@@ -26,7 +26,9 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
 
 ## Install
 
-1. Download `Telecat-<version>-arm64.dmg`, or build it yourself (see below).
+> **Apple Silicon Macs only** (arm64). Intel Macs are not supported.
+
+1. Download `Telecat-<version>-arm64.dmg` from [Releases](https://github.com/jameslufz/telecat/releases), or build it yourself (see below).
 2. Open the DMG and drag **Telecat** into **Applications**.
 3. The app is ad-hoc signed, not notarized. The first time you open it, right-click **Telecat** in Applications, choose **Open**, then confirm.
 
