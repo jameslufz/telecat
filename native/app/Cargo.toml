@@ -1,0 +1,42 @@
+[package]
+name = "telecat-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[[bin]]
+name = "telecat-native"
+path = "src/main.rs"
+[dependencies]
+telecat-editor = { path = "../editor" }
+telecat-grid = { path = "../grid" }
+telecat-theme = { path = "../theme" }
+gpui-kit = { version = "=0.7.3", default-features = false }
+raw-window-handle = "0.6"
+objc2 = "0.6"
+block2 = "0.6"
+telecat-core.workspace = true
+telecat-db = { path = "../db" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+pbkdf2 = "0.12"
+sha1 = "0.10"
+rusty-leveldb = "4"
+security-framework = "3"
+futures = "0.3"
+regex.workspace = true
+
+objc2-foundation = "0.3"
+objc2-app-kit = { version="0.3", default-features=false, features=["std", "NSMenu", "NSMenuItem", "NSView", "NSWindow", "NSScreen", "NSImage", "NSBezierPath", "NSColor", "NSSavePanel", "NSPopUpButton", "NSControl", "NSButton", "block2"] }
+libc = "0.2"
+mach2 = "0.5"
+# Strip dependency debug/trace logging (including SQL and parameters) in release.
+log = { version = "0.4", features = ["release_max_level_warn"] }
+
+[dev-dependencies]
+gpui = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }

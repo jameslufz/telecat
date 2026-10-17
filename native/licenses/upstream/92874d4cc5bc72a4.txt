@@ -1,0 +1,6 @@
+Package: objc_exception@0.1.2
+Repository: http://github.com/SSheldon/rust-objc-exception
+License declaration: MIT
+Authors (published Cargo.toml): Steven Sheldon
+
+

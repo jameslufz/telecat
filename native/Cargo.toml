@@ -1,0 +1,29 @@
+[workspace]
+members = ["core", "db", "app", "editor", "grid", "theme"]
+exclude = ["vendor/mysql_async", "vendor/tokio-postgres", "vendor/gpui-base", "vendor/gpui-pre-macos"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision"] }
+anyhow = "1"
+regex = "1"
+tokio = { version = "1", features = ["full"] }
+telecat-core = { path = "core" }
+
+[profile.release]
+strip = "symbols"
+
+[patch.crates-io]
+gpui-base = { path = "vendor/gpui-base" }
+gpui-pre-macos = { path = "vendor/gpui-pre-macos" }
+tokio-postgres = { path = "vendor/tokio-postgres" }
+mysql_async = { path = "vendor/mysql_async" }
+
+[profile.test.package.telecat-core]
+opt-level = 2

@@ -1,0 +1,11 @@
+# Build output and caches
+native/target/
+native/.cache/
+native/dist/
+**/__pycache__/
+.DS_Store
+
+# Local tooling / QA scratch (not part of the product)
+.claude/
+native/.claude-qa/
+native/reports/*.log

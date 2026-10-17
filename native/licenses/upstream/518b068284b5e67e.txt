@@ -1,0 +1,16 @@
+Package: crc32c@0.6.8
+Repository: https://github.com/zowens/crc32c
+License declaration: Apache-2.0/MIT
+Authors (published Cargo.toml): Zack Owens
+
+
+## License
+You may use this code under either the [Apache 2.0 license](https://www.apache.org/licenses/LICENSE-2.0)
+or the [MIT license](https://opensource.org/licenses/MIT), at your option.
+
+## License
+You may use this code under either the [Apache 2.0 license](https://www.apache.org/licenses/LICENSE-2.0)
+or the [MIT license](https://opensource.org/licenses/MIT), at your option.
+
+You may use this code under either the [Apache 2.0 license](https://www.apache.org/licenses/LICENSE-2.0)
+or the [MIT license](https://opensource.org/licenses/MIT), at your option.

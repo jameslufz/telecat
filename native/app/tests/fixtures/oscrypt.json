@@ -1,0 +1,21 @@
+{
+  "key": "synthetic-safe-storage-key",
+  "cases": [
+    {
+      "plain": "",
+      "encrypted": "djEwXOOku8jVxQNXQo5lLc/axA=="
+    },
+    {
+      "plain": "secret",
+      "encrypted": "djEwxzHQ23+Q7vsUQ4ijnkCfCA=="
+    },
+    {
+      "plain": "ธนาคารกรุงเทพ 😺",
+      "encrypted": "djEw0/+NgACLhOxcK/qWMeN7HS/bk6o7eN8IKAFvtghRc/TLDFuwTJk7a6VVa6Pz7Owr"
+    },
+    {
+      "plain": "a\n\u0000b",
+      "encrypted": "djEwiw28hL8aejigcNgQu6IKrg=="
+    }
+  ]
+}

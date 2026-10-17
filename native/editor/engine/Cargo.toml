@@ -1,0 +1,33 @@
+[package]
+name = "telecat-editor-engine"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+[lib]
+doctest = false
+test = false
+bench = false
+[dependencies]
+gpui-kit = { version = "=0.7.3", default-features = false }
+gpui = { package = "gpui-pre", version = "=0.3.9" }
+anyhow = "1"
+aho-corasick = "1"
+futures = "0.3"
+instant = "0.1"
+itertools = "0.13"
+lsp-types = { version = "0.97", features = ["proposed"] }
+regex = "1"
+ropey = { version = "=2.0.0-beta.1", features = ["metric_chars", "metric_lines_lf", "metric_utf16"] }
+serde = { version = "1", features = ["derive"] }
+smallvec = "1"
+sum-tree = { package = "gpui-pre-sum-tree", version = "=0.3.9" }
+unicode-segmentation = "1"
+tracing = "0.1"
+unicode-linebreak = "0.1"
+serde_json = "1"
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSView", "NSWindow"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSString"] }
+raw-window-handle = "0.6"

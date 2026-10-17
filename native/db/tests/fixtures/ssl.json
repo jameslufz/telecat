@@ -1,0 +1,398 @@
+[
+  {
+    "config": {
+      "driver": "mysql",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 3307,
+      "user": "root",
+      "passwordMode": "none",
+      "database": "zixma",
+      "sslMode": "DISABLED",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": null
+    }
+  },
+  {
+    "config": {
+      "driver": "mysql",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 3307,
+      "user": "root",
+      "passwordMode": "none",
+      "database": "zixma",
+      "sslMode": "PREFERRED",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": "TLSv1.3"
+    }
+  },
+  {
+    "config": {
+      "driver": "mysql",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 3307,
+      "user": "root",
+      "passwordMode": "none",
+      "database": "zixma",
+      "sslMode": "ALLOW",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": null
+    }
+  },
+  {
+    "config": {
+      "driver": "mysql",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 3307,
+      "user": "root",
+      "passwordMode": "none",
+      "database": "zixma",
+      "sslMode": "REQUIRED",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": "TLSv1.3"
+    }
+  },
+  {
+    "config": {
+      "driver": "mysql",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 3307,
+      "user": "root",
+      "passwordMode": "none",
+      "database": "zixma",
+      "sslMode": "VERIFY-CA",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": false,
+      "error": "self-signed certificate in certificate chain"
+    }
+  },
+  {
+    "config": {
+      "driver": "mysql",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 3307,
+      "user": "root",
+      "passwordMode": "none",
+      "database": "zixma",
+      "sslMode": "VERIFY-FULL",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": false,
+      "error": "self-signed certificate in certificate chain"
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "DISABLED",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": null
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "DISABLED",
+      "negotiation": "DIRECT",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": null
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "PREFERRED",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": null
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "PREFERRED",
+      "negotiation": "DIRECT",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": null
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "ALLOW",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": null
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "ALLOW",
+      "negotiation": "DIRECT",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": true,
+      "tls": null
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "REQUIRED",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": false,
+      "error": "The server does not support SSL connections"
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "REQUIRED",
+      "negotiation": "DIRECT",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": false,
+      "error": "Client network socket disconnected before secure TLS connection was established"
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "VERIFY-CA",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": false,
+      "error": "The server does not support SSL connections"
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "VERIFY-CA",
+      "negotiation": "DIRECT",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": false,
+      "error": "Client network socket disconnected before secure TLS connection was established"
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "VERIFY-FULL",
+      "negotiation": "POSTGRES",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": false,
+      "error": "The server does not support SSL connections"
+    }
+  },
+  {
+    "config": {
+      "driver": "postgres",
+      "name": "",
+      "color": "#3a7d44",
+      "tag": "",
+      "safeMode": "silent",
+      "host": "127.0.0.1",
+      "port": 5434,
+      "user": "postgres",
+      "passwordMode": "none",
+      "database": "main_db",
+      "sslMode": "VERIFY-FULL",
+      "negotiation": "DIRECT",
+      "groupId": null,
+      "id": "m1-tls"
+    },
+    "out": {
+      "ok": false,
+      "error": "Client network socket disconnected before secure TLS connection was established"
+    }
+  }
+]

@@ -1,0 +1,816 @@
+{
+  "version": "15.9.0",
+  "sourceSha256": "2ade54c17816159e178035c83cd6156c83650d2673afde5e151b7f96b73c9aca",
+  "fixtures": [
+    {
+      "id": "mysql-0",
+      "dialect": "mysql",
+      "input": "select * from users;",
+      "output": "SELECT\n  *\nFROM\n  users;"
+    },
+    {
+      "id": "mysql-1",
+      "dialect": "mysql",
+      "input": "select id,name from users where id=1;",
+      "output": "SELECT\n  id,\n  name\nFROM\n  users\nWHERE\n  id = 1;"
+    },
+    {
+      "id": "mysql-2",
+      "dialect": "mysql",
+      "input": "select * from users where id=1 and active=true order by name desc limit 10;",
+      "output": "SELECT\n  *\nFROM\n  users\nWHERE\n  id = 1\n  AND active = TRUE\nORDER BY\n  name DESC\nLIMIT\n  10;"
+    },
+    {
+      "id": "mysql-3",
+      "dialect": "mysql",
+      "input": "select count(*), coalesce(a, 0), lower(name) as label from users;",
+      "output": "SELECT\n  count(*),\n  coalesce(a, 0),\n  lower(name) AS label\nFROM\n  users;"
+    },
+    {
+      "id": "mysql-4",
+      "dialect": "mysql",
+      "input": "insert into t(a,b) values(1,2),(3,4);",
+      "output": "INSERT INTO\n  t (a, b)\nVALUES\n  (1, 2),\n  (3, 4);"
+    },
+    {
+      "id": "mysql-5",
+      "dialect": "mysql",
+      "input": "update t set a=1,b=2 where id=3;",
+      "output": "UPDATE t\nSET\n  a = 1,\n  b = 2\nWHERE\n  id = 3;"
+    },
+    {
+      "id": "mysql-6",
+      "dialect": "mysql",
+      "input": "delete from t where id=3;",
+      "output": "DELETE FROM t\nWHERE\n  id = 3;"
+    },
+    {
+      "id": "mysql-7",
+      "dialect": "mysql",
+      "input": "select a from x left join y on x.id=y.id and y.a=1;",
+      "output": "SELECT\n  a\nFROM\n  x\n  LEFT JOIN y ON x.id = y.id\n  AND y.a = 1;"
+    },
+    {
+      "id": "mysql-8",
+      "dialect": "mysql",
+      "input": "with a as (select * from t) select * from a;",
+      "output": "WITH\n  a AS (\n    SELECT\n      *\n    FROM\n      t\n  )\nSELECT\n  *\nFROM\n  a;"
+    },
+    {
+      "id": "mysql-9",
+      "dialect": "mysql",
+      "input": "select (1 + 2), a from t;",
+      "output": "SELECT\n  (1 + 2),\n  a\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-10",
+      "dialect": "mysql",
+      "input": "select 1; select 2;",
+      "output": "SELECT\n  1;\n\nSELECT\n  2;"
+    },
+    {
+      "id": "mysql-11",
+      "dialect": "mysql",
+      "input": "-- comment\nselect 1;",
+      "output": "-- comment\nSELECT\n  1;"
+    },
+    {
+      "id": "mysql-12",
+      "dialect": "mysql",
+      "input": "select case when x=1 then 'a' else 'b' end from t;",
+      "output": "SELECT\n  CASE\n    WHEN x = 1 THEN 'a'\n    ELSE 'b'\n  END\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-13",
+      "dialect": "mysql",
+      "input": "select a, count(*) from t group by a having count(*)>1 order by a limit 5 offset 2;",
+      "output": "SELECT\n  a,\n  count(*)\nFROM\n  t\nGROUP BY\n  a\nHAVING\n  count(*) > 1\nORDER BY\n  a\nLIMIT\n  5\nOFFSET\n  2;"
+    },
+    {
+      "id": "mysql-14",
+      "dialect": "mysql",
+      "input": "select distinct a from t;",
+      "output": "SELECT DISTINCT\n  a\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-15",
+      "dialect": "mysql",
+      "input": "select a from t union all select b from u;",
+      "output": "SELECT\n  a\nFROM\n  t\nUNION ALL\nSELECT\n  b\nFROM\n  u;"
+    },
+    {
+      "id": "mysql-16",
+      "dialect": "mysql",
+      "input": "select * from t where a in (1,2,3) and b is not null;",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  a IN (1, 2, 3)\n  AND b is not null;"
+    },
+    {
+      "id": "mysql-17",
+      "dialect": "mysql",
+      "input": "select 'ไทย 😺', 'a; b', 1.25, -10;",
+      "output": "SELECT\n  'ไทย 😺',\n  'a; b',\n  1.25,\n  -10;"
+    },
+    {
+      "id": "mysql-18",
+      "dialect": "mysql",
+      "input": "select * from (select id from t) as x;",
+      "output": "SELECT\n  *\nFROM\n  (\n    SELECT\n      id\n    FROM\n      t\n  ) AS x;"
+    },
+    {
+      "id": "mysql-19",
+      "dialect": "mysql",
+      "input": "insert into t select * from u;",
+      "output": "INSERT INTO\n  t\nSELECT\n  *\nFROM\n  u;"
+    },
+    {
+      "id": "mysql-20",
+      "dialect": "mysql",
+      "input": "update users set name='O''Brien' where id=2;",
+      "output": "UPDATE users\nSET\n  name = 'O''Brien'\nWHERE\n  id = 2;"
+    },
+    {
+      "id": "mysql-21",
+      "dialect": "mysql",
+      "input": "select * from t where x between 1 and 2 or y like 'a%';",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  x BETWEEN 1 AND 2\n  OR y like 'a%';"
+    },
+    {
+      "id": "mysql-22",
+      "dialect": "mysql",
+      "input": "select /* note */ id from t;",
+      "output": "SELECT\n  /* note */\n  id\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-23",
+      "dialect": "mysql",
+      "input": "select a+b*2 as total from t;",
+      "output": "SELECT\n  a + b * 2 AS total\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-24",
+      "dialect": "mysql",
+      "input": "select * from t inner join u on t.id=u.id right join v on u.id=v.id;",
+      "output": "SELECT\n  *\nFROM\n  t\n  INNER JOIN u ON t.id = u.id\n  RIGHT JOIN v ON u.id = v.id;"
+    },
+    {
+      "id": "mysql-25",
+      "dialect": "mysql",
+      "input": "select row_number() over (partition by a order by b) as n from t;",
+      "output": "SELECT\n  row_number() OVER (\n    PARTITION BY\n      a\n    ORDER BY\n      b\n  ) AS n\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-26",
+      "dialect": "mysql",
+      "input": "create table t (id int primary key, name varchar(255) not null);",
+      "output": "CREATE TABLE t (id int PRIMARY KEY, name varchar(255) NOT NULL);"
+    },
+    {
+      "id": "mysql-27",
+      "dialect": "mysql",
+      "input": "alter table t add column n int;",
+      "output": "ALTER TABLE t\nADD COLUMN n int;"
+    },
+    {
+      "id": "mysql-28",
+      "dialect": "mysql",
+      "input": "begin; update t set a=2; commit;",
+      "output": "begin;\n\nUPDATE t\nSET\n  a = 2;\n\nCOMMIT;"
+    },
+    {
+      "id": "mysql-29",
+      "dialect": "mysql",
+      "input": "select exists(select 1 from t where id=2);",
+      "output": "SELECT\n  EXISTS (\n    SELECT\n      1\n    FROM\n      t\n    WHERE\n      id = 2\n  );"
+    },
+    {
+      "id": "mysql-30",
+      "dialect": "mysql",
+      "input": "select a from t order by a asc,b desc;",
+      "output": "SELECT\n  a\nFROM\n  t\nORDER BY\n  a ASC,\n  b DESC;"
+    },
+    {
+      "id": "mysql-31",
+      "dialect": "mysql",
+      "input": "SELECT * FROM members\nWHERE 1\n-- AND MEMBER_TYPE = 'x;y'\nAND MEMBER_TYPE = 'member'\nORDER BY MEMBER_ID DESC;\n\nSELECT bank_name_th FROM sa_banks;",
+      "output": "SELECT\n  *\nFROM\n  members\nWHERE\n  1\n  -- AND MEMBER_TYPE = 'x;y'\n  AND MEMBER_TYPE = 'member'\nORDER BY\n  MEMBER_ID DESC;\n\nSELECT\n  bank_name_th\nFROM\n  sa_banks;"
+    },
+    {
+      "id": "mysql-32",
+      "dialect": "mysql",
+      "input": "select 1",
+      "output": "SELECT\n  1"
+    },
+    {
+      "id": "mysql-33",
+      "dialect": "mysql",
+      "input": "",
+      "output": ""
+    },
+    {
+      "id": "mysql-34",
+      "dialect": "mysql",
+      "input": "select null,true,false;",
+      "output": "SELECT\n  NULL,\n  TRUE,\n  FALSE;"
+    },
+    {
+      "id": "mysql-35",
+      "dialect": "mysql",
+      "input": "select a as b from t where x<>2;",
+      "output": "SELECT\n  a AS b\nFROM\n  t\nWHERE\n  x <> 2;"
+    },
+    {
+      "id": "mysql-36",
+      "dialect": "mysql",
+      "input": "select sum(amount) / count(*) from payments;",
+      "output": "SELECT\n  sum(amount) / count(*)\nFROM\n  payments;"
+    },
+    {
+      "id": "mysql-37",
+      "dialect": "mysql",
+      "input": "select * from t where (a=1 or b=2) and c=3;",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  (\n    a = 1\n    OR b = 2\n  )\n  AND c = 3;"
+    },
+    {
+      "id": "mysql-38",
+      "dialect": "mysql",
+      "input": "select * from t limit 10,20;",
+      "output": "SELECT\n  *\nFROM\n  t\nLIMIT\n  10, 20;"
+    },
+    {
+      "id": "mysql-39",
+      "dialect": "mysql",
+      "input": "select a from t\n-- tail",
+      "output": "SELECT\n  a\nFROM\n  t\n  -- tail"
+    },
+    {
+      "id": "mysql-40",
+      "dialect": "mysql",
+      "input": "select `bank_name_th` from `zixma`.`sa_banks`;",
+      "output": "SELECT\n  `bank_name_th`\nFROM\n  `zixma`.`sa_banks`;"
+    },
+    {
+      "id": "mysql-41",
+      "dialect": "mysql",
+      "input": "select @x, @@version, concat('a','b');",
+      "output": "SELECT\n  @x,\n  @@version,\n  concat('a', 'b');"
+    },
+    {
+      "id": "mysql-42",
+      "dialect": "mysql",
+      "input": "insert into t(a) values(1) on duplicate key update a=2;",
+      "output": "INSERT INTO\n  t (a)\nVALUES\n  (1)\nON DUPLICATE KEY UPDATE\n  a = 2;"
+    },
+    {
+      "id": "mysql-43",
+      "dialect": "mysql",
+      "input": "select * from t where a <=> null;",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  a <=> NULL;"
+    },
+    {
+      "id": "mysql-44",
+      "dialect": "mysql",
+      "input": "show tables;",
+      "output": "SHOW TABLES;"
+    },
+    {
+      "id": "mysql-45",
+      "dialect": "mysql",
+      "input": "select # note\n1;",
+      "output": "SELECT # note\n  1;"
+    },
+    {
+      "id": "mysql-46",
+      "dialect": "mysql",
+      "input": "with a as (select x from t), b as (select y from u) select * from a join b on a.x=b.y;",
+      "output": "WITH\n  a AS (\n    SELECT\n      x\n    FROM\n      t\n  ),\n  b AS (\n    SELECT\n      y\n    FROM\n      u\n  )\nSELECT\n  *\nFROM\n  a\n  JOIN b ON a.x = b.y;"
+    },
+    {
+      "id": "mysql-47",
+      "dialect": "mysql",
+      "input": "select case when a>0 then case when b>0 then 'both' else 'a' end else 'none' end as label from t;",
+      "output": "SELECT\n  CASE\n    WHEN a > 0 THEN CASE\n      WHEN b > 0 THEN 'both'\n      ELSE 'a'\n    END\n    ELSE 'none'\n  END AS label\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-48",
+      "dialect": "mysql",
+      "input": "select avg(amount) over (partition by account_id order by created_at rows between 2 preceding and current row) from transactions;",
+      "output": "SELECT\n  avg(amount) OVER (\n    PARTITION BY\n      account_id\n    ORDER BY\n      created_at ROWS BETWEEN 2 preceding\n      AND current ROW\n  )\nFROM\n  transactions;"
+    },
+    {
+      "id": "mysql-49",
+      "dialect": "mysql",
+      "input": "select aaaaaaaaaaaaaaaaaaaaaaaa + bbbbbbbbbbbbbbbbbbbbbbbbbbbb + ccccccccccccccccccccccccccc as total from t;",
+      "output": "SELECT\n  aaaaaaaaaaaaaaaaaaaaaaaa + bbbbbbbbbbbbbbbbbbbbbbbbbbbb + ccccccccccccccccccccccccccc AS total\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-50",
+      "dialect": "mysql",
+      "input": "select coalesce(very_long_column_name_which_exceeds_the_inline_limit, another_very_long_column_name, 0) from t;",
+      "output": "SELECT\n  coalesce(\n    very_long_column_name_which_exceeds_the_inline_limit,\n    another_very_long_column_name,\n    0\n  )\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-51",
+      "dialect": "mysql",
+      "input": "select * from t where (a=1 and b=2) or (c=3 and d=4);",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  (\n    a = 1\n    AND b = 2\n  )\n  OR (\n    c = 3\n    AND d = 4\n  );"
+    },
+    {
+      "id": "mysql-52",
+      "dialect": "mysql",
+      "input": "select * from t where not exists (select 1 from u where u.id=t.id);",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  NOT EXISTS (\n    SELECT\n      1\n    FROM\n      u\n    WHERE\n      u.id = t.id\n  );"
+    },
+    {
+      "id": "mysql-53",
+      "dialect": "mysql",
+      "input": "create table accounts (id bigint primary key, owner_id int references users(id), balance decimal(12,2) default 0, constraint positive check (balance>=0));",
+      "output": "CREATE TABLE accounts (\n  id bigint PRIMARY KEY,\n  owner_id int REFERENCES users (id),\n  balance decimal(12, 2) default 0,\n  CONSTRAINT positive CHECK (balance >= 0)\n);"
+    },
+    {
+      "id": "mysql-54",
+      "dialect": "mysql",
+      "input": "create index users_name_idx on users (name, id);",
+      "output": "CREATE INDEX users_name_idx ON users (name, id);"
+    },
+    {
+      "id": "mysql-55",
+      "dialect": "mysql",
+      "input": "select cast(amount as decimal(10,2)) as value, extract(year from created_at) from transactions;",
+      "output": "SELECT\n  cast(amount AS decimal(10, 2)) AS value,\n  extract(\n    year\n    FROM\n      created_at\n  )\nFROM\n  transactions;"
+    },
+    {
+      "id": "mysql-56",
+      "dialect": "mysql",
+      "input": "select a from t union select b from u intersect select c from v;",
+      "output": "SELECT\n  a\nFROM\n  t\nUNION\nSELECT\n  b\nFROM\n  u INTERSECT\nSELECT\n  c\nFROM\n  v;"
+    },
+    {
+      "id": "mysql-57",
+      "dialect": "mysql",
+      "input": "insert into t(a,b) values (1,2), (3,4), (5,6);",
+      "output": "INSERT INTO\n  t (a, b)\nVALUES\n  (1, 2),\n  (3, 4),\n  (5, 6);"
+    },
+    {
+      "id": "mysql-58",
+      "dialect": "mysql",
+      "input": "select t.id, u.name from t as t cross join users as u;",
+      "output": "SELECT\n  t.id,\n  u.name\nFROM\n  t AS t\n  CROSS JOIN users AS u;"
+    },
+    {
+      "id": "mysql-59",
+      "dialect": "mysql",
+      "input": "select /* multi\nline */ a, b -- trailing\nfrom t;",
+      "output": "SELECT\n  /* multi\n  line */\n  a,\n  b -- trailing\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-60",
+      "dialect": "mysql",
+      "input": "select a from t order by a nulls last;",
+      "output": "SELECT\n  a\nFROM\n  t\nORDER BY\n  a nulls last;"
+    },
+    {
+      "id": "mysql-61",
+      "dialect": "mysql",
+      "input": "select x'ff', b'1010', _utf8'ไทย', ? from t;",
+      "output": "SELECT\n  x'ff',\n  b'1010',\n  _utf8 'ไทย',\n  ?\nFROM\n  t;"
+    },
+    {
+      "id": "mysql-62",
+      "dialect": "mysql",
+      "input": "replace into t(a,b) values(1,2);",
+      "output": "REPLACE INTO\n  t (a, b)\nVALUES\n  (1, 2);"
+    },
+    {
+      "id": "mysql-63",
+      "dialect": "mysql",
+      "input": "select * from t force index (PRIMARY) where id=1;",
+      "output": "SELECT\n  *\nFROM\n  t FORCE INDEX (PRIMARY)\nWHERE\n  id = 1;"
+    },
+    {
+      "id": "mysql-64",
+      "dialect": "mysql",
+      "input": "select group_concat(distinct name order by name separator ', ') from users;",
+      "output": "SELECT\n  group_concat(\n    DISTINCT name\n    ORDER BY\n      name SEPARATOR ', '\n  )\nFROM\n  users;"
+    },
+    {
+      "id": "mysql-65",
+      "dialect": "mysql",
+      "input": "with recursive nums(n) as (select 1 union all select n+1 from nums where n<10) select * from nums;",
+      "output": "WITH RECURSIVE\n  nums (n) AS (\n    SELECT\n      1\n    UNION ALL\n    SELECT\n      n + 1\n    FROM\n      nums\n    WHERE\n      n < 10\n  )\nSELECT\n  *\nFROM\n  nums;"
+    },
+    {
+      "id": "mysql-66",
+      "dialect": "mysql",
+      "input": "create trigger t_bi before insert on t for each row set new.created_at=now();",
+      "output": "CREATE TRIGGER t_bi BEFORE\nINSERT\n  ON t FOR EACH ROW\nSET\n  new.created_at = now();"
+    },
+    {
+      "id": "postgresql-0",
+      "dialect": "postgresql",
+      "input": "select * from users;",
+      "output": "SELECT\n  *\nFROM\n  users;"
+    },
+    {
+      "id": "postgresql-1",
+      "dialect": "postgresql",
+      "input": "select id,name from users where id=1;",
+      "output": "SELECT\n  id,\n  name\nFROM\n  users\nWHERE\n  id = 1;"
+    },
+    {
+      "id": "postgresql-2",
+      "dialect": "postgresql",
+      "input": "select * from users where id=1 and active=true order by name desc limit 10;",
+      "output": "SELECT\n  *\nFROM\n  users\nWHERE\n  id = 1\n  AND active = TRUE\nORDER BY\n  name DESC\nLIMIT\n  10;"
+    },
+    {
+      "id": "postgresql-3",
+      "dialect": "postgresql",
+      "input": "select count(*), coalesce(a, 0), lower(name) as label from users;",
+      "output": "SELECT\n  count(*),\n  coalesce(a, 0),\n  lower(name) AS label\nFROM\n  users;"
+    },
+    {
+      "id": "postgresql-4",
+      "dialect": "postgresql",
+      "input": "insert into t(a,b) values(1,2),(3,4);",
+      "output": "INSERT INTO\n  t (a, b)\nVALUES\n  (1, 2),\n  (3, 4);"
+    },
+    {
+      "id": "postgresql-5",
+      "dialect": "postgresql",
+      "input": "update t set a=1,b=2 where id=3;",
+      "output": "UPDATE t\nSET\n  a = 1,\n  b = 2\nWHERE\n  id = 3;"
+    },
+    {
+      "id": "postgresql-6",
+      "dialect": "postgresql",
+      "input": "delete from t where id=3;",
+      "output": "DELETE FROM t\nWHERE\n  id = 3;"
+    },
+    {
+      "id": "postgresql-7",
+      "dialect": "postgresql",
+      "input": "select a from x left join y on x.id=y.id and y.a=1;",
+      "output": "SELECT\n  a\nFROM\n  x\n  LEFT JOIN y ON x.id = y.id\n  AND y.a = 1;"
+    },
+    {
+      "id": "postgresql-8",
+      "dialect": "postgresql",
+      "input": "with a as (select * from t) select * from a;",
+      "output": "WITH\n  a AS (\n    SELECT\n      *\n    FROM\n      t\n  )\nSELECT\n  *\nFROM\n  a;"
+    },
+    {
+      "id": "postgresql-9",
+      "dialect": "postgresql",
+      "input": "select (1 + 2), a from t;",
+      "output": "SELECT\n  (1 + 2),\n  a\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-10",
+      "dialect": "postgresql",
+      "input": "select 1; select 2;",
+      "output": "SELECT\n  1;\n\nSELECT\n  2;"
+    },
+    {
+      "id": "postgresql-11",
+      "dialect": "postgresql",
+      "input": "-- comment\nselect 1;",
+      "output": "-- comment\nSELECT\n  1;"
+    },
+    {
+      "id": "postgresql-12",
+      "dialect": "postgresql",
+      "input": "select case when x=1 then 'a' else 'b' end from t;",
+      "output": "SELECT\n  CASE\n    WHEN x = 1 THEN 'a'\n    ELSE 'b'\n  END\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-13",
+      "dialect": "postgresql",
+      "input": "select a, count(*) from t group by a having count(*)>1 order by a limit 5 offset 2;",
+      "output": "SELECT\n  a,\n  count(*)\nFROM\n  t\nGROUP BY\n  a\nHAVING\n  count(*) > 1\nORDER BY\n  a\nLIMIT\n  5\nOFFSET\n  2;"
+    },
+    {
+      "id": "postgresql-14",
+      "dialect": "postgresql",
+      "input": "select distinct a from t;",
+      "output": "SELECT DISTINCT\n  a\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-15",
+      "dialect": "postgresql",
+      "input": "select a from t union all select b from u;",
+      "output": "SELECT\n  a\nFROM\n  t\nUNION ALL\nSELECT\n  b\nFROM\n  u;"
+    },
+    {
+      "id": "postgresql-16",
+      "dialect": "postgresql",
+      "input": "select * from t where a in (1,2,3) and b is not null;",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  a IN (1, 2, 3)\n  AND b IS NOT NULL;"
+    },
+    {
+      "id": "postgresql-17",
+      "dialect": "postgresql",
+      "input": "select 'ไทย 😺', 'a; b', 1.25, -10;",
+      "output": "SELECT\n  'ไทย 😺',\n  'a; b',\n  1.25,\n  -10;"
+    },
+    {
+      "id": "postgresql-18",
+      "dialect": "postgresql",
+      "input": "select * from (select id from t) as x;",
+      "output": "SELECT\n  *\nFROM\n  (\n    SELECT\n      id\n    FROM\n      t\n  ) AS x;"
+    },
+    {
+      "id": "postgresql-19",
+      "dialect": "postgresql",
+      "input": "insert into t select * from u;",
+      "output": "INSERT INTO\n  t\nSELECT\n  *\nFROM\n  u;"
+    },
+    {
+      "id": "postgresql-20",
+      "dialect": "postgresql",
+      "input": "update users set name='O''Brien' where id=2;",
+      "output": "UPDATE users\nSET\n  name = 'O''Brien'\nWHERE\n  id = 2;"
+    },
+    {
+      "id": "postgresql-21",
+      "dialect": "postgresql",
+      "input": "select * from t where x between 1 and 2 or y like 'a%';",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  x BETWEEN 1 AND 2\n  OR y LIKE 'a%';"
+    },
+    {
+      "id": "postgresql-22",
+      "dialect": "postgresql",
+      "input": "select /* note */ id from t;",
+      "output": "SELECT\n  /* note */\n  id\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-23",
+      "dialect": "postgresql",
+      "input": "select a+b*2 as total from t;",
+      "output": "SELECT\n  a + b * 2 AS total\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-24",
+      "dialect": "postgresql",
+      "input": "select * from t inner join u on t.id=u.id right join v on u.id=v.id;",
+      "output": "SELECT\n  *\nFROM\n  t\n  INNER JOIN u ON t.id = u.id\n  RIGHT JOIN v ON u.id = v.id;"
+    },
+    {
+      "id": "postgresql-25",
+      "dialect": "postgresql",
+      "input": "select row_number() over (partition by a order by b) as n from t;",
+      "output": "SELECT\n  row_number() OVER (\n    PARTITION BY\n      a\n    ORDER BY\n      b\n  ) AS n\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-26",
+      "dialect": "postgresql",
+      "input": "create table t (id int primary key, name varchar(255) not null);",
+      "output": "CREATE TABLE t (id int PRIMARY KEY, name varchar(255) NOT NULL);"
+    },
+    {
+      "id": "postgresql-27",
+      "dialect": "postgresql",
+      "input": "alter table t add column n int;",
+      "output": "ALTER TABLE t\nADD COLUMN n int;"
+    },
+    {
+      "id": "postgresql-28",
+      "dialect": "postgresql",
+      "input": "begin; update t set a=2; commit;",
+      "output": "BEGIN;\n\nUPDATE t\nSET\n  a = 2;\n\nCOMMIT;"
+    },
+    {
+      "id": "postgresql-29",
+      "dialect": "postgresql",
+      "input": "select exists(select 1 from t where id=2);",
+      "output": "SELECT\n  EXISTS (\n    SELECT\n      1\n    FROM\n      t\n    WHERE\n      id = 2\n  );"
+    },
+    {
+      "id": "postgresql-30",
+      "dialect": "postgresql",
+      "input": "select a from t order by a asc,b desc;",
+      "output": "SELECT\n  a\nFROM\n  t\nORDER BY\n  a ASC,\n  b DESC;"
+    },
+    {
+      "id": "postgresql-31",
+      "dialect": "postgresql",
+      "input": "SELECT * FROM members\nWHERE 1\n-- AND MEMBER_TYPE = 'x;y'\nAND MEMBER_TYPE = 'member'\nORDER BY MEMBER_ID DESC;\n\nSELECT bank_name_th FROM sa_banks;",
+      "output": "SELECT\n  *\nFROM\n  members\nWHERE\n  1\n  -- AND MEMBER_TYPE = 'x;y'\n  AND MEMBER_TYPE = 'member'\nORDER BY\n  MEMBER_ID DESC;\n\nSELECT\n  bank_name_th\nFROM\n  sa_banks;"
+    },
+    {
+      "id": "postgresql-32",
+      "dialect": "postgresql",
+      "input": "select 1",
+      "output": "SELECT\n  1"
+    },
+    {
+      "id": "postgresql-33",
+      "dialect": "postgresql",
+      "input": "",
+      "output": ""
+    },
+    {
+      "id": "postgresql-34",
+      "dialect": "postgresql",
+      "input": "select null,true,false;",
+      "output": "SELECT\n  NULL,\n  TRUE,\n  FALSE;"
+    },
+    {
+      "id": "postgresql-35",
+      "dialect": "postgresql",
+      "input": "select a as b from t where x<>2;",
+      "output": "SELECT\n  a AS b\nFROM\n  t\nWHERE\n  x <> 2;"
+    },
+    {
+      "id": "postgresql-36",
+      "dialect": "postgresql",
+      "input": "select sum(amount) / count(*) from payments;",
+      "output": "SELECT\n  sum(amount) / count(*)\nFROM\n  payments;"
+    },
+    {
+      "id": "postgresql-37",
+      "dialect": "postgresql",
+      "input": "select * from t where (a=1 or b=2) and c=3;",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  (\n    a = 1\n    OR b = 2\n  )\n  AND c = 3;"
+    },
+    {
+      "id": "postgresql-38",
+      "dialect": "postgresql",
+      "input": "select a from t\n-- tail",
+      "output": "SELECT\n  a\nFROM\n  t\n  -- tail"
+    },
+    {
+      "id": "postgresql-39",
+      "dialect": "postgresql",
+      "input": "select a::text, $1 from \"users\";",
+      "output": "SELECT\n  a::text,\n  $1\nFROM\n  \"users\";"
+    },
+    {
+      "id": "postgresql-40",
+      "dialect": "postgresql",
+      "input": "select $$hello; ไทย$$, E'it\\'s';",
+      "output": "SELECT\n  $$hello; ไทย$$,\n  E'it\\'s';"
+    },
+    {
+      "id": "postgresql-41",
+      "dialect": "postgresql",
+      "input": "insert into t(a) values(1) returning id;",
+      "output": "INSERT INTO\n  t (a)\nVALUES\n  (1)\nRETURNING\n  id;"
+    },
+    {
+      "id": "postgresql-42",
+      "dialect": "postgresql",
+      "input": "select data->>'name' from t;",
+      "output": "SELECT\n  data ->> 'name'\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-43",
+      "dialect": "postgresql",
+      "input": "select * from t where a ilike 'b%';",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  a ILIKE 'b%';"
+    },
+    {
+      "id": "postgresql-44",
+      "dialect": "postgresql",
+      "input": "select array[1,2,3];",
+      "output": "SELECT\n  ARRAY[1, 2, 3];"
+    },
+    {
+      "id": "postgresql-45",
+      "dialect": "postgresql",
+      "input": "with a as (select x from t), b as (select y from u) select * from a join b on a.x=b.y;",
+      "output": "WITH\n  a AS (\n    SELECT\n      x\n    FROM\n      t\n  ),\n  b AS (\n    SELECT\n      y\n    FROM\n      u\n  )\nSELECT\n  *\nFROM\n  a\n  JOIN b ON a.x = b.y;"
+    },
+    {
+      "id": "postgresql-46",
+      "dialect": "postgresql",
+      "input": "select case when a>0 then case when b>0 then 'both' else 'a' end else 'none' end as label from t;",
+      "output": "SELECT\n  CASE\n    WHEN a > 0 THEN CASE\n      WHEN b > 0 THEN 'both'\n      ELSE 'a'\n    END\n    ELSE 'none'\n  END AS label\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-47",
+      "dialect": "postgresql",
+      "input": "select avg(amount) over (partition by account_id order by created_at rows between 2 preceding and current row) from transactions;",
+      "output": "SELECT\n  avg(amount) OVER (\n    PARTITION BY\n      account_id\n    ORDER BY\n      created_at ROWS BETWEEN 2 preceding\n      AND current ROW\n  )\nFROM\n  transactions;"
+    },
+    {
+      "id": "postgresql-48",
+      "dialect": "postgresql",
+      "input": "select aaaaaaaaaaaaaaaaaaaaaaaa + bbbbbbbbbbbbbbbbbbbbbbbbbbbb + ccccccccccccccccccccccccccc as total from t;",
+      "output": "SELECT\n  aaaaaaaaaaaaaaaaaaaaaaaa + bbbbbbbbbbbbbbbbbbbbbbbbbbbb + ccccccccccccccccccccccccccc AS total\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-49",
+      "dialect": "postgresql",
+      "input": "select coalesce(very_long_column_name_which_exceeds_the_inline_limit, another_very_long_column_name, 0) from t;",
+      "output": "SELECT\n  coalesce(\n    very_long_column_name_which_exceeds_the_inline_limit,\n    another_very_long_column_name,\n    0\n  )\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-50",
+      "dialect": "postgresql",
+      "input": "select * from t where (a=1 and b=2) or (c=3 and d=4);",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  (\n    a = 1\n    AND b = 2\n  )\n  OR (\n    c = 3\n    AND d = 4\n  );"
+    },
+    {
+      "id": "postgresql-51",
+      "dialect": "postgresql",
+      "input": "select * from t where not exists (select 1 from u where u.id=t.id);",
+      "output": "SELECT\n  *\nFROM\n  t\nWHERE\n  NOT EXISTS (\n    SELECT\n      1\n    FROM\n      u\n    WHERE\n      u.id = t.id\n  );"
+    },
+    {
+      "id": "postgresql-52",
+      "dialect": "postgresql",
+      "input": "create table accounts (id bigint primary key, owner_id int references users(id), balance decimal(12,2) default 0, constraint positive check (balance>=0));",
+      "output": "CREATE TABLE accounts (\n  id bigint PRIMARY KEY,\n  owner_id int REFERENCES users (id),\n  balance decimal(12, 2) DEFAULT 0,\n  CONSTRAINT positive CHECK (balance >= 0)\n);"
+    },
+    {
+      "id": "postgresql-53",
+      "dialect": "postgresql",
+      "input": "create index users_name_idx on users (name, id);",
+      "output": "CREATE INDEX users_name_idx ON users (name, id);"
+    },
+    {
+      "id": "postgresql-54",
+      "dialect": "postgresql",
+      "input": "select cast(amount as decimal(10,2)) as value, extract(year from created_at) from transactions;",
+      "output": "SELECT\n  cast(amount AS decimal(10, 2)) AS value,\n  extract(\n    YEAR\n    FROM\n      created_at\n  )\nFROM\n  transactions;"
+    },
+    {
+      "id": "postgresql-55",
+      "dialect": "postgresql",
+      "input": "select a from t union select b from u intersect select c from v;",
+      "output": "SELECT\n  a\nFROM\n  t\nUNION\nSELECT\n  b\nFROM\n  u\nINTERSECT\nSELECT\n  c\nFROM\n  v;"
+    },
+    {
+      "id": "postgresql-56",
+      "dialect": "postgresql",
+      "input": "insert into t(a,b) values (1,2), (3,4), (5,6);",
+      "output": "INSERT INTO\n  t (a, b)\nVALUES\n  (1, 2),\n  (3, 4),\n  (5, 6);"
+    },
+    {
+      "id": "postgresql-57",
+      "dialect": "postgresql",
+      "input": "select t.id, u.name from t as t cross join users as u;",
+      "output": "SELECT\n  t.id,\n  u.name\nFROM\n  t AS t\n  CROSS JOIN users AS u;"
+    },
+    {
+      "id": "postgresql-58",
+      "dialect": "postgresql",
+      "input": "select /* multi\nline */ a, b -- trailing\nfrom t;",
+      "output": "SELECT\n  /* multi\n  line */\n  a,\n  b -- trailing\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-59",
+      "dialect": "postgresql",
+      "input": "select a from t order by a nulls last;",
+      "output": "SELECT\n  a\nFROM\n  t\nORDER BY\n  a NULLS LAST;"
+    },
+    {
+      "id": "postgresql-60",
+      "dialect": "postgresql",
+      "input": "select $tag$ไทย '😺'$tag$, jsonb_build_object('x', 1);",
+      "output": "SELECT\n  $tag$ไทย '😺'$tag$,\n  jsonb_build_object('x', 1);"
+    },
+    {
+      "id": "postgresql-61",
+      "dialect": "postgresql",
+      "input": "update t set value=u.value from u where t.id=u.id returning t.*;",
+      "output": "UPDATE t\nSET\n  value = u.value\nFROM\n  u\nWHERE\n  t.id = u.id\nRETURNING\n  t.*;"
+    },
+    {
+      "id": "postgresql-62",
+      "dialect": "postgresql",
+      "input": "select * from t limit $1 offset $2;",
+      "output": "SELECT\n  *\nFROM\n  t\nLIMIT\n  $1\nOFFSET\n  $2;"
+    },
+    {
+      "id": "postgresql-63",
+      "dialect": "postgresql",
+      "input": "select date '2026-01-01' + interval '1 day';",
+      "output": "SELECT\n  date '2026-01-01' + interval '1 day';"
+    },
+    {
+      "id": "postgresql-64",
+      "dialect": "postgresql",
+      "input": "select count(*) filter (where active), sum(amount) over (order by id rows between unbounded preceding and current row) from t;",
+      "output": "SELECT\n  count(*) FILTER (\n    WHERE\n      active\n  ),\n  sum(amount) OVER (\n    ORDER BY\n      id ROWS BETWEEN unbounded preceding\n      AND current ROW\n  )\nFROM\n  t;"
+    },
+    {
+      "id": "postgresql-65",
+      "dialect": "postgresql",
+      "input": "insert into t(id,value) values(1,2) on conflict(id) do update set value=excluded.value returning *;",
+      "output": "INSERT INTO\n  t (id, value)\nVALUES\n  (1, 2)\nON CONFLICT (id) DO UPDATE\nSET\n  value = excluded.value\nRETURNING\n  *;"
+    },
+    {
+      "id": "postgresql-66",
+      "dialect": "postgresql",
+      "input": "select * from t left join lateral (select * from u where u.id=t.id limit 1) as x on true;",
+      "output": "SELECT\n  *\nFROM\n  t\n  LEFT JOIN LATERAL (\n    SELECT\n      *\n    FROM\n      u\n    WHERE\n      u.id = t.id\n    LIMIT\n      1\n  ) AS x ON TRUE;"
+    },
+    {
+      "id": "postgresql-67",
+      "dialect": "postgresql",
+      "input": "select array(select id from t), ARRAY[ARRAY[1,2], ARRAY[3,4]];",
+      "output": "SELECT\n  array(\n    SELECT\n      id\n    FROM\n      t\n  ),\n  ARRAY[ARRAY[1, 2], ARRAY[3, 4]];"
+    }
+  ]
+}

@@ -1,0 +1,1122 @@
+{
+  "driver": "postgres",
+  "config": {
+    "driver": "postgres",
+    "name": "",
+    "color": "#3a7d44",
+    "tag": "",
+    "safeMode": "silent",
+    "host": "127.0.0.1",
+    "port": 5434,
+    "user": "postgres",
+    "passwordMode": "none",
+    "database": "main_db",
+    "sslMode": "DISABLED",
+    "negotiation": "POSTGRES",
+    "groupId": null,
+    "id": "m1-test"
+  },
+  "setup": [
+    "DROP TABLE IF EXISTS telecat_m1_values",
+    "CREATE TABLE telecat_m1_values (id int PRIMARY KEY, txt text, bin bytea, bits bit(8), j json, jb jsonb, dt timestamp(6), tz timestamptz(6), n numeric(30,6), big bigint, flag boolean, arr text[], iv interval, pt point, uid uuid, f real, d double precision)",
+    "INSERT INTO telecat_m1_values VALUES (1,'ธนาคารกรุงเทพ 😺','\\x00ff10',B'10101010','{\"a\": 1, \"b\": [1, 2]}','{\"a\": 1, \"b\": [1,2]}','2024-03-10 02:30:00.123456','2024-03-10 02:30:00.123456+07',1234567890123456.123456,9223372036854775807,true,ARRAY['a','😺'],INTERVAL '1 day 02:03:04','(1.5,2.5)','00000000-0000-0000-0000-000000000001',1.1,0.1), (2,'abc','\\x414243',B'00000001',NULL,NULL,NULL,NULL,NULL,NULL,false,NULL,NULL,NULL,NULL,'NaN','Infinity')",
+    "CREATE INDEX telecat_m1_txt ON telecat_m1_values (txt)"
+  ],
+  "cases": [
+    {
+      "op": "query",
+      "arg": "SELECT * FROM telecat_m1_values ORDER BY id",
+      "out": {
+        "columns": [
+          "id",
+          "txt",
+          "bin",
+          "bits",
+          "j",
+          "jb",
+          "dt",
+          "tz",
+          "n",
+          "big",
+          "flag",
+          "arr",
+          "iv",
+          "pt",
+          "uid",
+          "f",
+          "d"
+        ],
+        "numeric": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "binary": [
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "rows": [
+          [
+            "1",
+            "ธนาคารกรุงเทพ 😺",
+            "\\x00ff10",
+            "10101010",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "2024-03-10 02:30:00.123456",
+            "2024-03-09 19:30:00.123456+00",
+            "1234567890123456.123456",
+            "9223372036854775807",
+            "true",
+            "{a,😺}",
+            "1 day 02:03:04",
+            "(1.5,2.5)",
+            "00000000-0000-0000-0000-000000000001",
+            "1.1",
+            "0.1"
+          ],
+          [
+            "2",
+            "abc",
+            "\\x414243",
+            "00000001",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "false",
+            null,
+            null,
+            null,
+            null,
+            "NaN",
+            "Infinity"
+          ]
+        ],
+        "command": "SELECT"
+      }
+    },
+    {
+      "op": "query",
+      "arg": "SELECT * FROM telecat_m1_values WHERE 1=0",
+      "out": {
+        "columns": [
+          "id",
+          "txt",
+          "bin",
+          "bits",
+          "j",
+          "jb",
+          "dt",
+          "tz",
+          "n",
+          "big",
+          "flag",
+          "arr",
+          "iv",
+          "pt",
+          "uid",
+          "f",
+          "d"
+        ],
+        "numeric": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "binary": [
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "rows": [],
+        "command": "SELECT"
+      }
+    },
+    {
+      "op": "query",
+      "arg": "SELECT true AS a, false AS b, '\\x00ff'::bytea AS c, 'infinity'::date AS d, '{}'::text[] AS e",
+      "out": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e"
+        ],
+        "numeric": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "binary": [
+          false,
+          false,
+          true,
+          false,
+          false
+        ],
+        "rows": [
+          [
+            "true",
+            "false",
+            "\\x00ff",
+            "infinity",
+            "{}"
+          ]
+        ],
+        "command": "SELECT"
+      }
+    },
+    {
+      "op": "queryError",
+      "arg": "SELECT * FROM telecat_m1_missing",
+      "out": "42P01: relation \"telecat_m1_missing\" does not exist"
+    },
+    {
+      "op": "queryError",
+      "arg": "SELEC 1",
+      "out": "42601: syntax error at or near \"SELEC\""
+    },
+    {
+      "op": "structure",
+      "arg": {
+        "schema": "public",
+        "name": "telecat_m1_values"
+      },
+      "out": {
+        "columns": [
+          "#",
+          "column_name",
+          "data_type",
+          "collation",
+          "is_nullable",
+          "column_default",
+          "extra",
+          "foreign_key",
+          "comment"
+        ],
+        "numeric": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "binary": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "rows": [
+          [
+            "1",
+            "id",
+            "integer",
+            null,
+            "NO",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "2",
+            "txt",
+            "text",
+            "default",
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "3",
+            "bin",
+            "bytea",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "4",
+            "bits",
+            "bit(8)",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "5",
+            "j",
+            "json",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "6",
+            "jb",
+            "jsonb",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "7",
+            "dt",
+            "timestamp(6) without time zone",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "8",
+            "tz",
+            "timestamp(6) with time zone",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "9",
+            "n",
+            "numeric(30,6)",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "10",
+            "big",
+            "bigint",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "11",
+            "flag",
+            "boolean",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "12",
+            "arr",
+            "text[]",
+            "default",
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "13",
+            "iv",
+            "interval",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "14",
+            "pt",
+            "point",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "15",
+            "uid",
+            "uuid",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "16",
+            "f",
+            "real",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ],
+          [
+            "17",
+            "d",
+            "double precision",
+            null,
+            "YES",
+            null,
+            null,
+            null,
+            null
+          ]
+        ],
+        "command": "SELECT"
+      }
+    },
+    {
+      "op": "indexes",
+      "arg": {
+        "schema": "public",
+        "name": "telecat_m1_values"
+      },
+      "out": {
+        "columns": [
+          "index_name",
+          "index_algorithm",
+          "is_unique",
+          "column_name",
+          "condition",
+          "constraint_type"
+        ],
+        "numeric": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "binary": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "rows": [
+          [
+            "telecat_m1_values_pkey",
+            "btree",
+            "TRUE",
+            "id",
+            null,
+            "primary"
+          ],
+          [
+            "telecat_m1_txt",
+            "btree",
+            "FALSE",
+            "txt",
+            null,
+            null
+          ]
+        ],
+        "command": "SELECT"
+      }
+    },
+    {
+      "op": "ddl",
+      "arg": {
+        "schema": "public",
+        "name": "telecat_m1_values"
+      },
+      "out": "CREATE TABLE \"public\".\"telecat_m1_values\" (\n  \"id\" integer NOT NULL,\n  \"txt\" text,\n  \"bin\" bytea,\n  \"bits\" bit(8),\n  \"j\" json,\n  \"jb\" jsonb,\n  \"dt\" timestamp(6) without time zone,\n  \"tz\" timestamp(6) with time zone,\n  \"n\" numeric(30,6),\n  \"big\" bigint,\n  \"flag\" boolean,\n  \"arr\" text[],\n  \"iv\" interval,\n  \"pt\" point,\n  \"uid\" uuid,\n  \"f\" real,\n  \"d\" double precision,\n  CONSTRAINT \"telecat_m1_values_pkey\" PRIMARY KEY (id)\n);\n\nCREATE INDEX telecat_m1_txt ON public.telecat_m1_values USING btree (txt);"
+    },
+    {
+      "op": "tableData",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [],
+        "limit": 1,
+        "offset": 0
+      },
+      "out": {
+        "columns": [
+          "id",
+          "txt",
+          "bin",
+          "bits",
+          "j",
+          "jb",
+          "dt",
+          "tz",
+          "n",
+          "big",
+          "flag",
+          "arr",
+          "iv",
+          "pt",
+          "uid",
+          "f",
+          "d"
+        ],
+        "numeric": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "binary": [
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "rows": [
+          [
+            "1",
+            "ธนาคารกรุงเทพ 😺",
+            "\\x00ff10",
+            "10101010",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "2024-03-10 02:30:00.123456",
+            "2024-03-09 19:30:00.123456+00",
+            "1234567890123456.123456",
+            "9223372036854775807",
+            "true",
+            "{a,😺}",
+            "1 day 02:03:04",
+            "(1.5,2.5)",
+            "00000000-0000-0000-0000-000000000001",
+            "1.1",
+            "0.1"
+          ]
+        ],
+        "command": "SELECT",
+        "rowIds": [
+          [
+            "OID",
+            "CTID"
+          ]
+        ],
+        "total": 2,
+        "primaryKey": [
+          "id"
+        ]
+      }
+    },
+    {
+      "op": "tableDataSql",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [],
+        "limit": 1,
+        "offset": 0
+      },
+      "out": "SELECT *, tableoid::oid::text AS \"__telecat_tableoid\", ctid::text AS \"__telecat_ctid\" FROM \"public\".\"telecat_m1_values\" ORDER BY \"id\" LIMIT 1 OFFSET 0;"
+    },
+    {
+      "op": "tableData",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [],
+        "orderBy": {
+          "column": "id",
+          "dir": "DESC"
+        },
+        "limit": 1,
+        "offset": 1
+      },
+      "out": {
+        "columns": [
+          "id",
+          "txt",
+          "bin",
+          "bits",
+          "j",
+          "jb",
+          "dt",
+          "tz",
+          "n",
+          "big",
+          "flag",
+          "arr",
+          "iv",
+          "pt",
+          "uid",
+          "f",
+          "d"
+        ],
+        "numeric": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "binary": [
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "rows": [
+          [
+            "1",
+            "ธนาคารกรุงเทพ 😺",
+            "\\x00ff10",
+            "10101010",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "2024-03-10 02:30:00.123456",
+            "2024-03-09 19:30:00.123456+00",
+            "1234567890123456.123456",
+            "9223372036854775807",
+            "true",
+            "{a,😺}",
+            "1 day 02:03:04",
+            "(1.5,2.5)",
+            "00000000-0000-0000-0000-000000000001",
+            "1.1",
+            "0.1"
+          ]
+        ],
+        "command": "SELECT",
+        "rowIds": [
+          [
+            "OID",
+            "CTID"
+          ]
+        ],
+        "total": 2,
+        "primaryKey": [
+          "id"
+        ]
+      }
+    },
+    {
+      "op": "tableDataSql",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [],
+        "orderBy": {
+          "column": "id",
+          "dir": "DESC"
+        },
+        "limit": 1,
+        "offset": 1
+      },
+      "out": "SELECT *, tableoid::oid::text AS \"__telecat_tableoid\", ctid::text AS \"__telecat_ctid\" FROM \"public\".\"telecat_m1_values\" ORDER BY \"id\" DESC LIMIT 1 OFFSET 1;"
+    },
+    {
+      "op": "tableData",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [
+          {
+            "enabled": true,
+            "column": "txt",
+            "op": "contains",
+            "value": "ธนาคาร"
+          }
+        ],
+        "limit": 100,
+        "offset": 0
+      },
+      "out": {
+        "columns": [
+          "id",
+          "txt",
+          "bin",
+          "bits",
+          "j",
+          "jb",
+          "dt",
+          "tz",
+          "n",
+          "big",
+          "flag",
+          "arr",
+          "iv",
+          "pt",
+          "uid",
+          "f",
+          "d"
+        ],
+        "numeric": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "binary": [
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "rows": [
+          [
+            "1",
+            "ธนาคารกรุงเทพ 😺",
+            "\\x00ff10",
+            "10101010",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "2024-03-10 02:30:00.123456",
+            "2024-03-09 19:30:00.123456+00",
+            "1234567890123456.123456",
+            "9223372036854775807",
+            "true",
+            "{a,😺}",
+            "1 day 02:03:04",
+            "(1.5,2.5)",
+            "00000000-0000-0000-0000-000000000001",
+            "1.1",
+            "0.1"
+          ]
+        ],
+        "command": "SELECT",
+        "rowIds": [
+          [
+            "OID",
+            "CTID"
+          ]
+        ],
+        "total": 1,
+        "primaryKey": [
+          "id"
+        ]
+      }
+    },
+    {
+      "op": "tableDataSql",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [
+          {
+            "enabled": true,
+            "column": "txt",
+            "op": "contains",
+            "value": "ธนาคาร"
+          }
+        ],
+        "limit": 100,
+        "offset": 0
+      },
+      "out": "SELECT *, tableoid::oid::text AS \"__telecat_tableoid\", ctid::text AS \"__telecat_ctid\" FROM \"public\".\"telecat_m1_values\" WHERE \"txt\"::text ILIKE '%ธนาคาร%' ORDER BY \"id\" LIMIT 100 OFFSET 0;"
+    },
+    {
+      "op": "tableData",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [
+          {
+            "enabled": true,
+            "column": "id",
+            "op": "=",
+            "value": "2"
+          },
+          {
+            "enabled": true,
+            "column": "txt",
+            "op": "contains cs",
+            "value": "😺"
+          }
+        ],
+        "combine": "OR",
+        "limit": 100,
+        "offset": 0
+      },
+      "out": {
+        "columns": [
+          "id",
+          "txt",
+          "bin",
+          "bits",
+          "j",
+          "jb",
+          "dt",
+          "tz",
+          "n",
+          "big",
+          "flag",
+          "arr",
+          "iv",
+          "pt",
+          "uid",
+          "f",
+          "d"
+        ],
+        "numeric": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true
+        ],
+        "binary": [
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "rows": [
+          [
+            "1",
+            "ธนาคารกรุงเทพ 😺",
+            "\\x00ff10",
+            "10101010",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "{\"a\": 1, \"b\": [1, 2]}",
+            "2024-03-10 02:30:00.123456",
+            "2024-03-09 19:30:00.123456+00",
+            "1234567890123456.123456",
+            "9223372036854775807",
+            "true",
+            "{a,😺}",
+            "1 day 02:03:04",
+            "(1.5,2.5)",
+            "00000000-0000-0000-0000-000000000001",
+            "1.1",
+            "0.1"
+          ],
+          [
+            "2",
+            "abc",
+            "\\x414243",
+            "00000001",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "false",
+            null,
+            null,
+            null,
+            null,
+            "NaN",
+            "Infinity"
+          ]
+        ],
+        "command": "SELECT",
+        "rowIds": [
+          [
+            "OID",
+            "CTID"
+          ],
+          [
+            "OID",
+            "CTID"
+          ]
+        ],
+        "total": 2,
+        "primaryKey": [
+          "id"
+        ]
+      }
+    },
+    {
+      "op": "tableDataSql",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [
+          {
+            "enabled": true,
+            "column": "id",
+            "op": "=",
+            "value": "2"
+          },
+          {
+            "enabled": true,
+            "column": "txt",
+            "op": "contains cs",
+            "value": "😺"
+          }
+        ],
+        "combine": "OR",
+        "limit": 100,
+        "offset": 0
+      },
+      "out": "SELECT *, tableoid::oid::text AS \"__telecat_tableoid\", ctid::text AS \"__telecat_ctid\" FROM \"public\".\"telecat_m1_values\" WHERE \"id\" = '2' OR \"txt\"::text LIKE '%😺%' ORDER BY \"id\" LIMIT 100 OFFSET 0;"
+    },
+    {
+      "op": "tableDataSql",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [
+          {
+            "enabled": true,
+            "column": "txt",
+            "op": "contains",
+            "value": "a'\\%_\n\t"
+          }
+        ],
+        "limit": 100,
+        "offset": 0
+      },
+      "out": "SELECT *, tableoid::oid::text AS \"__telecat_tableoid\", ctid::text AS \"__telecat_ctid\" FROM \"public\".\"telecat_m1_values\" WHERE \"txt\"::text ILIKE '%a''\\\\\\%\\_\n\t%' ORDER BY \"id\" LIMIT 100 OFFSET 0;"
+    },
+    {
+      "op": "tableDataSql",
+      "arg": {
+        "table": {
+          "schema": "public",
+          "name": "telecat_m1_values"
+        },
+        "filters": [
+          {
+            "enabled": true,
+            "column": "txt",
+            "op": "contains",
+            "value": "ธนาคารกรุงเทพ 😺"
+          }
+        ],
+        "limit": 100,
+        "offset": 0
+      },
+      "out": "SELECT *, tableoid::oid::text AS \"__telecat_tableoid\", ctid::text AS \"__telecat_ctid\" FROM \"public\".\"telecat_m1_values\" WHERE \"txt\"::text ILIKE '%ธนาคารกรุงเทพ 😺%' ORDER BY \"id\" LIMIT 100 OFFSET 0;"
+    },
+    {
+      "op": "listObjects",
+      "out": [
+        {
+          "schema": "public",
+          "name": "telecat_m1_values",
+          "kind": "table"
+        }
+      ]
+    }
+  ]
+}

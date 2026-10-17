@@ -1,0 +1,705 @@
+{
+  "hashes": {
+    "src/shared/types.ts": "2620553c0e2200990841893e634c6fbcbd292e29a1ee60b1b4a1e30813f75d07",
+    "src/main/store.ts": "80f569d05584c8e6def4f9196d957e3dc8e5bb442e2bc59b32ef1c0a19c5160d"
+  },
+  "cases": [
+    {
+      "op": "upsertConnection",
+      "args": [
+        {
+          "driver": "mysql",
+          "name": "ธนาคารกรุงเทพ 😺",
+          "color": "#3a7d44",
+          "tag": "",
+          "safeMode": "silent",
+          "host": "127.0.0.1",
+          "port": 3307,
+          "user": "root",
+          "passwordMode": "keychain",
+          "database": "zixma",
+          "sslMode": "PREFERRED",
+          "negotiation": "POSTGRES",
+          "groupId": null,
+          "id": "one"
+        },
+        "secret 😺"
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "one"
+          }
+        ],
+        "groups": []
+      },
+      "queries": {},
+      "drafts": {}
+    },
+    {
+      "op": "saveGroup",
+      "args": [
+        {
+          "id": "g1",
+          "name": "FA Agent",
+          "collapsed": true
+        }
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "one"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "name": "FA Agent",
+            "collapsed": true
+          }
+        ]
+      },
+      "queries": {},
+      "drafts": {}
+    },
+    {
+      "op": "moveConnection",
+      "args": [
+        "one",
+        "g1"
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": "g1",
+            "id": "one"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "name": "FA Agent",
+            "collapsed": true
+          }
+        ]
+      },
+      "queries": {},
+      "drafts": {}
+    },
+    {
+      "op": "saveGroup",
+      "args": [
+        {
+          "id": "g2",
+          "name": "สอง 😺"
+        }
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": "g1",
+            "id": "one"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "name": "FA Agent",
+            "collapsed": true
+          },
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {},
+      "drafts": {}
+    },
+    {
+      "op": "upsertConnection",
+      "args": [
+        {
+          "driver": "postgres",
+          "name": "Mochi",
+          "color": "#3a7d44",
+          "tag": "",
+          "safeMode": "silent",
+          "host": "127.0.0.1",
+          "port": 5434,
+          "user": "",
+          "passwordMode": "ask",
+          "database": "",
+          "sslMode": "PREFERRED",
+          "negotiation": "POSTGRES",
+          "groupId": null,
+          "id": "two"
+        },
+        "unused"
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": "g1",
+            "id": "one"
+          },
+          {
+            "driver": "postgres",
+            "name": "Mochi",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 5434,
+            "user": "",
+            "passwordMode": "ask",
+            "database": "",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "two"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "name": "FA Agent",
+            "collapsed": true
+          },
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {},
+      "drafts": {}
+    },
+    {
+      "op": "saveQuery",
+      "args": [
+        "one",
+        {
+          "id": "q1",
+          "name": "query 😺",
+          "sql": "SELECT 'ธนาคารกรุงเทพ'"
+        }
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": "g1",
+            "id": "one"
+          },
+          {
+            "driver": "postgres",
+            "name": "Mochi",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 5434,
+            "user": "",
+            "passwordMode": "ask",
+            "database": "",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "two"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "name": "FA Agent",
+            "collapsed": true
+          },
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {
+        "one": [
+          {
+            "id": "q1",
+            "name": "query 😺",
+            "sql": "SELECT 'ธนาคารกรุงเทพ'"
+          }
+        ]
+      },
+      "drafts": {}
+    },
+    {
+      "op": "saveDrafts",
+      "args": [
+        "one",
+        [
+          {
+            "title": "empty",
+            "sql": " ﻿ "
+          },
+          {
+            "title": "SQL Query",
+            "sql": "SELECT 1"
+          }
+        ]
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": "g1",
+            "id": "one"
+          },
+          {
+            "driver": "postgres",
+            "name": "Mochi",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 5434,
+            "user": "",
+            "passwordMode": "ask",
+            "database": "",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "two"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "name": "FA Agent",
+            "collapsed": true
+          },
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {
+        "one": [
+          {
+            "id": "q1",
+            "name": "query 😺",
+            "sql": "SELECT 'ธนาคารกรุงเทพ'"
+          }
+        ]
+      },
+      "drafts": {
+        "one": [
+          {
+            "title": "SQL Query",
+            "sql": "SELECT 1"
+          }
+        ]
+      }
+    },
+    {
+      "op": "saveQuery",
+      "args": [
+        "one",
+        {
+          "id": "q1",
+          "name": "renamed",
+          "sql": "SELECT 2"
+        }
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": "g1",
+            "id": "one"
+          },
+          {
+            "driver": "postgres",
+            "name": "Mochi",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 5434,
+            "user": "",
+            "passwordMode": "ask",
+            "database": "",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "two"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "name": "FA Agent",
+            "collapsed": true
+          },
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {
+        "one": [
+          {
+            "id": "q1",
+            "name": "renamed",
+            "sql": "SELECT 2"
+          }
+        ]
+      },
+      "drafts": {
+        "one": [
+          {
+            "title": "SQL Query",
+            "sql": "SELECT 1"
+          }
+        ]
+      }
+    },
+    {
+      "op": "deleteQuery",
+      "args": [
+        "one",
+        "q1"
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": "g1",
+            "id": "one"
+          },
+          {
+            "driver": "postgres",
+            "name": "Mochi",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 5434,
+            "user": "",
+            "passwordMode": "ask",
+            "database": "",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "two"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g1",
+            "name": "FA Agent",
+            "collapsed": true
+          },
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {
+        "one": []
+      },
+      "drafts": {
+        "one": [
+          {
+            "title": "SQL Query",
+            "sql": "SELECT 1"
+          }
+        ]
+      }
+    },
+    {
+      "op": "deleteGroup",
+      "args": [
+        "g1"
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "keychain",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "one"
+          },
+          {
+            "driver": "postgres",
+            "name": "Mochi",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 5434,
+            "user": "",
+            "passwordMode": "ask",
+            "database": "",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "two"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {
+        "one": []
+      },
+      "drafts": {
+        "one": [
+          {
+            "title": "SQL Query",
+            "sql": "SELECT 1"
+          }
+        ]
+      }
+    },
+    {
+      "op": "upsertConnection",
+      "args": [
+        {
+          "driver": "mysql",
+          "name": "ธนาคารกรุงเทพ 😺",
+          "color": "#3a7d44",
+          "tag": "",
+          "safeMode": "silent",
+          "host": "127.0.0.1",
+          "port": 3307,
+          "user": "root",
+          "passwordMode": "none",
+          "database": "zixma",
+          "sslMode": "PREFERRED",
+          "negotiation": "POSTGRES",
+          "groupId": null,
+          "id": "one"
+        }
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "none",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "one"
+          },
+          {
+            "driver": "postgres",
+            "name": "Mochi",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 5434,
+            "user": "",
+            "passwordMode": "ask",
+            "database": "",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "two"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {
+        "one": []
+      },
+      "drafts": {
+        "one": [
+          {
+            "title": "SQL Query",
+            "sql": "SELECT 1"
+          }
+        ]
+      }
+    },
+    {
+      "op": "deleteConnection",
+      "args": [
+        "two"
+      ],
+      "store": {
+        "connections": [
+          {
+            "driver": "mysql",
+            "name": "ธนาคารกรุงเทพ 😺",
+            "color": "#3a7d44",
+            "tag": "",
+            "safeMode": "silent",
+            "host": "127.0.0.1",
+            "port": 3307,
+            "user": "root",
+            "passwordMode": "none",
+            "database": "zixma",
+            "sslMode": "PREFERRED",
+            "negotiation": "POSTGRES",
+            "groupId": null,
+            "id": "one"
+          }
+        ],
+        "groups": [
+          {
+            "id": "g2",
+            "name": "สอง 😺"
+          }
+        ]
+      },
+      "queries": {
+        "one": []
+      },
+      "drafts": {
+        "one": [
+          {
+            "title": "SQL Query",
+            "sql": "SELECT 1"
+          }
+        ]
+      }
+    }
+  ]
+}

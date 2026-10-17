@@ -1,0 +1,10 @@
+Package: mac@0.1.1
+Repository: https://github.com/reem/rust-mac.git
+License declaration: MIT/Apache-2.0
+Authors (published Cargo.toml): Jonathan Reem <jonathan.reem@gmail.com>
+
+
+## License
+
+MIT/Apache-2.0, like rust itself
+

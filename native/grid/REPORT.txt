@@ -1,0 +1,151 @@
+Telecat Native — grid component handoff — 2026-10-17
+
+Implementation and tests are complete within native/grid. Visual acceptance,
+actual GPU scroll timing and the no-dropped-frames requirement remain unverified
+because the sandbox cannot open the native application window. This report does
+not claim pixel equality or measured rendering frame times.
+
+Ownership
+Only grid/ source, fixtures, documentation, launcher and logs were edited.
+Cargo used the shared native target/cache after sourcing scripts/env.sh; no
+private target, cargo clean, workspace tests, DB connection, Electron changes,
+real profile or Keychain access. Root Cargo.toml and other sessions' sources
+were not edited. Example names are grid-specific to avoid shared-target binary
+collisions, while the required file remains examples/scenario.rs.
+
+Implementation locations (relative to native/)
+grid/src/model.rs:8 — column metadata; row/cell/default state; selection.
+grid/src/model.rs:123 — typed edit/selection/sort/resize/paste/menu/detail events.
+grid/src/model.rs:198 — owned Vec<Vec<Option<String>>> model, viewport/layout,
+  controlled data/sort updates, scrolling, selection, edit lifecycle and hooks.
+grid/src/model.rs:475 — commit/cancel, NULL/DEFAULT no-op, editable Tab traversal.
+grid/src/model.rs:515 — arrows, page keys, Home/End, Tab, delete/insert/duplicate.
+grid/src/model.rs:619 — selected TSV and all standard context-menu copy formats.
+grid/src/model.rs:722 — Electron width sampling, UTF-16 lengths, duplicate names.
+grid/src/model.rs:745 — exact CR removal / one-final-LF TSV paste semantics.
+grid/src/model.rs:755 — bounded virtualization with 20-row overscan.
+grid/src/theme.rs:3 — exact CSS colors and geometry; SF Mono / UI / Thai fallback.
+grid/src/view.rs:83 — public Entity component, model updates and subscriptions.
+grid/src/view.rs:181 — native text engine in custom cell frame, Unicode/IME,
+  focus, blur, multiline editing and resize. No stock AppKit cell widgets.
+grid/src/view.rs:272 — keyboard dispatch, clipboard and editor lifecycle.
+grid/src/view.rs:373 — pointer selection, resize, scrollbars and menu/popup hooks.
+grid/src/view.rs:635 — GPUI rendering, input action capture and editor overlay.
+grid/src/view.rs:1051 — canvas rows/cells, sticky header/number column, filler,
+  selection, staged colors, ellipsis, numeric/NULL/DEFAULT display, empty message.
+grid/examples/scenario.rs:10 — deferred native frame sizing and WINDOW output.
+grid/examples/scenario.rs:55 — finite 360-frame GUI scroll measurement mode.
+grid/examples/scenario.rs:93 — scenario launcher, temp-profile requirement.
+grid/examples/support/fixtures.rs:11 — reference data/geometry; grid-100k at :153.
+grid/examples/bench_model.rs:8 — headless model footprint/window lookup benchmark.
+grid/tools/scenario.sh:1 — temporary profile and package-specific binary launcher.
+grid/tests/behavior.rs:50 — 2,107 cases from the actual Electron functions.
+grid/tests/ui.rs:116 — actual GPUI input dispatch using GPUI Kit's Base Root.
+grid/README.md:1 — caller integration, hooks, capture rectangles and commands.
+
+Behavior details
+- Row strings are held once; frame work is bounded by visible rows/columns.
+  Only one cell editor is allocated. FrameStats retains at most 1,200 samples.
+- Edits/sorts emit requests; they do not mutate caller-supplied row values or
+  issue SQL. Context menus, inspector, Quick Look and cell popups emit hooks.
+  COPY_MENU plus activate_menu cover Electron's built-in copy commands; caller
+  supplies extra items and native menu presentation.
+- DEFAULT is represented by sparse per-cell metadata, keeping None as SQL NULL.
+  Unchanged empty NULL/DEFAULT editors do not emit edits. Literal NULL stays
+  a string. SQL NULL/DEFAULT actions belong to the caller's menu handling.
+- Copy includes hidden columns. Single-row plus active-column selection copies
+  a cell; other selections copy rows in sorted order. TSV is intentionally not
+  quoted and paste strips every CR but just one trailing LF.
+- GPUI dispatch tests caught and fixed automatic scroller focus stealing focus
+  from double-click editors, the Base Root consuming Tab, and different CR/LF
+  handling for HTML input/textarea paste. Thai/emoji IME, native Edit-menu copy,
+  Tab/Enter commits, Esc, multiline blur, external resize drags, popup anchors,
+  context hooks and 100k x 30 render bounds all pass.
+- Electron does not explicitly implement PageUp/PageDown/Home/End/non-editing
+  Tab; these requested keys are added. Existing arrow/anchor behavior remains
+  identical, including repeated Shift+Arrow using the original anchor and
+  arrows including hidden column indices.
+- Modified rows do not get a whole-row tint in Electron. MOD_CELL colors changed
+  cells; MOD is exported for the parent's dirty-state UI. NEW/DEL override row
+  selection while the active-cell outline remains visible.
+
+Final commands/results (working directory: native/)
+  . scripts/env.sh
+  node grid/tools/oracle.mjs
+    exit 0; 2,107 deterministic cases from extracted DataGrid.tsx function ASTs.
+    source SHA256: 1b2bdf7c8320152ba04211d5a849af3d0754b5ab3b6b695fc7cf8e28e155bf54
+  cargo test -p telecat-grid > grid/tests.log 2>&1
+    exit 0; 17 passed, 0 failed/ignored: 11 behavior + 6 GPUI dispatch tests.
+    Actual 100k x 30 headless render remains at <=160 painted cells.
+  cargo build --release -p telecat-grid --examples > grid/build-release.log 2>&1
+    exit 0; final build 5.32s. No telecat-grid warnings. Vendored macOS backend
+    emits 1,203 upstream deprecation warnings; block future-compat notice remains.
+  cargo fmt -p telecat-grid --check
+    exit 0.
+  ./target/release/examples/grid-bench-model > grid/perf-model.log 2>&1
+  ./target/release/examples/grid-bench-model 1000 > grid/perf-model-1k.log 2>&1
+    exit 0; measurements below.
+
+Reference scenarios / reviewer capture
+  ./grid/tools/scenario.sh grid-07
+  ./grid/tools/scenario.sh grid-51
+  ./grid/tools/scenario.sh grid-06
+  ./grid/tools/scenario.sh grid-22
+  ./grid/tools/scenario.sh grid-100k
+  ./grid/tools/scenario.sh grid-empty  (additional filler/message fixture)
+
+Names printed: grid-07, grid-51, grid-06, grid-22, grid-100k, grid-empty.
+Binary: native/target/release/examples/grid-scenario
+Source: native/grid/examples/scenario.rs
+All windows are component-only, without title bar decoration. Expected logical
+size is 848 x 511 pt, except grid-06 at 848 x 233.5 pt.
+Reference 2x crop rectangles (x,y,width,height):
+  07 / 51 / 22: (542,184,1696,1022)
+  06:          (542,739,1696,467)
+These exclude the surrounding workspace border/sub-bar. No screenshots were
+captured here. Row data includes the exact visible Thai names, staged deleted
+and inserted test-bank rows, selected query row and 500 invoice rows.
+grid-51 starts at scrollLeft=526.5 pt, row 7 / country_code selected. The visible
+reference contains no yellow modified cell; its modified state is offscreen.
+Visible widths were measured from reference pixel boundaries. The clipped final
+swift_code width (131 pt) was calibrated from scrollbar extent; offscreen data
+cannot be recovered exactly from the supplied images. This is a fixture
+assumption, not a change to the tested default-width algorithm.
+
+Performance measurements
+100,000 rows x 30 columns (mixed numbers, Thai, text and NULL):
+  Model construction:       125.832 ms
+  Owned model allocation:   136,774,338 bytes (130.44 MiB)
+  Process phys_footprint:   178,963,032 bytes (170.67 MiB)
+  Before model allocation:  2,064,864 bytes
+  Maximum overscan cells:   480
+  10,000 headless window lookups:
+    mean 0.0349 ms; p50 0.0343; p95 0.0367; p99 0.0432; max 0.0923.
+
+1,000 rows x 30 columns, headless only:
+  Model construction:       1.155 ms
+  Owned model allocation:   1,349,580 bytes
+  Process phys_footprint:   3,932,640 bytes
+  Window lookup: mean 0.0224 ms; p95 0.0232; max 0.0553.
+
+These are headless model measurements, NOT scroll frame times, GPU memory or
+workspace footprint. Owned bytes exclude allocator overhead; phys_footprint
+comes from proc_pid_rusage for the benchmark process.
+
+GUI probe / incomplete verification
+  TELECAT_GRID_PERF=1 ./grid/tools/scenario.sh grid-100k
+  (run in a subprocess with a 12-second timeout and SIGTERM cleanup;
+   stdout/stderr captured to grid/perf-gui.log)
+The probe printed PROFILE and SCENARIO, then failed to establish the macOS
+LaunchServices/XPC connection (com.apple.hiservices-xpcservice and
+_LSModifyNotification). No WINDOW or rendered-frame statistics appeared.
+The process was terminated after the timeout. No capture was attempted.
+
+Run that same command outside the sandbox to get process footprint, scroll-frame
+interval p50/p95/p99/max and grid CPU preparation/paint percentiles. It sweeps
+360 frames and then stops scheduling callbacks. Idle redraw behavior, GPU frame
+times, no-frame-drop acceptance, live native font rendering and pixel equality
+still need the reviewer's actual-window run. Headless tests do not establish
+those properties. The <=100 MB workspace target is not claimed by a headless
+1,000-row model measurement. Tooltip presentation and native window geometry
+also await that visual review.

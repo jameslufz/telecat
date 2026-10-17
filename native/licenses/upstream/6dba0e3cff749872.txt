@@ -1,0 +1,6 @@
+Package: block@0.1.6
+Repository: http://github.com/SSheldon/rust-block
+License declaration: MIT
+Authors (published Cargo.toml): Steven Sheldon
+
+

@@ -1,0 +1,11 @@
+[package]
+name = "telecat-theme"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+gpui-kit = { version = "=0.7.3", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui-apple = { package = "gpui-pre-apple", version = "=0.3.9", features = ["font-kit"] }

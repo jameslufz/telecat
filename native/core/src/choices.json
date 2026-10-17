@@ -1,0 +1,170 @@
+{
+  "SAFE_MODES": [
+    {
+      "value": "silent",
+      "label": "Silent Mode - Send queries to the server without any warnings (Default)",
+      "icon": "unlock"
+    },
+    {
+      "value": "alert1",
+      "label": "Alert Mode 1 - Warn before sending queries to the server",
+      "icon": "dot",
+      "color": "#f2c14e"
+    },
+    {
+      "value": "alert2",
+      "label": "Alert Mode 2 - Warn before sending queries to the server except SELECT/EXPLAIN/SHOW queries",
+      "icon": "ring",
+      "color": "#f2c14e"
+    },
+    {
+      "value": "safe1",
+      "label": "Safe Mode 1 - Prompt for password before sending queries to the server",
+      "icon": "dot",
+      "color": "#e2574c"
+    },
+    {
+      "value": "safe2",
+      "label": "Safe Mode 2 - Prompt for password before sending queries to the server except SELECT/EXPLAIN/SHOW queries",
+      "icon": "ring",
+      "color": "#e2574c"
+    }
+  ],
+  "PASSWORD_MODES": [
+    {
+      "value": "keychain",
+      "label": "Store in keychain"
+    },
+    {
+      "value": "ask",
+      "label": "Ask every time"
+    },
+    {
+      "value": "command",
+      "label": "Command Line"
+    },
+    {
+      "value": "none",
+      "label": "No password"
+    }
+  ],
+  "SSL_MODES": [
+    "PREFERRED",
+    "DISABLED",
+    "REQUIRED",
+    "ALLOW",
+    "VERIFY-CA",
+    "VERIFY-FULL"
+  ],
+  "NEGOTIATIONS": [
+    "POSTGRES",
+    "DIRECT"
+  ],
+  "TAGS": [
+    "",
+    "local",
+    "development",
+    "testing",
+    "staging",
+    "production"
+  ],
+  "STATUS_COLORS": [
+    "#3a7d44",
+    "#6e6e73",
+    "#1f4f8f",
+    "#9a7a45",
+    "#6e1109"
+  ],
+  "TAG_COLORS": {
+    "local": "#3fb950",
+    "development": "#58a6ff",
+    "testing": "#d29922",
+    "staging": "#db6d28",
+    "production": "#f85149"
+  },
+  "FILTER_OPS": [
+    {
+      "value": "=",
+      "label": "="
+    },
+    {
+      "value": "<>",
+      "label": "<>"
+    },
+    {
+      "value": "<",
+      "label": "<"
+    },
+    {
+      "value": ">",
+      "label": ">"
+    },
+    {
+      "value": "<=",
+      "label": "<="
+    },
+    {
+      "value": ">=",
+      "label": ">="
+    },
+    {
+      "value": "in",
+      "label": "IN",
+      "separatorBefore": true
+    },
+    {
+      "value": "not in",
+      "label": "NOT IN"
+    },
+    {
+      "value": "is null",
+      "label": "IS NULL",
+      "separatorBefore": true
+    },
+    {
+      "value": "is not null",
+      "label": "IS NOT NULL"
+    },
+    {
+      "value": "between",
+      "label": "BETWEEN",
+      "separatorBefore": true
+    },
+    {
+      "value": "not between",
+      "label": "NOT BETWEEN"
+    },
+    {
+      "value": "like",
+      "label": "LIKE",
+      "separatorBefore": true
+    },
+    {
+      "value": "contains",
+      "label": "Contains",
+      "separatorBefore": true
+    },
+    {
+      "value": "not contains",
+      "label": "Not contains"
+    },
+    {
+      "value": "contains cs",
+      "label": "Contains - Case sensitive",
+      "separatorBefore": true
+    },
+    {
+      "value": "not contains cs",
+      "label": "Not contains - Case sensitive"
+    },
+    {
+      "value": "has prefix",
+      "label": "Has prefix",
+      "separatorBefore": true
+    },
+    {
+      "value": "has suffix",
+      "label": "Has suffix"
+    }
+  ]
+}

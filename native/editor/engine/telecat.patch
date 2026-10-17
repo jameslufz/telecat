@@ -1,0 +1,519 @@
+--- gpui-base-0.7.3/src/input/base/blink_cursor.rs
++++ telecat-editor-engine/src/input/base/blink_cursor.rs
+@@ -1,18 +1,18 @@
+ use gpui::{Context, Pixels, Task, px};
+ use instant::Duration;
+ 
+-static INTERVAL: Duration = Duration::from_millis(500);
+-static PAUSE_DELAY: Duration = Duration::from_millis(300);
++static INTERVAL: Duration = Duration::from_millis(600);
++static PAUSE_DELAY: Duration = Duration::from_millis(600);
+ 
+ // On Windows, Linux, we should use integer to avoid blurry cursor.
+ #[cfg(not(target_os = "macos"))]
+ pub(super) const CURSOR_WIDTH: Pixels = px(2.);
+ #[cfg(target_os = "macos")]
+-pub(super) const CURSOR_WIDTH: Pixels = px(1.5);
++pub(super) const CURSOR_WIDTH: Pixels = px(1.);
+ 
+ /// To manage the Input cursor blinking.
+ ///
+-/// It will start blinking with a interval of 500ms.
++/// It will start blinking with a interval of 600ms.
+ /// Every loop will notify the view to update the `visible`, and Input will observe this update to touch repaint.
+ ///
+ /// The input painter will check if this in visible state, then it will draw the cursor.
+@@ -36,6 +36,9 @@
+ 
+     /// Start the blinking
+     pub(crate) fn start(&mut self, cx: &mut Context<Self>) {
++        self.epoch += 1;
++        self.paused = false;
++        self.visible = false;
+         self.blink(self.epoch, cx);
+     }
+ 
+@@ -76,6 +79,14 @@
+                 this.update(cx, |this, cx| this.blink(epoch, cx));
+             }
+         });
++    }
++
++    pub(crate) fn freeze(&mut self, visible: bool, cx: &mut Context<Self>) {
++        self._task = Task::ready(());
++        self.epoch = 0;
++        self.paused = false;
++        self.visible = visible;
++        cx.notify();
+     }
+ 
+     pub(crate) fn visible(&self) -> bool {
+--- gpui-base-0.7.3/src/input/base/cursor.rs
++++ telecat-editor-engine/src/input/base/cursor.rs
+@@ -181,7 +181,7 @@
+ 
+     /// Adds an additional selection.
+     pub(super) fn add(&mut self, selection: CursorSelection) {
+-        self.selections.push(selection);
++        self.selections.insert(0, selection);
+     }
+ 
+     /// Replaces all selections. Ignores an empty vec to keep the
+--- gpui-base-0.7.3/src/input/base/element.rs
++++ telecat-editor-engine/src/input/base/element.rs
+@@ -48,11 +48,11 @@
+ 
+ const BOTTOM_MARGIN_ROWS: usize = 3;
+ pub(super) const RIGHT_MARGIN: Pixels = px(10.);
+-pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(6.);
++pub(super) const LINE_NUMBER_RIGHT_MARGIN: Pixels = px(38.);
+ const FOLD_ICON_WIDTH: Pixels = px(14.);
+ const FOLD_ICON_HITBOX_WIDTH: Pixels = px(18.);
+ const MAX_HIGHLIGHT_LINE_LENGTH: usize = 10_000;
+-const MIN_LINE_NUMBER_DIGITS: usize = 3;
++const MIN_LINE_NUMBER_DIGITS: usize = 1;
+ const MAX_LINE_NUMBER_DIGITS: usize = 7;
+ const MAX_DISPLAYED_LINE_NUMBER: usize = 9_999_999;
+ 
+@@ -332,7 +332,7 @@
+             input_bounds.origin.y - paddings.top,
+         ),
+         size: size(
+-            line_number_width + paddings.left,
++            (line_number_width - px(6.)).max(px(0.)) + paddings.left,
+             input_bounds.size.height + ghost_lines_height + paddings.top + paddings.bottom,
+         ),
+     }
+@@ -1116,7 +1116,7 @@
+ 
+             empty_line_number.width + LINE_NUMBER_RIGHT_MARGIN
+         } else if state.is_code_editor() {
+-            LINE_NUMBER_RIGHT_MARGIN
++            px(0.)
+         } else {
+             px(0.)
+         };
+@@ -2543,7 +2543,7 @@
+         let (display_text, text_color) = if is_empty {
+             (
+                 &Rope::from(placeholder.as_str()),
+-                dim(state.editor_style.muted_foreground),
++                dim(gpui::rgb(0x666666).into()),
+             )
+         } else if state.masked {
+             (
+@@ -2917,7 +2917,7 @@
+             let current_line_runs = vec![TextRun {
+                 len: line_number_len,
+                 font: style.font(),
+-                color: state.editor_style.foreground,
++                color: gpui::rgb(0xbbbbbb).into(),
+                 background_color: None,
+                 underline: None,
+                 strikethrough: None,
+@@ -2936,7 +2936,9 @@
+                 )
+                 .into();
+ 
+-                let runs = if current_row == Some(buffer_line) {
++                let runs = if state.selections.iter().any(|selection| {
++                    state.text.offset_to_point(selection.cursor_offset()).row == buffer_line
++                }) {
+                     &current_line_runs
+                 } else {
+                     &other_line_runs
+@@ -3021,6 +3023,14 @@
+                 state.editor_paddings,
+             )
+         };
++        let active_rows: Vec<_> = {
++            let state = self.state.read(cx);
++            state
++                .selections
++                .iter()
++                .map(|selection| state.text.offset_to_point(selection.cursor_offset()).row)
++                .collect()
++        };
+         let focused = focus_handle.is_focused(window);
+         let bounds = prepaint.bounds;
+         let text_align = prepaint.last_layout.text_align;
+@@ -3055,7 +3065,7 @@
+                 .iter()
+                 .zip(prepaint.last_layout.visible_buffer_lines.iter())
+             {
+-                let is_active = prepaint.current_row == Some(buffer_line);
++                let is_active = active_rows.contains(&buffer_line);
+                 let p = point(input_bounds.origin.x, origin.y + offset_y);
+                 let height = line_height * lines.len() as f32;
+                 // Paint the current line background
+@@ -3143,14 +3153,15 @@
+                 }
+             }
+ 
+-            for path in prepaint.selection_paths.drain(..) {
+-                window.paint_path(path, editor_style.selection);
+-            }
+-
+             // Paint hover highlight
+             if let Some(path) = prepaint.hover_highlight_path.take() {
+                 window.paint_path(path, secondary_selection);
+             }
++        }
++
++        // CodeMirror keeps its selection visible when another window is active.
++        for path in prepaint.selection_paths.drain(..) {
++            window.paint_path(path, editor_style.selection);
+         }
+ 
+         // Paint document colors
+@@ -3262,22 +3273,12 @@
+                 .iter()
+                 .zip(prepaint.last_layout.visible_buffer_lines.iter())
+             {
+-                let p = point(input_bounds.origin.x, origin.y + offset_y);
+-                let is_active = prepaint.current_row == Some(buffer_line);
++                let p = point(input_bounds.origin.x + px(18.), origin.y + offset_y);
++                let is_active = active_rows.contains(&buffer_line);
+ 
+                 let height = line_height * lines.len() as f32;
+                 // paint active line number background
+-                if is_active {
+-                    if let Some(bg_color) = active_line_color {
+-                        window.paint_quad(fill(
+-                            Bounds::new(
+-                                point(gutter_bounds.origin.x, p.y),
+-                                size(gutter_bounds.size.width, height),
+-                            ),
+-                            bg_color,
+-                        ));
+-                    }
+-                }
++                let _ = (is_active, height); // Electron gutter stays transparent.
+ 
+                 for line in lines {
+                     _ = line.paint(p, line_height, TextAlign::Left, None, window, cx);
+--- gpui-base-0.7.3/src/input/base/state.rs
++++ telecat-editor-engine/src/input/base/state.rs
+@@ -49,7 +49,7 @@
+ }
+ 
+ #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+-#[action(namespace = input, no_json)]
++#[action(namespace = telecat_editor_input, no_json)]
+ pub struct Enter {
+     /// Is confirm with secondary.
+     pub secondary: bool,
+@@ -72,7 +72,7 @@
+ }
+ 
+ actions!(
+-    input,
++    telecat_editor_input,
+     [
+         ActivateToken,
+         Backspace,
+@@ -131,7 +131,7 @@
+     Blur,
+ }
+ 
+-pub(super) const CONTEXT: &str = "Input";
++pub(super) const CONTEXT: &str = "TelecatInput";
+ 
+ pub(crate) fn init(cx: &mut App) {
+     cx.bind_keys([
+@@ -204,9 +204,9 @@
+         KeyBinding::new("shift-alt-right", SelectRight, Some(CONTEXT)),
+         // Avoid Ctrl+Alt+arrows on Linux, where desktops may reserve them.
+         #[cfg(target_os = "macos")]
+-        KeyBinding::new("cmd-alt-up", AddCursorAbove, Some(CONTEXT)),
++        KeyBinding::new("ctrl-shift-up", AddCursorAbove, Some(CONTEXT)),
+         #[cfg(target_os = "macos")]
+-        KeyBinding::new("cmd-alt-down", AddCursorBelow, Some(CONTEXT)),
++        KeyBinding::new("ctrl-shift-down", AddCursorBelow, Some(CONTEXT)),
+         #[cfg(target_os = "windows")]
+         KeyBinding::new("ctrl-alt-up", AddCursorAbove, Some(CONTEXT)),
+         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+@@ -791,6 +791,8 @@
+                             blink_cursor.start(cx);
+                         });
+                     }
++                } else {
++                    input.blink_cursor.update(cx, |cursor, cx| cursor.stop(cx));
+                 }
+             }),
+             cx.on_focus(&focus_handle, window, Self::on_focus),
+@@ -1801,10 +1803,7 @@
+     fn auto_close_target(&self, range: &Range<usize>, text: &str) -> Option<(usize, SharedString)> {
+         if self.silent_replace_text
+             || self.ime_marked_range.is_some()
+-            || !self.selections.is_single()
+-            || !self.active_selection().is_empty()
+             || !range.is_empty()
+-            || range.start != self.cursor()
+             || text.chars().count() != 1
+             || !self.mode.is_auto_close()
+         {
+@@ -1874,12 +1873,11 @@
+     /// active [`LanguageConfig`](crate::input::language_config::LanguageConfig) that already follows the collapsed cursor and is
+     /// not escaped. The caller then moves the cursor without editing text or
+     /// history. `None` means insert normally.
+-    fn skip_over_target(&self, new_text: &str) -> Option<usize> {
++    fn skip_over_target_at(&self, new_text: &str, cursor: usize) -> Option<usize> {
+         if !self.mode.is_auto_close() || new_text.chars().count() != 1 {
+             return None;
+         }
+         let rules = self.mode.language_config()?;
+-        let cursor = self.cursor();
+         for (open, close, not_in) in rules.closing_pairs() {
+             for (index, _) in close.char_indices() {
+                 if !close[index..].starts_with(new_text)
+@@ -1908,6 +1906,116 @@
+         None
+     }
+ 
++    fn pair_deletion(&self, off: usize) -> Option<Range<usize>> {
++        if !self.mode.is_auto_close() {
++            return None;
++        }
++        self.mode
++            .language_config()?
++            .closing_pairs()
++            .find_map(|(open, close, not_in)| {
++                if !self.text_before_matches(off, open) || !self.text_after_matches(off, close) {
++                    return None;
++                }
++                let start = off - open.len();
++                let generated = self
++                    .mode
++                    .auto_closed_pairs()
++                    .contains(start..off, off..off + close.len());
++                if self.is_escaped_at(start)
++                    || (!generated && not_in.contains(&M::editing_syntax_context(self, start)))
++                {
++                    return None;
++                }
++                Some(start..off + close.len())
++            })
++    }
++
++    /// Surround selected text and pair/skip at every cursor as one undoable edit.
++    fn pair_multiple_or_selection(
++        &mut self,
++        typed: &str,
++        window: &mut Window,
++        cx: &mut Context<Self>,
++    ) -> bool {
++        if self.silent_replace_text
++            || self.ime_marked_range.is_some()
++            || !self.mode.is_auto_close()
++            || typed.chars().count() != 1
++        {
++            return false;
++        }
++        if self.selections.is_single() && self.active_selection().is_empty() {
++            return false;
++        }
++        let before: Vec<_> = self.selections.iter().copied().collect();
++        let mut ordered = before.clone();
++        ordered.sort_by_key(|s| s.start);
++        let surround = self.mode.language_config().and_then(|rules| {
++            rules
++                .closing_pairs()
++                .find(|(open, _, _)| *open == typed)
++                .map(|(_, close, _)| close.to_string())
++        });
++        let mut edits = Vec::new();
++        let mut after = Vec::new();
++        let mut pairs = Vec::new();
++        let mut shift = 0isize;
++        let mut handled = false;
++        for mut selection in ordered {
++            let range = selection.start..selection.end;
++            let start = range.start.saturating_add_signed(shift);
++            let mut replacement = typed.to_string();
++            if range.is_empty()
++                && let Some(target) = self.skip_over_target_at(typed, range.start)
++            {
++                selection.place_at(target.saturating_add_signed(shift), None);
++                replacement.clear();
++                handled = true;
++            } else if !range.is_empty()
++                && let Some(close) = &surround
++            {
++                replacement = format!("{typed}{}{close}", self.text.slice(range.clone()));
++                selection.start = start + typed.len();
++                selection.end = selection.start + range.len();
++                handled = true;
++            } else if let Some((open_len, close)) = self.auto_close_target(&range, typed) {
++                replacement.push_str(&close);
++                let cursor = start + typed.len();
++                selection.place_at(cursor, None);
++                pairs.push((cursor - open_len..cursor, cursor..cursor + close.len()));
++                handled = true;
++            } else {
++                selection.place_at(start + replacement.len(), None);
++            }
++            shift += replacement.len() as isize - range.len() as isize;
++            if !range.is_empty() || !replacement.is_empty() {
++                edits.push((range, replacement));
++            }
++            after.push(selection);
++        }
++        if !handled {
++            return false;
++        }
++        // Restore main-cursor order independently of document order.
++        after.sort_by_key(|s| before.iter().position(|b| b.id == s.id).unwrap());
++        self.undo_manager.break_transaction_coalescing();
++        self.replace_text_in_ranges(&edits, window, cx);
++        self.selections.replace_all(after.clone());
++        if !edits.is_empty() {
++            for (open, close) in pairs {
++                self.mode.track_auto_closed_pair(open, close);
++            }
++            self.undo_manager
++                .record_auto_closed_pairs_after(self.mode.auto_closed_pairs().clone());
++            self.undo_manager.record_selections(before, after);
++        }
++        self.update_preferred_column();
++        self.scroll_to(self.cursor(), None, cx);
++        cx.notify();
++        true
++    }
++
+     pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
+         // Nothing to delete at the start of the text. Propagate so an ancestor
+         // (e.g. a command palette navigating back a level) can act on it.
+@@ -1919,43 +2027,13 @@
+             return;
+         }
+ 
+-        // Pair deletion follows automatic closing rules, independently of
+-        // structural brackets used by Enter.
+-        if self.mode.is_auto_close()
+-            && self.selections.is_single()
+-            && self.active_selection().is_empty()
+-        {
+-            let off = self.cursor();
+-            let deletion = self.mode.language_config().and_then(|rules| {
+-                rules.closing_pairs().find_map(|(open, close, not_in)| {
+-                    if !self.text_before_matches(off, open) || !self.text_after_matches(off, close)
+-                    {
+-                        return None;
+-                    }
+-                    let start = off - open.len();
+-                    let generated = self
+-                        .mode
+-                        .auto_closed_pairs()
+-                        .contains(start..off, off..off + close.len());
+-                    if self.is_escaped_at(start)
+-                        || (!generated && not_in.contains(&M::editing_syntax_context(self, start)))
+-                    {
+-                        return None;
+-                    }
+-                    Some(start..off + close.len())
+-                })
+-            });
+-            if let Some(range) = deletion {
+-                let utf16 = self.range_to_utf16(&range);
+-                self.replace_text_in_range_silent(Some(utf16), "", window, cx);
+-                return;
+-            }
+-        }
+-
+         self.delete_selections(
+             false,
+             EditIntent::Backspace,
+-            |s, offset| s.previous_boundary(offset)..offset,
++            |s, offset| {
++                s.pair_deletion(offset)
++                    .unwrap_or_else(|| s.previous_boundary(offset)..offset)
++            },
+             window,
+             cx,
+         );
+@@ -2483,7 +2561,11 @@
+ 
+         // Multi-cursor placement, multi-line only.
+         if self.is_multi_line() && event.button == MouseButton::Left {
+-            if event.modifiers.alt
++            if event.modifiers.platform {
++                self.add_cursor_at(offset, cx);
++                self.selecting = false;
++                return;
++            } else if event.modifiers.alt
+                 && (event.modifiers.shift || (cfg!(target_os = "linux") && event.modifiers.control))
+             {
+                 // Alt+Shift starts a block; Linux also accepts Ghostty's Ctrl+Alt.
+@@ -3531,13 +3613,28 @@
+     }
+ 
+     pub(super) fn previous_boundary(&self, offset: usize) -> usize {
+-        let offset = self.cursor_boundary(offset.saturating_sub(1), Bias::Left);
+-        self.clamp_offset_to_visible_backward(offset)
++        let start = self
++            .text
++            .line_start_offset(self.text.offset_to_point(offset).row);
++        let line = self.text.slice(start..offset).to_string();
++        let previous = line
++            .grapheme_indices(true)
++            .next_back()
++            .map(|(i, _)| start + i)
++            .unwrap_or_else(|| self.cursor_boundary(offset.saturating_sub(1), Bias::Left));
++        self.clamp_offset_to_visible_backward(previous)
+     }
+ 
+     pub(super) fn next_boundary(&self, offset: usize) -> usize {
+-        let offset = self.cursor_boundary(offset.saturating_add(1), Bias::Right);
+-        self.clamp_offset_to_visible_forward(offset)
++        let row = self.text.offset_to_point(offset).row;
++        let end = self.text.line_end_offset(row).max(offset);
++        let line = self.text.slice(offset..end).to_string();
++        let next = line
++            .graphemes(true)
++            .next()
++            .map(|g| offset + g.len())
++            .unwrap_or_else(|| self.cursor_boundary(offset.saturating_add(1), Bias::Right));
++        self.clamp_offset_to_visible_forward(next)
+     }
+ 
+     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
+@@ -4172,6 +4269,10 @@
+             .unwrap_or(self.selected_range());
+         let range = self.normalize_token_range(range);
+ 
++        if range_utf16.is_none() && self.pair_multiple_or_selection(new_text, window, cx) {
++            return;
++        }
++
+         // Skip-over as a pure cursor move: a typed closer that already follows
+         // the cursor moves past it without touching text or history, so Undo
+         // never exposes a transient duplicate. Only for interactive single
+@@ -4185,7 +4286,7 @@
+             && self.selections.is_single()
+             && self.active_selection().is_empty()
+         {
+-            if let Some(target) = self.skip_over_target(new_text) {
++            if let Some(target) = self.skip_over_target_at(new_text, self.cursor()) {
+                 self.set_cursor_to(target);
+                 self.update_preferred_column();
+                 cx.notify();
+--- gpui-base-0.7.3/src/input/editor/mod.rs
++++ telecat-editor-engine/src/input/editor/mod.rs
+@@ -186,7 +186,7 @@
+         window: &mut Window,
+     ) -> Stateful<Div> {
+         element
+-            .key_context("Input mode=editor")
++            .key_context("TelecatInput mode=editor")
+             .on_action(window.listener_for(entity, InputBaseState::on_action_toggle_code_actions))
+             .on_action(window.listener_for(entity, InputBaseState::on_action_show_completions))
+             .on_action(window.listener_for(entity, InputBaseState::on_action_go_to_definition))
+--- gpui-base-0.7.3/src/input/mod.rs
++++ telecat-editor-engine/src/input/mod.rs
+@@ -122,3 +122,5 @@
+ pub use search::{SearchMatcher, SearchSession};
+ pub use state::*;
+ pub use textarea::{Textarea, TextareaState};
++
++mod telecat;

@@ -1,0 +1,190 @@
+[
+  {
+    "title": "Global",
+    "keys": [
+      [
+        "⌘N",
+        "New connection"
+      ],
+      [
+        "⇧⌘K",
+        "Switch connection (connections window)"
+      ],
+      [
+        "⌃1 … ⌃9",
+        "Go to open connection 1–9"
+      ],
+      [
+        "⌘Q",
+        "Quit"
+      ]
+    ]
+  },
+  {
+    "title": "Workspace",
+    "keys": [
+      [
+        "⌘T",
+        "New tab"
+      ],
+      [
+        "⌘W",
+        "Close tab (last tab closes the connection)"
+      ],
+      [
+        "⌘[  /  ⌘]",
+        "Previous / next tab"
+      ],
+      [
+        "⌘1 … ⌘9",
+        "Go to tab 1–9"
+      ],
+      [
+        "⌘E",
+        "Open SQL Query"
+      ],
+      [
+        "⌘P",
+        "Open anything (tables, views, functions, saved queries)"
+      ],
+      [
+        "⌘K",
+        "Switch database"
+      ],
+      [
+        "⌘S",
+        "Commit changes (or save query)"
+      ],
+      [
+        "⇧⌘P",
+        "Preview changes"
+      ],
+      [
+        "⇧⌘⌫",
+        "Discard changes"
+      ],
+      [
+        "⌘Z  /  ⇧⌘Z",
+        "Undo / redo"
+      ],
+      [
+        "⌘R",
+        "Reload workspace"
+      ],
+      [
+        "⌘.",
+        "Running queries"
+      ],
+      [
+        "⌘0  /  ⇧⌘0",
+        "Toggle sidebar / right panel"
+      ],
+      [
+        "⇧⌘C",
+        "Toggle console log"
+      ],
+      [
+        "⌫  /  ⌥⌫",
+        "Sidebar: delete / truncate table"
+      ]
+    ]
+  },
+  {
+    "title": "SQL Query",
+    "keys": [
+      [
+        "⌘↵",
+        "Run current statement (or selection)"
+      ],
+      [
+        "⇧⌘↵",
+        "Run all"
+      ],
+      [
+        "⌘I",
+        "Beautify"
+      ],
+      [
+        "⇧⌘I",
+        "Uglify"
+      ],
+      [
+        "⌘O",
+        "Open SQL file"
+      ],
+      [
+        "⇧⌘S",
+        "Save SQL as file"
+      ],
+      [
+        "⌘/",
+        "Comment / uncomment lines"
+      ],
+      [
+        "⌘D",
+        "Select next occurrence"
+      ],
+      [
+        "⌃⌘G",
+        "Select all occurrences"
+      ],
+      [
+        "⌘ click",
+        "Add a cursor"
+      ],
+      [
+        "⌃⇧↑  /  ⌃⇧↓",
+        "Add cursor above / below"
+      ]
+    ]
+  },
+  {
+    "title": "Table data",
+    "keys": [
+      [
+        "Double-click  /  ↵",
+        "Edit cell (Tab moves to the next cell)"
+      ],
+      [
+        "Space",
+        "Toggle row detail"
+      ],
+      [
+        "⌘C  /  ⌘V",
+        "Copy rows / paste rows"
+      ],
+      [
+        "⌘D",
+        "Duplicate row"
+      ],
+      [
+        "⌘I",
+        "Insert a new row"
+      ],
+      [
+        "⌫",
+        "Delete selected rows"
+      ],
+      [
+        "⌘F",
+        "Row filter"
+      ],
+      [
+        "⌥⌘F",
+        "Column filter"
+      ],
+      [
+        "⌥ click",
+        "Quick edit menu"
+      ],
+      [
+        "Middle click",
+        "Quick look at a cell"
+      ],
+      [
+        "Esc",
+        "Discard staged edits in the tab"
+      ]
+    ]
+  }
+]

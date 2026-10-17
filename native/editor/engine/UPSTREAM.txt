@@ -1,0 +1,30 @@
+Source: gpui-base 0.7.3, from native/vendor/gpui-base/src in this workspace.
+License: Apache-2.0; upstream copyright/license retained in LICENSE-APACHE.
+
+This is an isolated extraction of the input module and three support modules
+(state_style, text_boundary, touch_selection), not a second GPUI backend.
+lib.rs reexports shared theme, scrollbar, and global-state infrastructure from
+exactly the same gpui-kit 0.7.3 as the shell. No vendor files were modified.
+
+Why an extraction: stock gpui-kit keeps the blink interval, gutter geometry,
+selection storage, and mouse/character movement private. A public wrapper alone
+cannot match CodeMirror's 600 ms timer, 18/14 px gutter, Command-click cursors,
+UTF-16 multi-selection API, or Thai grapheme movement. Copying only input keeps
+these changes within the editor session's ownership and avoids altering shell
+and grid inputs. Upstream editor search/completion presentation is disabled;
+Telecat supplies its own SQL highlighter, async completions, and search panel.
+
+telecat.patch records every changed upstream source file (six files), relative
+to the installed vendor snapshot. Added input/telecat.rs exposes the necessary
+selection, batched-edit, undo/redo, and screenshot-caret seams. lib.rs is local.
+Changes include: isolated action namespace/key context; Ctrl-Shift-Up/Down;
+Command-click and newest-cursor ordering; grapheme arrow/delete movement;
+600 ms blink/reset with cancellation on blur/deactivation; 1 px caret;
+Electron gutter/placeholder/active-line colors and geometry; highlight each
+selection head row; retain inactive-window selections; multi-cursor
+pair/wrap/skip/delete support; atomic edits preserving selection snapshots.
+
+Upstream #[cfg(test)] modules are retained for provenance but this library's
+internal test harness is disabled: those tests assume the complete gpui-base
+crate. Behavioral integration tests live in telecat-editor/tests/behavior.rs
+and exercise this extracted code through real GPUI key/mouse/IME dispatch.

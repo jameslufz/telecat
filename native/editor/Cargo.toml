@@ -1,0 +1,24 @@
+[package]
+name = "telecat-editor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+telecat-theme = { path = "../theme" }
+gpui-kit = { version = "=0.7.3", default-features = false }
+telecat-core.workspace = true
+
+telecat-editor-engine = { path = "engine" }
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+raw-window-handle = "0.6"
+objc2 = "0.6"
+gpui = { package = "gpui-pre", version = "=0.3.9" }
+[dev-dependencies]
+gpui = { package = "gpui-pre", version = "=0.3.9", features = ["test-support"] }
+
+[[example]]
+name = "telecat-editor-scenario"
+path = "examples/scenario.rs"

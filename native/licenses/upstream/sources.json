@@ -1,0 +1,201 @@
+{
+  "accesskit@0.24.1": {
+    "file": "23f18e03dc49df91.txt",
+    "source": "https://raw.githubusercontent.com/AccessKit/accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-MIT"
+  },
+  "accesskit_consumer@0.38.0": {
+    "file": "23f18e03dc49df91.txt",
+    "source": "https://raw.githubusercontent.com/AccessKit/accesskit/c88605b96d04431f9c3c792464a0f2f253480e94/LICENSE-MIT"
+  },
+  "accesskit_macos@0.26.3": {
+    "file": "23f18e03dc49df91.txt",
+    "source": "https://raw.githubusercontent.com/AccessKit/accesskit/c88605b96d04431f9c3c792464a0f2f253480e94/LICENSE-MIT"
+  },
+  "block@0.1.6": {
+    "file": "6dba0e3cff749872.txt",
+    "source": "https://crates.io/api/v1/crates/block/0.1.6/download",
+    "manifest_notice": true
+  },
+  "block2@0.5.1": {
+    "file": "e353f37b12aefbb9.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/4fc083f1c6d6784577e38b0ee8dbd344481e2fd2/LICENSE.txt"
+  },
+  "block2@0.6.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/b4167b582b2f75f9a1be75495c41b765344fd03c/LICENSE.md"
+  },
+  "crc32c@0.6.8": {
+    "file": "518b068284b5e67e.txt",
+    "source": "https://crates.io/api/v1/crates/crc32c/0.6.8/download",
+    "manifest_notice": true
+  },
+  "dispatch2@0.3.1": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/8852b424193ca41602281b3d7540d7c8ed51e49a/LICENSE.md"
+  },
+  "gpui-kit@0.7.3": {
+    "file": "d1b0449e5478c574.txt",
+    "source": "https://raw.githubusercontent.com/longbridge/gpui-kit/67265a36e260ffe03c5aaebdcd8d654dbf892eab/LICENSE-APACHE"
+  },
+  "keyed_priority_queue@0.4.2": {
+    "file": "824f627ec8266fa8.txt",
+    "source": "https://raw.githubusercontent.com/AngelicosPhosphoros/keyed_priority_queue/2656a970a1ff174010bb8ebfb676f922d2d59599/LICENSE.md"
+  },
+  "lyon@1.0.19": {
+    "file": "80f275e90d799911.txt",
+    "source": "https://raw.githubusercontent.com/nical/lyon/56219c95c658d4f39de7b190d98e57d5773ba241/LICENSE-MIT"
+  },
+  "lyon_algorithms@1.0.21": {
+    "file": "80f275e90d799911.txt",
+    "source": "https://raw.githubusercontent.com/nical/lyon/994526f2766c7e9bc5bb16687232fd7e8999dbdf/LICENSE-MIT"
+  },
+  "lyon_geom@1.0.19": {
+    "file": "80f275e90d799911.txt",
+    "source": "https://raw.githubusercontent.com/nical/lyon/56219c95c658d4f39de7b190d98e57d5773ba241/LICENSE-MIT"
+  },
+  "lyon_path@1.0.19": {
+    "file": "80f275e90d799911.txt",
+    "source": "https://raw.githubusercontent.com/nical/lyon/56219c95c658d4f39de7b190d98e57d5773ba241/LICENSE-MIT"
+  },
+  "lyon_tessellation@1.0.22": {
+    "file": "80f275e90d799911.txt",
+    "source": "https://raw.githubusercontent.com/nical/lyon/b456b143215a1942a617c4672776b68b9a30feee/LICENSE-MIT"
+  },
+  "mac@0.1.1": {
+    "file": "e7ca1fc40a9acdb9.txt",
+    "source": "https://crates.io/api/v1/crates/mac/0.1.1/download",
+    "manifest_notice": true
+  },
+  "malloc_buf@0.0.6": {
+    "file": "aced7b57e474a63e.txt",
+    "source": "https://raw.githubusercontent.com/SSheldon/malloc_buf/HEAD/LICENSE"
+  },
+  "objc-sys@0.3.5": {
+    "file": "e353f37b12aefbb9.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/4fc083f1c6d6784577e38b0ee8dbd344481e2fd2/LICENSE.txt"
+  },
+  "objc2@0.5.3": {
+    "file": "e353f37b12aefbb9.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/5237cbf081d04ef75a1f6a207b4018e7c1ae7438/LICENSE.txt"
+  },
+  "objc2@0.6.5": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/d7d2fa23ceaa5e6096c923b081040e5d81b3b9df/LICENSE.md"
+  },
+  "objc2-app-kit@0.2.2": {
+    "file": "e353f37b12aefbb9.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt"
+  },
+  "objc2-app-kit@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-core-data@0.2.2": {
+    "file": "e353f37b12aefbb9.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt"
+  },
+  "objc2-core-foundation@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-core-graphics@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-core-image@0.2.2": {
+    "file": "e353f37b12aefbb9.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt"
+  },
+  "objc2-core-text@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-core-video@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-encode@4.1.0": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/8d214f5477365ffcbcbb7de058c86ed9a518efb7/LICENSE.md"
+  },
+  "objc2-io-surface@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-metal@0.2.2": {
+    "file": "e353f37b12aefbb9.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt"
+  },
+  "objc2-metal@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-quartz-core@0.2.2": {
+    "file": "e353f37b12aefbb9.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/e282618be4c3a3b9542957e0c8540e9588472ce8/LICENSE.txt"
+  },
+  "objc2-quartz-core@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-security@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-system-configuration@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc2-user-notifications@0.3.2": {
+    "file": "7f976f7e9cb2d87d.txt",
+    "source": "https://raw.githubusercontent.com/madsmtm/objc2/7b1abfd750a2cacaea71d6a56ecfb83cb7de560b/LICENSE.md"
+  },
+  "objc_exception@0.1.2": {
+    "file": "92874d4cc5bc72a4.txt",
+    "source": "https://crates.io/api/v1/crates/objc_exception/0.1.2/download",
+    "manifest_notice": true
+  },
+  "pathfinder_geometry@0.5.1": {
+    "file": "d3112ca2f49bb6ca.txt",
+    "source": "https://crates.io/api/v1/crates/pathfinder_geometry/0.5.1/download",
+    "manifest_notice": true
+  },
+  "pathfinder_simd@0.5.6": {
+    "file": "0621878e61f0d0fd.txt",
+    "source": "https://raw.githubusercontent.com/servo/pathfinder/6c3c0466f451c5bd2007087728cd168798cd64e8/LICENSE-MIT"
+  },
+  "profiling@1.0.18": {
+    "file": "c8167fdeeed46d3f.txt",
+    "source": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-MIT"
+  },
+  "profiling-procmacros@1.0.18": {
+    "file": "c8167fdeeed46d3f.txt",
+    "source": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-MIT"
+  },
+  "pulp-wasm-simd-flag@0.1.1": {
+    "file": "d64f878c89bd5f1e.txt",
+    "source": "https://raw.githubusercontent.com/sarah-quinones/pulp/5eb07fd7b68edf0a5e19f71737d315f72a510295/LICENSE"
+  },
+  "seahash@4.1.0": {
+    "file": "20349bf2f4d2fe7c.txt",
+    "source": "https://crates.io/api/v1/crates/seahash/4.1.0/download",
+    "manifest_notice": true
+  },
+  "simd_helpers@0.1.0": {
+    "file": "62b214fa1f8020a2.txt",
+    "source": "https://crates.io/api/v1/crates/simd_helpers/0.1.0/download",
+    "manifest_notice": true
+  },
+  "svg_fmt@0.4.5": {
+    "file": "7e98bed7f100747a.txt",
+    "source": "https://raw.githubusercontent.com/nical/rust_debug/93f414cd572b5c2781df93dbdc068ed13443d05a/LICENSE"
+  },
+  "taffy@0.13.0": {
+    "file": "f97daf1a0124413d.txt",
+    "source": "https://raw.githubusercontent.com/DioxusLabs/taffy/45a56299d366ddb383e593a1f0372158d00e8530/LICENSE"
+  },
+  "zune-inflate@0.2.54": {
+    "file": "e870d7fd7819a9f0.txt",
+    "source": "https://raw.githubusercontent.com/etemesi254/zune-image/69502ce83fdfecdd0beefd677e2abb3781b29d98/LICENSE.md"
+  }
+}

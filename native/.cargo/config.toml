@@ -1,0 +1,7 @@
+[build]
+# Keep GPUI's Apple framework crates from competing for memory on small Macs.
+jobs = 2
+
+# Source-over compositing fix for transparent macOS windows.
+[patch.crates-io]
+gpui-pre-apple = { path = "vendor/gpui-pre-apple" }

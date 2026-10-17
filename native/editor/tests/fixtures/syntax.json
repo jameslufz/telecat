@@ -1,0 +1,9965 @@
+[
+  {
+    "id": "mysql-0",
+    "input": "select * from users;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 19,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-1",
+    "input": "select id,name from users where id=1;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 9,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 10,
+        "kind": "Operator"
+      },
+      {
+        "from": 10,
+        "to": 14,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 19,
+        "kind": "Keyword"
+      },
+      {
+        "from": 20,
+        "to": 25,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 34,
+        "kind": "Name"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-2",
+    "input": "select * from users where id=1 and active=true order by name desc limit 10;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 19,
+        "kind": "Name"
+      },
+      {
+        "from": 20,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 28,
+        "kind": "Name"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Number"
+      },
+      {
+        "from": 31,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 41,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Operator"
+      },
+      {
+        "from": 42,
+        "to": 46,
+        "kind": "Number"
+      },
+      {
+        "from": 47,
+        "to": 52,
+        "kind": "Keyword"
+      },
+      {
+        "from": 53,
+        "to": 55,
+        "kind": "Keyword"
+      },
+      {
+        "from": 56,
+        "to": 60,
+        "kind": "Name"
+      },
+      {
+        "from": 61,
+        "to": 65,
+        "kind": "Keyword"
+      },
+      {
+        "from": 66,
+        "to": 71,
+        "kind": "Keyword"
+      },
+      {
+        "from": 72,
+        "to": 74,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-3",
+    "input": "select count(*), coalesce(a, 0), lower(name) as label from users;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Operator"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Number"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 38,
+        "kind": "Name"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Operator"
+      },
+      {
+        "from": 39,
+        "to": 43,
+        "kind": "Name"
+      },
+      {
+        "from": 43,
+        "to": 44,
+        "kind": "Operator"
+      },
+      {
+        "from": 45,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 53,
+        "kind": "Name"
+      },
+      {
+        "from": 54,
+        "to": 58,
+        "kind": "Keyword"
+      },
+      {
+        "from": 59,
+        "to": 64,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-4",
+    "input": "insert into t(a,b) values(1,2),(3,4);",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Number"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Number"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Number"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Number"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-5",
+    "input": "update t set a=1,b=2 where id=3;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Number"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Number"
+      },
+      {
+        "from": 21,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 29,
+        "kind": "Name"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-6",
+    "input": "delete from t where id=3;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 19,
+        "kind": "Keyword"
+      },
+      {
+        "from": 20,
+        "to": 22,
+        "kind": "Name"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-7",
+    "input": "select a from x left join y on x.id=y.id and y.a=1;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 20,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Name"
+      },
+      {
+        "from": 28,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Name"
+      },
+      {
+        "from": 33,
+        "to": 35,
+        "kind": "Name"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Name"
+      },
+      {
+        "from": 38,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 44,
+        "kind": "Keyword"
+      },
+      {
+        "from": 45,
+        "to": 46,
+        "kind": "Name"
+      },
+      {
+        "from": 47,
+        "to": 48,
+        "kind": "Name"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Operator"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-8",
+    "input": "with a as (select * from t) select * from a;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 4,
+        "kind": "Keyword"
+      },
+      {
+        "from": 5,
+        "to": 6,
+        "kind": "Name"
+      },
+      {
+        "from": 7,
+        "to": 9,
+        "kind": "Keyword"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 20,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      },
+      {
+        "from": 37,
+        "to": 41,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-9",
+    "input": "select (1 + 2), a from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 8,
+        "to": 9,
+        "kind": "Number"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Number"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 22,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-10",
+    "input": "select 1; select 2;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Number"
+      },
+      {
+        "from": 10,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-11",
+    "input": "-- comment\nselect 1;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 10,
+        "kind": "Comment"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-12",
+    "input": "select case when x=1 then 'a' else 'b' end from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Number"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 29,
+        "kind": "String"
+      },
+      {
+        "from": 30,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 38,
+        "kind": "String"
+      },
+      {
+        "from": 39,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-13",
+    "input": "select a, count(*) from t group by a having count(*)>1 order by a limit 5 offset 2;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 8,
+        "to": 9,
+        "kind": "Operator"
+      },
+      {
+        "from": 10,
+        "to": 15,
+        "kind": "Keyword"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 23,
+        "kind": "Keyword"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Name"
+      },
+      {
+        "from": 37,
+        "to": 43,
+        "kind": "Keyword"
+      },
+      {
+        "from": 44,
+        "to": 49,
+        "kind": "Keyword"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Operator"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Operator"
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "kind": "Operator"
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "kind": "Operator"
+      },
+      {
+        "from": 53,
+        "to": 54,
+        "kind": "Number"
+      },
+      {
+        "from": 55,
+        "to": 60,
+        "kind": "Keyword"
+      },
+      {
+        "from": 61,
+        "to": 63,
+        "kind": "Keyword"
+      },
+      {
+        "from": 64,
+        "to": 65,
+        "kind": "Name"
+      },
+      {
+        "from": 66,
+        "to": 71,
+        "kind": "Keyword"
+      },
+      {
+        "from": 72,
+        "to": 73,
+        "kind": "Number"
+      },
+      {
+        "from": 74,
+        "to": 80,
+        "kind": "Keyword"
+      },
+      {
+        "from": 81,
+        "to": 82,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-14",
+    "input": "select distinct a from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 15,
+        "kind": "Keyword"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 22,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-15",
+    "input": "select a from t union all select b from u;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 32,
+        "kind": "Keyword"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Name"
+      },
+      {
+        "from": 35,
+        "to": 39,
+        "kind": "Keyword"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-16",
+    "input": "select * from t where a in (1,2,3) and b is not null;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Number"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Number"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Number"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 43,
+        "kind": "Keyword"
+      },
+      {
+        "from": 44,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 52,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-17",
+    "input": "select 'ไทย 😺', 'a; b', 1.25, -10;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 15,
+        "kind": "String"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 23,
+        "kind": "String"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 29,
+        "kind": "Number"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 34,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-18",
+    "input": "select * from (select id from t) as x;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 15,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 24,
+        "kind": "Name"
+      },
+      {
+        "from": 25,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Name"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-19",
+    "input": "insert into t select * from u;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 20,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 27,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-20",
+    "input": "update users set name='O''Brien' where id=2;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 22,
+        "to": 25,
+        "kind": "String"
+      },
+      {
+        "from": 25,
+        "to": 32,
+        "kind": "String"
+      },
+      {
+        "from": 33,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 41,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Operator"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-21",
+    "input": "select * from t where x between 1 and 2 or y like 'a%';",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Number"
+      },
+      {
+        "from": 34,
+        "to": 37,
+        "kind": "Keyword"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Number"
+      },
+      {
+        "from": 40,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 44,
+        "kind": "Name"
+      },
+      {
+        "from": 45,
+        "to": 49,
+        "kind": "Keyword"
+      },
+      {
+        "from": 50,
+        "to": 54,
+        "kind": "String"
+      }
+    ]
+  },
+  {
+    "id": "mysql-22",
+    "input": "select /* note */ id from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 17,
+        "kind": "Comment"
+      },
+      {
+        "from": 18,
+        "to": 20,
+        "kind": "Name"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-23",
+    "input": "select a+b*2 as total from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 8,
+        "to": 9,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 10,
+        "kind": "Name"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 12,
+        "kind": "Number"
+      },
+      {
+        "from": 13,
+        "to": 15,
+        "kind": "Keyword"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 22,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-24",
+    "input": "select * from t inner join u on t.id=u.id right join v on u.id=v.id;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Name"
+      },
+      {
+        "from": 29,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Name"
+      },
+      {
+        "from": 34,
+        "to": 36,
+        "kind": "Name"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Operator"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Name"
+      },
+      {
+        "from": 39,
+        "to": 41,
+        "kind": "Name"
+      },
+      {
+        "from": 42,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 52,
+        "kind": "Keyword"
+      },
+      {
+        "from": 53,
+        "to": 54,
+        "kind": "Name"
+      },
+      {
+        "from": 55,
+        "to": 57,
+        "kind": "Keyword"
+      },
+      {
+        "from": 58,
+        "to": 59,
+        "kind": "Name"
+      },
+      {
+        "from": 60,
+        "to": 62,
+        "kind": "Name"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Operator"
+      },
+      {
+        "from": 63,
+        "to": 64,
+        "kind": "Name"
+      },
+      {
+        "from": 65,
+        "to": 67,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-25",
+    "input": "select row_number() over (partition by a order by b) as n from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 20,
+        "to": 24,
+        "kind": "Name"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 26,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 46,
+        "kind": "Keyword"
+      },
+      {
+        "from": 47,
+        "to": 49,
+        "kind": "Keyword"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Name"
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "kind": "Operator"
+      },
+      {
+        "from": 53,
+        "to": 55,
+        "kind": "Keyword"
+      },
+      {
+        "from": 56,
+        "to": 57,
+        "kind": "Name"
+      },
+      {
+        "from": 58,
+        "to": 62,
+        "kind": "Keyword"
+      },
+      {
+        "from": 63,
+        "to": 64,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-26",
+    "input": "create table t (id int primary key, name varchar(255) not null);",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 19,
+        "to": 22,
+        "kind": "Type"
+      },
+      {
+        "from": 23,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 48,
+        "kind": "Type"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Operator"
+      },
+      {
+        "from": 49,
+        "to": 52,
+        "kind": "Number"
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "kind": "Operator"
+      },
+      {
+        "from": 54,
+        "to": 57,
+        "kind": "Keyword"
+      },
+      {
+        "from": 58,
+        "to": 62,
+        "kind": "Number"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-27",
+    "input": "alter table t add column n int;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 5,
+        "kind": "Keyword"
+      },
+      {
+        "from": 6,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 30,
+        "kind": "Type"
+      }
+    ]
+  },
+  {
+    "id": "mysql-28",
+    "input": "begin; update t set a=2; commit;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 5,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 19,
+        "kind": "Keyword"
+      },
+      {
+        "from": 20,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Number"
+      },
+      {
+        "from": 25,
+        "to": 31,
+        "kind": "Keyword"
+      }
+    ]
+  },
+  {
+    "id": "mysql-29",
+    "input": "select exists(select 1 from t where id=2);",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 20,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Number"
+      },
+      {
+        "from": 23,
+        "to": 27,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Name"
+      },
+      {
+        "from": 30,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 38,
+        "kind": "Name"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Operator"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Number"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-30",
+    "input": "select a from t order by a asc,b desc;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Name"
+      },
+      {
+        "from": 33,
+        "to": 37,
+        "kind": "Keyword"
+      }
+    ]
+  },
+  {
+    "id": "mysql-31",
+    "input": "SELECT * FROM members\nWHERE 1\n-- AND MEMBER_TYPE = 'x;y'\nAND MEMBER_TYPE = 'member'\nORDER BY MEMBER_ID DESC;\n\nSELECT bank_name_th FROM sa_banks;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 22,
+        "to": 27,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Number"
+      },
+      {
+        "from": 30,
+        "to": 56,
+        "kind": "Comment"
+      },
+      {
+        "from": 57,
+        "to": 60,
+        "kind": "Keyword"
+      },
+      {
+        "from": 61,
+        "to": 72,
+        "kind": "Name"
+      },
+      {
+        "from": 73,
+        "to": 74,
+        "kind": "Operator"
+      },
+      {
+        "from": 75,
+        "to": 83,
+        "kind": "String"
+      },
+      {
+        "from": 84,
+        "to": 89,
+        "kind": "Keyword"
+      },
+      {
+        "from": 90,
+        "to": 92,
+        "kind": "Keyword"
+      },
+      {
+        "from": 93,
+        "to": 102,
+        "kind": "Name"
+      },
+      {
+        "from": 103,
+        "to": 107,
+        "kind": "Keyword"
+      },
+      {
+        "from": 110,
+        "to": 116,
+        "kind": "Keyword"
+      },
+      {
+        "from": 117,
+        "to": 129,
+        "kind": "Name"
+      },
+      {
+        "from": 130,
+        "to": 134,
+        "kind": "Keyword"
+      },
+      {
+        "from": 135,
+        "to": 143,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-32",
+    "input": "select 1",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-33",
+    "input": "",
+    "dialect": "mysql",
+    "ranges": []
+  },
+  {
+    "id": "mysql-34",
+    "input": "select null,true,false;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Number"
+      },
+      {
+        "from": 11,
+        "to": 12,
+        "kind": "Operator"
+      },
+      {
+        "from": 12,
+        "to": 16,
+        "kind": "Number"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 22,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-35",
+    "input": "select a as b from t where x<>2;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 18,
+        "kind": "Keyword"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Name"
+      },
+      {
+        "from": 21,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Name"
+      },
+      {
+        "from": 28,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-36",
+    "input": "select sum(amount) / count(*) from payments;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 10,
+        "kind": "Keyword"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 21,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 43,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-37",
+    "input": "select * from t where (a=1 or b=2) and c=3;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Number"
+      },
+      {
+        "from": 27,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Name"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Number"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Operator"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-38",
+    "input": "select * from t limit 10,20;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 24,
+        "kind": "Number"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 27,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-39",
+    "input": "select a from t\n-- tail",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 23,
+        "kind": "Comment"
+      }
+    ]
+  },
+  {
+    "id": "mysql-40",
+    "input": "select `bank_name_th` from `zixma`.`sa_banks`;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 21,
+        "kind": "String"
+      },
+      {
+        "from": 22,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 34,
+        "kind": "String"
+      },
+      {
+        "from": 35,
+        "to": 45,
+        "kind": "String"
+      }
+    ]
+  },
+  {
+    "id": "mysql-41",
+    "input": "select @x, @@version, concat('a','b');",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 9,
+        "kind": "Special"
+      },
+      {
+        "from": 9,
+        "to": 10,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 20,
+        "kind": "Special"
+      },
+      {
+        "from": 20,
+        "to": 21,
+        "kind": "Operator"
+      },
+      {
+        "from": 22,
+        "to": 28,
+        "kind": "Name"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 32,
+        "kind": "String"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 36,
+        "kind": "String"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-42",
+    "input": "insert into t(a) values(1) on duplicate key update a=2;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 23,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Operator"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Number"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 39,
+        "kind": "Name"
+      },
+      {
+        "from": 40,
+        "to": 43,
+        "kind": "Keyword"
+      },
+      {
+        "from": 44,
+        "to": 50,
+        "kind": "Keyword"
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "kind": "Name"
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "kind": "Operator"
+      },
+      {
+        "from": 53,
+        "to": 54,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-43",
+    "input": "select * from t where a <=> null;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 32,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-44",
+    "input": "show tables;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 4,
+        "kind": "Keyword"
+      },
+      {
+        "from": 5,
+        "to": 11,
+        "kind": "Keyword"
+      }
+    ]
+  },
+  {
+    "id": "mysql-45",
+    "input": "select # note\n1;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 13,
+        "kind": "Comment"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-46",
+    "input": "with a as (select x from t), b as (select y from u) select * from a join b on a.x=b.y;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 4,
+        "kind": "Keyword"
+      },
+      {
+        "from": 5,
+        "to": 6,
+        "kind": "Name"
+      },
+      {
+        "from": 7,
+        "to": 9,
+        "kind": "Keyword"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Name"
+      },
+      {
+        "from": 20,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Name"
+      },
+      {
+        "from": 31,
+        "to": 33,
+        "kind": "Keyword"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 41,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Name"
+      },
+      {
+        "from": 44,
+        "to": 48,
+        "kind": "Keyword"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Name"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Operator"
+      },
+      {
+        "from": 52,
+        "to": 58,
+        "kind": "Keyword"
+      },
+      {
+        "from": 59,
+        "to": 60,
+        "kind": "Operator"
+      },
+      {
+        "from": 61,
+        "to": 65,
+        "kind": "Keyword"
+      },
+      {
+        "from": 66,
+        "to": 67,
+        "kind": "Name"
+      },
+      {
+        "from": 68,
+        "to": 72,
+        "kind": "Keyword"
+      },
+      {
+        "from": 73,
+        "to": 74,
+        "kind": "Name"
+      },
+      {
+        "from": 75,
+        "to": 77,
+        "kind": "Keyword"
+      },
+      {
+        "from": 78,
+        "to": 79,
+        "kind": "Name"
+      },
+      {
+        "from": 80,
+        "to": 81,
+        "kind": "Name"
+      },
+      {
+        "from": 81,
+        "to": 82,
+        "kind": "Operator"
+      },
+      {
+        "from": 82,
+        "to": 83,
+        "kind": "Name"
+      },
+      {
+        "from": 84,
+        "to": 85,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-47",
+    "input": "select case when a>0 then case when b>0 then 'both' else 'a' end else 'none' end as label from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Number"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Name"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Operator"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Number"
+      },
+      {
+        "from": 40,
+        "to": 44,
+        "kind": "Keyword"
+      },
+      {
+        "from": 45,
+        "to": 51,
+        "kind": "String"
+      },
+      {
+        "from": 52,
+        "to": 56,
+        "kind": "Keyword"
+      },
+      {
+        "from": 57,
+        "to": 60,
+        "kind": "String"
+      },
+      {
+        "from": 61,
+        "to": 64,
+        "kind": "Keyword"
+      },
+      {
+        "from": 65,
+        "to": 69,
+        "kind": "Keyword"
+      },
+      {
+        "from": 70,
+        "to": 76,
+        "kind": "String"
+      },
+      {
+        "from": 77,
+        "to": 80,
+        "kind": "Keyword"
+      },
+      {
+        "from": 81,
+        "to": 83,
+        "kind": "Keyword"
+      },
+      {
+        "from": 84,
+        "to": 89,
+        "kind": "Name"
+      },
+      {
+        "from": 90,
+        "to": 94,
+        "kind": "Keyword"
+      },
+      {
+        "from": 95,
+        "to": 96,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-48",
+    "input": "select avg(amount) over (partition by account_id order by created_at rows between 2 preceding and current row) from transactions;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 10,
+        "kind": "Keyword"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 23,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 37,
+        "kind": "Keyword"
+      },
+      {
+        "from": 38,
+        "to": 48,
+        "kind": "Name"
+      },
+      {
+        "from": 49,
+        "to": 54,
+        "kind": "Keyword"
+      },
+      {
+        "from": 55,
+        "to": 57,
+        "kind": "Keyword"
+      },
+      {
+        "from": 58,
+        "to": 68,
+        "kind": "Name"
+      },
+      {
+        "from": 69,
+        "to": 73,
+        "kind": "Keyword"
+      },
+      {
+        "from": 74,
+        "to": 81,
+        "kind": "Keyword"
+      },
+      {
+        "from": 82,
+        "to": 83,
+        "kind": "Number"
+      },
+      {
+        "from": 84,
+        "to": 93,
+        "kind": "Name"
+      },
+      {
+        "from": 94,
+        "to": 97,
+        "kind": "Keyword"
+      },
+      {
+        "from": 98,
+        "to": 105,
+        "kind": "Keyword"
+      },
+      {
+        "from": 106,
+        "to": 109,
+        "kind": "Keyword"
+      },
+      {
+        "from": 109,
+        "to": 110,
+        "kind": "Operator"
+      },
+      {
+        "from": 111,
+        "to": 115,
+        "kind": "Keyword"
+      },
+      {
+        "from": 116,
+        "to": 128,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-49",
+    "input": "select aaaaaaaaaaaaaaaaaaaaaaaa + bbbbbbbbbbbbbbbbbbbbbbbbbbbb + ccccccccccccccccccccccccccc as total from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 31,
+        "kind": "Name"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Operator"
+      },
+      {
+        "from": 34,
+        "to": 62,
+        "kind": "Name"
+      },
+      {
+        "from": 63,
+        "to": 64,
+        "kind": "Operator"
+      },
+      {
+        "from": 65,
+        "to": 92,
+        "kind": "Name"
+      },
+      {
+        "from": 93,
+        "to": 95,
+        "kind": "Keyword"
+      },
+      {
+        "from": 96,
+        "to": 101,
+        "kind": "Name"
+      },
+      {
+        "from": 102,
+        "to": 106,
+        "kind": "Keyword"
+      },
+      {
+        "from": 107,
+        "to": 108,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-50",
+    "input": "select coalesce(very_long_column_name_which_exceeds_the_inline_limit, another_very_long_column_name, 0) from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 15,
+        "kind": "Keyword"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 68,
+        "kind": "Name"
+      },
+      {
+        "from": 68,
+        "to": 69,
+        "kind": "Operator"
+      },
+      {
+        "from": 70,
+        "to": 99,
+        "kind": "Name"
+      },
+      {
+        "from": 99,
+        "to": 100,
+        "kind": "Operator"
+      },
+      {
+        "from": 101,
+        "to": 102,
+        "kind": "Number"
+      },
+      {
+        "from": 102,
+        "to": 103,
+        "kind": "Operator"
+      },
+      {
+        "from": 104,
+        "to": 108,
+        "kind": "Keyword"
+      },
+      {
+        "from": 109,
+        "to": 110,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-51",
+    "input": "select * from t where (a=1 and b=2) or (c=3 and d=4);",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Number"
+      },
+      {
+        "from": 27,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Name"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Number"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Operator"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Operator"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Number"
+      },
+      {
+        "from": 44,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Name"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Operator"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Number"
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-52",
+    "input": "select * from t where not exists (select 1 from u where u.id=t.id);",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 32,
+        "kind": "Keyword"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 34,
+        "to": 40,
+        "kind": "Keyword"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Number"
+      },
+      {
+        "from": 43,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Name"
+      },
+      {
+        "from": 50,
+        "to": 55,
+        "kind": "Keyword"
+      },
+      {
+        "from": 56,
+        "to": 57,
+        "kind": "Name"
+      },
+      {
+        "from": 58,
+        "to": 60,
+        "kind": "Name"
+      },
+      {
+        "from": 60,
+        "to": 61,
+        "kind": "Operator"
+      },
+      {
+        "from": 61,
+        "to": 62,
+        "kind": "Name"
+      },
+      {
+        "from": 63,
+        "to": 65,
+        "kind": "Name"
+      },
+      {
+        "from": 65,
+        "to": 66,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-53",
+    "input": "create table accounts (id bigint primary key, owner_id int references users(id), balance decimal(12,2) default 0, constraint positive check (balance>=0));",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 25,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 32,
+        "kind": "Type"
+      },
+      {
+        "from": 33,
+        "to": 40,
+        "kind": "Keyword"
+      },
+      {
+        "from": 41,
+        "to": 44,
+        "kind": "Keyword"
+      },
+      {
+        "from": 44,
+        "to": 45,
+        "kind": "Operator"
+      },
+      {
+        "from": 46,
+        "to": 54,
+        "kind": "Name"
+      },
+      {
+        "from": 55,
+        "to": 58,
+        "kind": "Type"
+      },
+      {
+        "from": 59,
+        "to": 69,
+        "kind": "Keyword"
+      },
+      {
+        "from": 70,
+        "to": 75,
+        "kind": "Name"
+      },
+      {
+        "from": 75,
+        "to": 76,
+        "kind": "Operator"
+      },
+      {
+        "from": 76,
+        "to": 78,
+        "kind": "Name"
+      },
+      {
+        "from": 78,
+        "to": 79,
+        "kind": "Operator"
+      },
+      {
+        "from": 79,
+        "to": 80,
+        "kind": "Operator"
+      },
+      {
+        "from": 81,
+        "to": 88,
+        "kind": "Name"
+      },
+      {
+        "from": 89,
+        "to": 96,
+        "kind": "Type"
+      },
+      {
+        "from": 96,
+        "to": 97,
+        "kind": "Operator"
+      },
+      {
+        "from": 97,
+        "to": 99,
+        "kind": "Number"
+      },
+      {
+        "from": 99,
+        "to": 100,
+        "kind": "Operator"
+      },
+      {
+        "from": 100,
+        "to": 101,
+        "kind": "Number"
+      },
+      {
+        "from": 101,
+        "to": 102,
+        "kind": "Operator"
+      },
+      {
+        "from": 103,
+        "to": 110,
+        "kind": "Keyword"
+      },
+      {
+        "from": 111,
+        "to": 112,
+        "kind": "Number"
+      },
+      {
+        "from": 112,
+        "to": 113,
+        "kind": "Operator"
+      },
+      {
+        "from": 114,
+        "to": 124,
+        "kind": "Keyword"
+      },
+      {
+        "from": 125,
+        "to": 133,
+        "kind": "Name"
+      },
+      {
+        "from": 134,
+        "to": 139,
+        "kind": "Keyword"
+      },
+      {
+        "from": 140,
+        "to": 141,
+        "kind": "Operator"
+      },
+      {
+        "from": 141,
+        "to": 148,
+        "kind": "Name"
+      },
+      {
+        "from": 148,
+        "to": 150,
+        "kind": "Operator"
+      },
+      {
+        "from": 150,
+        "to": 151,
+        "kind": "Number"
+      },
+      {
+        "from": 151,
+        "to": 152,
+        "kind": "Operator"
+      },
+      {
+        "from": 152,
+        "to": 153,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-54",
+    "input": "create index users_name_idx on users (name, id);",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 27,
+        "kind": "Name"
+      },
+      {
+        "from": 28,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 36,
+        "kind": "Name"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Operator"
+      },
+      {
+        "from": 38,
+        "to": 42,
+        "kind": "Name"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Operator"
+      },
+      {
+        "from": 44,
+        "to": 46,
+        "kind": "Name"
+      },
+      {
+        "from": 46,
+        "to": 47,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-55",
+    "input": "select cast(amount as decimal(10,2)) as value, extract(year from created_at) from transactions;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 11,
+        "to": 12,
+        "kind": "Operator"
+      },
+      {
+        "from": 12,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 19,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 29,
+        "kind": "Type"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 32,
+        "kind": "Number"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Number"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      },
+      {
+        "from": 37,
+        "to": 39,
+        "kind": "Keyword"
+      },
+      {
+        "from": 40,
+        "to": 45,
+        "kind": "Keyword"
+      },
+      {
+        "from": 45,
+        "to": 46,
+        "kind": "Operator"
+      },
+      {
+        "from": 47,
+        "to": 54,
+        "kind": "Name"
+      },
+      {
+        "from": 54,
+        "to": 55,
+        "kind": "Operator"
+      },
+      {
+        "from": 55,
+        "to": 59,
+        "kind": "Keyword"
+      },
+      {
+        "from": 60,
+        "to": 64,
+        "kind": "Keyword"
+      },
+      {
+        "from": 65,
+        "to": 75,
+        "kind": "Name"
+      },
+      {
+        "from": 75,
+        "to": 76,
+        "kind": "Operator"
+      },
+      {
+        "from": 77,
+        "to": 81,
+        "kind": "Keyword"
+      },
+      {
+        "from": 82,
+        "to": 94,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-56",
+    "input": "select a from t union select b from u intersect select c from v;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 28,
+        "kind": "Keyword"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Name"
+      },
+      {
+        "from": 31,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Name"
+      },
+      {
+        "from": 38,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 54,
+        "kind": "Keyword"
+      },
+      {
+        "from": 55,
+        "to": 56,
+        "kind": "Name"
+      },
+      {
+        "from": 57,
+        "to": 61,
+        "kind": "Keyword"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-57",
+    "input": "insert into t(a,b) values (1,2), (3,4), (5,6);",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Number"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Number"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Number"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Number"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Operator"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Operator"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Operator"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Number"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Operator"
+      },
+      {
+        "from": 43,
+        "to": 44,
+        "kind": "Number"
+      },
+      {
+        "from": 44,
+        "to": 45,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-58",
+    "input": "select t.id, u.name from t as t cross join users as u;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 11,
+        "kind": "Name"
+      },
+      {
+        "from": 11,
+        "to": 12,
+        "kind": "Operator"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 19,
+        "kind": "Name"
+      },
+      {
+        "from": 20,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Name"
+      },
+      {
+        "from": 32,
+        "to": 37,
+        "kind": "Keyword"
+      },
+      {
+        "from": 38,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 48,
+        "kind": "Name"
+      },
+      {
+        "from": 49,
+        "to": 51,
+        "kind": "Keyword"
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-59",
+    "input": "select /* multi\nline */ a, b -- trailing\nfrom t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 23,
+        "kind": "Comment"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Name"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Name"
+      },
+      {
+        "from": 29,
+        "to": 40,
+        "kind": "Comment"
+      },
+      {
+        "from": 41,
+        "to": 45,
+        "kind": "Keyword"
+      },
+      {
+        "from": 46,
+        "to": 47,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-60",
+    "input": "select a from t order by a nulls last;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 32,
+        "kind": "Name"
+      },
+      {
+        "from": 33,
+        "to": 37,
+        "kind": "Keyword"
+      }
+    ]
+  },
+  {
+    "id": "mysql-61",
+    "input": "select x'ff', b'1010', _utf8'ไทย', ? from t;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Number"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 21,
+        "kind": "Number"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 33,
+        "kind": "String"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Special"
+      },
+      {
+        "from": 37,
+        "to": 41,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-62",
+    "input": "replace into t(a,b) values(1,2);",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 7,
+        "kind": "Keyword"
+      },
+      {
+        "from": 8,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 20,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Number"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Number"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "mysql-63",
+    "input": "select * from t force index (PRIMARY) where id=1;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 27,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 36,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Operator"
+      },
+      {
+        "from": 38,
+        "to": 43,
+        "kind": "Keyword"
+      },
+      {
+        "from": 44,
+        "to": 46,
+        "kind": "Name"
+      },
+      {
+        "from": 46,
+        "to": 47,
+        "kind": "Operator"
+      },
+      {
+        "from": 47,
+        "to": 48,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "mysql-64",
+    "input": "select group_concat(distinct name order by name separator ', ') from users;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 19,
+        "kind": "Keyword"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Operator"
+      },
+      {
+        "from": 20,
+        "to": 28,
+        "kind": "Keyword"
+      },
+      {
+        "from": 29,
+        "to": 33,
+        "kind": "Name"
+      },
+      {
+        "from": 34,
+        "to": 39,
+        "kind": "Keyword"
+      },
+      {
+        "from": 40,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 47,
+        "kind": "Name"
+      },
+      {
+        "from": 48,
+        "to": 57,
+        "kind": "Keyword"
+      },
+      {
+        "from": 58,
+        "to": 62,
+        "kind": "String"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Operator"
+      },
+      {
+        "from": 64,
+        "to": 68,
+        "kind": "Keyword"
+      },
+      {
+        "from": 69,
+        "to": 74,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-65",
+    "input": "with recursive nums(n) as (select 1 union all select n+1 from nums where n<10) select * from nums;",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 4,
+        "kind": "Keyword"
+      },
+      {
+        "from": 5,
+        "to": 14,
+        "kind": "Keyword"
+      },
+      {
+        "from": 15,
+        "to": 19,
+        "kind": "Name"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Operator"
+      },
+      {
+        "from": 20,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 33,
+        "kind": "Keyword"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Number"
+      },
+      {
+        "from": 36,
+        "to": 41,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 45,
+        "kind": "Keyword"
+      },
+      {
+        "from": 46,
+        "to": 52,
+        "kind": "Keyword"
+      },
+      {
+        "from": 53,
+        "to": 54,
+        "kind": "Name"
+      },
+      {
+        "from": 54,
+        "to": 55,
+        "kind": "Operator"
+      },
+      {
+        "from": 55,
+        "to": 56,
+        "kind": "Number"
+      },
+      {
+        "from": 57,
+        "to": 61,
+        "kind": "Keyword"
+      },
+      {
+        "from": 62,
+        "to": 66,
+        "kind": "Name"
+      },
+      {
+        "from": 67,
+        "to": 72,
+        "kind": "Keyword"
+      },
+      {
+        "from": 73,
+        "to": 74,
+        "kind": "Name"
+      },
+      {
+        "from": 74,
+        "to": 75,
+        "kind": "Operator"
+      },
+      {
+        "from": 75,
+        "to": 77,
+        "kind": "Number"
+      },
+      {
+        "from": 77,
+        "to": 78,
+        "kind": "Operator"
+      },
+      {
+        "from": 79,
+        "to": 85,
+        "kind": "Keyword"
+      },
+      {
+        "from": 86,
+        "to": 87,
+        "kind": "Operator"
+      },
+      {
+        "from": 88,
+        "to": 92,
+        "kind": "Keyword"
+      },
+      {
+        "from": 93,
+        "to": 97,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "mysql-66",
+    "input": "create trigger t_bi before insert on t for each row set new.created_at=now();",
+    "dialect": "mysql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 14,
+        "kind": "Keyword"
+      },
+      {
+        "from": 15,
+        "to": 19,
+        "kind": "Name"
+      },
+      {
+        "from": 20,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 33,
+        "kind": "Keyword"
+      },
+      {
+        "from": 34,
+        "to": 36,
+        "kind": "Keyword"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Name"
+      },
+      {
+        "from": 39,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 51,
+        "kind": "Keyword"
+      },
+      {
+        "from": 52,
+        "to": 55,
+        "kind": "Keyword"
+      },
+      {
+        "from": 56,
+        "to": 59,
+        "kind": "Name"
+      },
+      {
+        "from": 60,
+        "to": 70,
+        "kind": "Name"
+      },
+      {
+        "from": 70,
+        "to": 71,
+        "kind": "Operator"
+      },
+      {
+        "from": 71,
+        "to": 74,
+        "kind": "Name"
+      },
+      {
+        "from": 74,
+        "to": 75,
+        "kind": "Operator"
+      },
+      {
+        "from": 75,
+        "to": 76,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-0",
+    "input": "select * from users;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 19,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-1",
+    "input": "select id,name from users where id=1;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 9,
+        "kind": "Keyword"
+      },
+      {
+        "from": 9,
+        "to": 10,
+        "kind": "Operator"
+      },
+      {
+        "from": 10,
+        "to": 14,
+        "kind": "Keyword"
+      },
+      {
+        "from": 15,
+        "to": 19,
+        "kind": "Keyword"
+      },
+      {
+        "from": 20,
+        "to": 25,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-2",
+    "input": "select * from users where id=1 and active=true order by name desc limit 10;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 19,
+        "kind": "Name"
+      },
+      {
+        "from": 20,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 28,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Number"
+      },
+      {
+        "from": 31,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 41,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Operator"
+      },
+      {
+        "from": 42,
+        "to": 46,
+        "kind": "Number"
+      },
+      {
+        "from": 47,
+        "to": 52,
+        "kind": "Keyword"
+      },
+      {
+        "from": 53,
+        "to": 55,
+        "kind": "Keyword"
+      },
+      {
+        "from": 56,
+        "to": 60,
+        "kind": "Keyword"
+      },
+      {
+        "from": 61,
+        "to": 65,
+        "kind": "Keyword"
+      },
+      {
+        "from": 66,
+        "to": 71,
+        "kind": "Keyword"
+      },
+      {
+        "from": 72,
+        "to": 74,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-3",
+    "input": "select count(*), coalesce(a, 0), lower(name) as label from users;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Operator"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Number"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Operator"
+      },
+      {
+        "from": 39,
+        "to": 43,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 44,
+        "kind": "Operator"
+      },
+      {
+        "from": 45,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 53,
+        "kind": "Keyword"
+      },
+      {
+        "from": 54,
+        "to": 58,
+        "kind": "Keyword"
+      },
+      {
+        "from": 59,
+        "to": 64,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-4",
+    "input": "insert into t(a,b) values(1,2),(3,4);",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Number"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Number"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Number"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Number"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-5",
+    "input": "update t set a=1,b=2 where id=3;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Number"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Number"
+      },
+      {
+        "from": 21,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-6",
+    "input": "delete from t where id=3;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 19,
+        "kind": "Keyword"
+      },
+      {
+        "from": 20,
+        "to": 22,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-7",
+    "input": "select a from x left join y on x.id=y.id and y.a=1;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 20,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Name"
+      },
+      {
+        "from": 28,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Name"
+      },
+      {
+        "from": 33,
+        "to": 35,
+        "kind": "Name"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Name"
+      },
+      {
+        "from": 38,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 44,
+        "kind": "Keyword"
+      },
+      {
+        "from": 45,
+        "to": 46,
+        "kind": "Name"
+      },
+      {
+        "from": 47,
+        "to": 48,
+        "kind": "Name"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Operator"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-8",
+    "input": "with a as (select * from t) select * from a;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 4,
+        "kind": "Keyword"
+      },
+      {
+        "from": 5,
+        "to": 6,
+        "kind": "Name"
+      },
+      {
+        "from": 7,
+        "to": 9,
+        "kind": "Keyword"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 20,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      },
+      {
+        "from": 37,
+        "to": 41,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-9",
+    "input": "select (1 + 2), a from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 8,
+        "to": 9,
+        "kind": "Number"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Number"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 22,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-10",
+    "input": "select 1; select 2;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Number"
+      },
+      {
+        "from": 10,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-11",
+    "input": "-- comment\nselect 1;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 10,
+        "kind": "Comment"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-12",
+    "input": "select case when x=1 then 'a' else 'b' end from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Number"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 29,
+        "kind": "String"
+      },
+      {
+        "from": 30,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 38,
+        "kind": "String"
+      },
+      {
+        "from": 39,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-13",
+    "input": "select a, count(*) from t group by a having count(*)>1 order by a limit 5 offset 2;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 8,
+        "to": 9,
+        "kind": "Operator"
+      },
+      {
+        "from": 10,
+        "to": 15,
+        "kind": "Keyword"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 23,
+        "kind": "Keyword"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Name"
+      },
+      {
+        "from": 37,
+        "to": 43,
+        "kind": "Keyword"
+      },
+      {
+        "from": 44,
+        "to": 49,
+        "kind": "Keyword"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Operator"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Operator"
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "kind": "Operator"
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "kind": "Operator"
+      },
+      {
+        "from": 53,
+        "to": 54,
+        "kind": "Number"
+      },
+      {
+        "from": 55,
+        "to": 60,
+        "kind": "Keyword"
+      },
+      {
+        "from": 61,
+        "to": 63,
+        "kind": "Keyword"
+      },
+      {
+        "from": 64,
+        "to": 65,
+        "kind": "Name"
+      },
+      {
+        "from": 66,
+        "to": 71,
+        "kind": "Keyword"
+      },
+      {
+        "from": 72,
+        "to": 73,
+        "kind": "Number"
+      },
+      {
+        "from": 74,
+        "to": 80,
+        "kind": "Keyword"
+      },
+      {
+        "from": 81,
+        "to": 82,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-14",
+    "input": "select distinct a from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 15,
+        "kind": "Keyword"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 22,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-15",
+    "input": "select a from t union all select b from u;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 32,
+        "kind": "Keyword"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Name"
+      },
+      {
+        "from": 35,
+        "to": 39,
+        "kind": "Keyword"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-16",
+    "input": "select * from t where a in (1,2,3) and b is not null;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Number"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Number"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Number"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 43,
+        "kind": "Keyword"
+      },
+      {
+        "from": 44,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 52,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-17",
+    "input": "select 'ไทย 😺', 'a; b', 1.25, -10;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 15,
+        "kind": "String"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 23,
+        "kind": "String"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 29,
+        "kind": "Number"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 34,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-18",
+    "input": "select * from (select id from t) as x;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 15,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Name"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-19",
+    "input": "insert into t select * from u;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 20,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 27,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-20",
+    "input": "update users set name='O''Brien' where id=2;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 22,
+        "to": 25,
+        "kind": "String"
+      },
+      {
+        "from": 25,
+        "to": 32,
+        "kind": "String"
+      },
+      {
+        "from": 33,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 41,
+        "kind": "Keyword"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Operator"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-21",
+    "input": "select * from t where x between 1 and 2 or y like 'a%';",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Number"
+      },
+      {
+        "from": 34,
+        "to": 37,
+        "kind": "Keyword"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Number"
+      },
+      {
+        "from": 40,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 44,
+        "kind": "Name"
+      },
+      {
+        "from": 45,
+        "to": 49,
+        "kind": "Keyword"
+      },
+      {
+        "from": 50,
+        "to": 54,
+        "kind": "String"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-22",
+    "input": "select /* note */ id from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 17,
+        "kind": "Comment"
+      },
+      {
+        "from": 18,
+        "to": 20,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-23",
+    "input": "select a+b*2 as total from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 8,
+        "to": 9,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 10,
+        "kind": "Name"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 12,
+        "kind": "Number"
+      },
+      {
+        "from": 13,
+        "to": 15,
+        "kind": "Keyword"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 22,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-24",
+    "input": "select * from t inner join u on t.id=u.id right join v on u.id=v.id;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Name"
+      },
+      {
+        "from": 29,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Name"
+      },
+      {
+        "from": 34,
+        "to": 36,
+        "kind": "Name"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Operator"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Name"
+      },
+      {
+        "from": 39,
+        "to": 41,
+        "kind": "Name"
+      },
+      {
+        "from": 42,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 52,
+        "kind": "Keyword"
+      },
+      {
+        "from": 53,
+        "to": 54,
+        "kind": "Name"
+      },
+      {
+        "from": 55,
+        "to": 57,
+        "kind": "Keyword"
+      },
+      {
+        "from": 58,
+        "to": 59,
+        "kind": "Name"
+      },
+      {
+        "from": 60,
+        "to": 62,
+        "kind": "Name"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Operator"
+      },
+      {
+        "from": 63,
+        "to": 64,
+        "kind": "Name"
+      },
+      {
+        "from": 65,
+        "to": 67,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-25",
+    "input": "select row_number() over (partition by a order by b) as n from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 20,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 26,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 46,
+        "kind": "Keyword"
+      },
+      {
+        "from": 47,
+        "to": 49,
+        "kind": "Keyword"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Name"
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "kind": "Operator"
+      },
+      {
+        "from": 53,
+        "to": 55,
+        "kind": "Keyword"
+      },
+      {
+        "from": 56,
+        "to": 57,
+        "kind": "Name"
+      },
+      {
+        "from": 58,
+        "to": 62,
+        "kind": "Keyword"
+      },
+      {
+        "from": 63,
+        "to": 64,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-26",
+    "input": "create table t (id int primary key, name varchar(255) not null);",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 18,
+        "kind": "Keyword"
+      },
+      {
+        "from": 19,
+        "to": 22,
+        "kind": "Type"
+      },
+      {
+        "from": 23,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 40,
+        "kind": "Keyword"
+      },
+      {
+        "from": 41,
+        "to": 48,
+        "kind": "Type"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Operator"
+      },
+      {
+        "from": 49,
+        "to": 52,
+        "kind": "Number"
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "kind": "Operator"
+      },
+      {
+        "from": 54,
+        "to": 57,
+        "kind": "Keyword"
+      },
+      {
+        "from": 58,
+        "to": 62,
+        "kind": "Number"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-27",
+    "input": "alter table t add column n int;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 5,
+        "kind": "Keyword"
+      },
+      {
+        "from": 6,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 30,
+        "kind": "Type"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-28",
+    "input": "begin; update t set a=2; commit;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 5,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 19,
+        "kind": "Keyword"
+      },
+      {
+        "from": 20,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Number"
+      },
+      {
+        "from": 25,
+        "to": 31,
+        "kind": "Keyword"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-29",
+    "input": "select exists(select 1 from t where id=2);",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 20,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Number"
+      },
+      {
+        "from": 23,
+        "to": 27,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Name"
+      },
+      {
+        "from": 30,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Operator"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Number"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-30",
+    "input": "select a from t order by a asc,b desc;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Name"
+      },
+      {
+        "from": 33,
+        "to": 37,
+        "kind": "Keyword"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-31",
+    "input": "SELECT * FROM members\nWHERE 1\n-- AND MEMBER_TYPE = 'x;y'\nAND MEMBER_TYPE = 'member'\nORDER BY MEMBER_ID DESC;\n\nSELECT bank_name_th FROM sa_banks;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 22,
+        "to": 27,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Number"
+      },
+      {
+        "from": 30,
+        "to": 56,
+        "kind": "Comment"
+      },
+      {
+        "from": 57,
+        "to": 60,
+        "kind": "Keyword"
+      },
+      {
+        "from": 61,
+        "to": 72,
+        "kind": "Name"
+      },
+      {
+        "from": 73,
+        "to": 74,
+        "kind": "Operator"
+      },
+      {
+        "from": 75,
+        "to": 83,
+        "kind": "String"
+      },
+      {
+        "from": 84,
+        "to": 89,
+        "kind": "Keyword"
+      },
+      {
+        "from": 90,
+        "to": 92,
+        "kind": "Keyword"
+      },
+      {
+        "from": 93,
+        "to": 102,
+        "kind": "Name"
+      },
+      {
+        "from": 103,
+        "to": 107,
+        "kind": "Keyword"
+      },
+      {
+        "from": 110,
+        "to": 116,
+        "kind": "Keyword"
+      },
+      {
+        "from": 117,
+        "to": 129,
+        "kind": "Name"
+      },
+      {
+        "from": 130,
+        "to": 134,
+        "kind": "Keyword"
+      },
+      {
+        "from": 135,
+        "to": 143,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-32",
+    "input": "select 1",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-33",
+    "input": "",
+    "dialect": "postgresql",
+    "ranges": []
+  },
+  {
+    "id": "postgresql-34",
+    "input": "select null,true,false;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Number"
+      },
+      {
+        "from": 11,
+        "to": 12,
+        "kind": "Operator"
+      },
+      {
+        "from": 12,
+        "to": 16,
+        "kind": "Number"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 22,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-35",
+    "input": "select a as b from t where x<>2;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 14,
+        "to": 18,
+        "kind": "Keyword"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Name"
+      },
+      {
+        "from": 21,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Name"
+      },
+      {
+        "from": 28,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-36",
+    "input": "select sum(amount) / count(*) from payments;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 10,
+        "kind": "Keyword"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Operator"
+      },
+      {
+        "from": 21,
+        "to": 26,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 43,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-37",
+    "input": "select * from t where (a=1 or b=2) and c=3;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Number"
+      },
+      {
+        "from": 27,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Name"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Number"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Name"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Operator"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-38",
+    "input": "select a from t\n-- tail",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 23,
+        "kind": "Comment"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-39",
+    "input": "select a::text, $1 from \"users\";",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 8,
+        "to": 9,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 10,
+        "kind": "Operator"
+      },
+      {
+        "from": 10,
+        "to": 14,
+        "kind": "Type"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Number"
+      },
+      {
+        "from": 19,
+        "to": 23,
+        "kind": "Keyword"
+      },
+      {
+        "from": 24,
+        "to": 31,
+        "kind": "String"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-40",
+    "input": "select $$hello; ไทย$$, E'it\\'s';",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 21,
+        "kind": "String"
+      },
+      {
+        "from": 21,
+        "to": 22,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 31,
+        "kind": "String"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-41",
+    "input": "insert into t(a) values(1) returning id;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 23,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Operator"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Number"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 36,
+        "kind": "Keyword"
+      },
+      {
+        "from": 37,
+        "to": 39,
+        "kind": "Keyword"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-42",
+    "input": "select data->>'name' from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 11,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 20,
+        "kind": "String"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-43",
+    "input": "select * from t where a ilike 'b%';",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 34,
+        "kind": "String"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-44",
+    "input": "select array[1,2,3];",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Type"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Operator"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Number"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Number"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Number"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-45",
+    "input": "with a as (select x from t), b as (select y from u) select * from a join b on a.x=b.y;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 4,
+        "kind": "Keyword"
+      },
+      {
+        "from": 5,
+        "to": 6,
+        "kind": "Name"
+      },
+      {
+        "from": 7,
+        "to": 9,
+        "kind": "Keyword"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Name"
+      },
+      {
+        "from": 20,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Name"
+      },
+      {
+        "from": 31,
+        "to": 33,
+        "kind": "Keyword"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 41,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Name"
+      },
+      {
+        "from": 44,
+        "to": 48,
+        "kind": "Keyword"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Name"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Operator"
+      },
+      {
+        "from": 52,
+        "to": 58,
+        "kind": "Keyword"
+      },
+      {
+        "from": 59,
+        "to": 60,
+        "kind": "Operator"
+      },
+      {
+        "from": 61,
+        "to": 65,
+        "kind": "Keyword"
+      },
+      {
+        "from": 66,
+        "to": 67,
+        "kind": "Name"
+      },
+      {
+        "from": 68,
+        "to": 72,
+        "kind": "Keyword"
+      },
+      {
+        "from": 73,
+        "to": 74,
+        "kind": "Name"
+      },
+      {
+        "from": 75,
+        "to": 77,
+        "kind": "Keyword"
+      },
+      {
+        "from": 78,
+        "to": 79,
+        "kind": "Name"
+      },
+      {
+        "from": 80,
+        "to": 81,
+        "kind": "Name"
+      },
+      {
+        "from": 81,
+        "to": 82,
+        "kind": "Operator"
+      },
+      {
+        "from": 82,
+        "to": 83,
+        "kind": "Name"
+      },
+      {
+        "from": 84,
+        "to": 85,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-46",
+    "input": "select case when a>0 then case when b>0 then 'both' else 'a' end else 'none' end as label from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Number"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Name"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Operator"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Number"
+      },
+      {
+        "from": 40,
+        "to": 44,
+        "kind": "Keyword"
+      },
+      {
+        "from": 45,
+        "to": 51,
+        "kind": "String"
+      },
+      {
+        "from": 52,
+        "to": 56,
+        "kind": "Keyword"
+      },
+      {
+        "from": 57,
+        "to": 60,
+        "kind": "String"
+      },
+      {
+        "from": 61,
+        "to": 64,
+        "kind": "Keyword"
+      },
+      {
+        "from": 65,
+        "to": 69,
+        "kind": "Keyword"
+      },
+      {
+        "from": 70,
+        "to": 76,
+        "kind": "String"
+      },
+      {
+        "from": 77,
+        "to": 80,
+        "kind": "Keyword"
+      },
+      {
+        "from": 81,
+        "to": 83,
+        "kind": "Keyword"
+      },
+      {
+        "from": 84,
+        "to": 89,
+        "kind": "Keyword"
+      },
+      {
+        "from": 90,
+        "to": 94,
+        "kind": "Keyword"
+      },
+      {
+        "from": 95,
+        "to": 96,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-47",
+    "input": "select avg(amount) over (partition by account_id order by created_at rows between 2 preceding and current row) from transactions;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 10,
+        "kind": "Keyword"
+      },
+      {
+        "from": 10,
+        "to": 11,
+        "kind": "Operator"
+      },
+      {
+        "from": 11,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 23,
+        "kind": "Keyword"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 34,
+        "kind": "Keyword"
+      },
+      {
+        "from": 35,
+        "to": 37,
+        "kind": "Keyword"
+      },
+      {
+        "from": 38,
+        "to": 48,
+        "kind": "Name"
+      },
+      {
+        "from": 49,
+        "to": 54,
+        "kind": "Keyword"
+      },
+      {
+        "from": 55,
+        "to": 57,
+        "kind": "Keyword"
+      },
+      {
+        "from": 58,
+        "to": 68,
+        "kind": "Name"
+      },
+      {
+        "from": 69,
+        "to": 73,
+        "kind": "Keyword"
+      },
+      {
+        "from": 74,
+        "to": 81,
+        "kind": "Keyword"
+      },
+      {
+        "from": 82,
+        "to": 83,
+        "kind": "Number"
+      },
+      {
+        "from": 84,
+        "to": 93,
+        "kind": "Keyword"
+      },
+      {
+        "from": 94,
+        "to": 97,
+        "kind": "Keyword"
+      },
+      {
+        "from": 98,
+        "to": 105,
+        "kind": "Keyword"
+      },
+      {
+        "from": 106,
+        "to": 109,
+        "kind": "Keyword"
+      },
+      {
+        "from": 109,
+        "to": 110,
+        "kind": "Operator"
+      },
+      {
+        "from": 111,
+        "to": 115,
+        "kind": "Keyword"
+      },
+      {
+        "from": 116,
+        "to": 128,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-48",
+    "input": "select aaaaaaaaaaaaaaaaaaaaaaaa + bbbbbbbbbbbbbbbbbbbbbbbbbbbb + ccccccccccccccccccccccccccc as total from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 31,
+        "kind": "Name"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Operator"
+      },
+      {
+        "from": 34,
+        "to": 62,
+        "kind": "Name"
+      },
+      {
+        "from": 63,
+        "to": 64,
+        "kind": "Operator"
+      },
+      {
+        "from": 65,
+        "to": 92,
+        "kind": "Name"
+      },
+      {
+        "from": 93,
+        "to": 95,
+        "kind": "Keyword"
+      },
+      {
+        "from": 96,
+        "to": 101,
+        "kind": "Name"
+      },
+      {
+        "from": 102,
+        "to": 106,
+        "kind": "Keyword"
+      },
+      {
+        "from": 107,
+        "to": 108,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-49",
+    "input": "select coalesce(very_long_column_name_which_exceeds_the_inline_limit, another_very_long_column_name, 0) from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 15,
+        "kind": "Keyword"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 68,
+        "kind": "Name"
+      },
+      {
+        "from": 68,
+        "to": 69,
+        "kind": "Operator"
+      },
+      {
+        "from": 70,
+        "to": 99,
+        "kind": "Name"
+      },
+      {
+        "from": 99,
+        "to": 100,
+        "kind": "Operator"
+      },
+      {
+        "from": 101,
+        "to": 102,
+        "kind": "Number"
+      },
+      {
+        "from": 102,
+        "to": 103,
+        "kind": "Operator"
+      },
+      {
+        "from": 104,
+        "to": 108,
+        "kind": "Keyword"
+      },
+      {
+        "from": 109,
+        "to": 110,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-50",
+    "input": "select * from t where (a=1 and b=2) or (c=3 and d=4);",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Name"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Operator"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Number"
+      },
+      {
+        "from": 27,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Name"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Number"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 40,
+        "kind": "Operator"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Name"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Operator"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Number"
+      },
+      {
+        "from": 44,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Name"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Operator"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Number"
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-51",
+    "input": "select * from t where not exists (select 1 from u where u.id=t.id);",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 32,
+        "kind": "Keyword"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 34,
+        "to": 40,
+        "kind": "Keyword"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Number"
+      },
+      {
+        "from": 43,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Name"
+      },
+      {
+        "from": 50,
+        "to": 55,
+        "kind": "Keyword"
+      },
+      {
+        "from": 56,
+        "to": 57,
+        "kind": "Name"
+      },
+      {
+        "from": 58,
+        "to": 60,
+        "kind": "Name"
+      },
+      {
+        "from": 60,
+        "to": 61,
+        "kind": "Operator"
+      },
+      {
+        "from": 61,
+        "to": 62,
+        "kind": "Name"
+      },
+      {
+        "from": 63,
+        "to": 65,
+        "kind": "Name"
+      },
+      {
+        "from": 65,
+        "to": 66,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-52",
+    "input": "create table accounts (id bigint primary key, owner_id int references users(id), balance decimal(12,2) default 0, constraint positive check (balance>=0));",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 21,
+        "kind": "Name"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 23,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 32,
+        "kind": "Type"
+      },
+      {
+        "from": 33,
+        "to": 40,
+        "kind": "Keyword"
+      },
+      {
+        "from": 41,
+        "to": 44,
+        "kind": "Keyword"
+      },
+      {
+        "from": 44,
+        "to": 45,
+        "kind": "Operator"
+      },
+      {
+        "from": 46,
+        "to": 54,
+        "kind": "Name"
+      },
+      {
+        "from": 55,
+        "to": 58,
+        "kind": "Type"
+      },
+      {
+        "from": 59,
+        "to": 69,
+        "kind": "Keyword"
+      },
+      {
+        "from": 70,
+        "to": 75,
+        "kind": "Name"
+      },
+      {
+        "from": 75,
+        "to": 76,
+        "kind": "Operator"
+      },
+      {
+        "from": 76,
+        "to": 78,
+        "kind": "Keyword"
+      },
+      {
+        "from": 78,
+        "to": 79,
+        "kind": "Operator"
+      },
+      {
+        "from": 79,
+        "to": 80,
+        "kind": "Operator"
+      },
+      {
+        "from": 81,
+        "to": 88,
+        "kind": "Name"
+      },
+      {
+        "from": 89,
+        "to": 96,
+        "kind": "Type"
+      },
+      {
+        "from": 96,
+        "to": 97,
+        "kind": "Operator"
+      },
+      {
+        "from": 97,
+        "to": 99,
+        "kind": "Number"
+      },
+      {
+        "from": 99,
+        "to": 100,
+        "kind": "Operator"
+      },
+      {
+        "from": 100,
+        "to": 101,
+        "kind": "Number"
+      },
+      {
+        "from": 101,
+        "to": 102,
+        "kind": "Operator"
+      },
+      {
+        "from": 103,
+        "to": 110,
+        "kind": "Keyword"
+      },
+      {
+        "from": 111,
+        "to": 112,
+        "kind": "Number"
+      },
+      {
+        "from": 112,
+        "to": 113,
+        "kind": "Operator"
+      },
+      {
+        "from": 114,
+        "to": 124,
+        "kind": "Keyword"
+      },
+      {
+        "from": 125,
+        "to": 133,
+        "kind": "Name"
+      },
+      {
+        "from": 134,
+        "to": 139,
+        "kind": "Keyword"
+      },
+      {
+        "from": 140,
+        "to": 141,
+        "kind": "Operator"
+      },
+      {
+        "from": 141,
+        "to": 148,
+        "kind": "Name"
+      },
+      {
+        "from": 148,
+        "to": 150,
+        "kind": "Operator"
+      },
+      {
+        "from": 150,
+        "to": 151,
+        "kind": "Number"
+      },
+      {
+        "from": 151,
+        "to": 152,
+        "kind": "Operator"
+      },
+      {
+        "from": 152,
+        "to": 153,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-53",
+    "input": "create index users_name_idx on users (name, id);",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 27,
+        "kind": "Name"
+      },
+      {
+        "from": 28,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 31,
+        "to": 36,
+        "kind": "Name"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Operator"
+      },
+      {
+        "from": 38,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Operator"
+      },
+      {
+        "from": 44,
+        "to": 46,
+        "kind": "Keyword"
+      },
+      {
+        "from": 46,
+        "to": 47,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-54",
+    "input": "select cast(amount as decimal(10,2)) as value, extract(year from created_at) from transactions;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 11,
+        "to": 12,
+        "kind": "Operator"
+      },
+      {
+        "from": 12,
+        "to": 18,
+        "kind": "Name"
+      },
+      {
+        "from": 19,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 29,
+        "kind": "Type"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 32,
+        "kind": "Number"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Number"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      },
+      {
+        "from": 37,
+        "to": 39,
+        "kind": "Keyword"
+      },
+      {
+        "from": 40,
+        "to": 45,
+        "kind": "Keyword"
+      },
+      {
+        "from": 45,
+        "to": 46,
+        "kind": "Operator"
+      },
+      {
+        "from": 47,
+        "to": 54,
+        "kind": "Keyword"
+      },
+      {
+        "from": 54,
+        "to": 55,
+        "kind": "Operator"
+      },
+      {
+        "from": 55,
+        "to": 59,
+        "kind": "Keyword"
+      },
+      {
+        "from": 60,
+        "to": 64,
+        "kind": "Keyword"
+      },
+      {
+        "from": 65,
+        "to": 75,
+        "kind": "Name"
+      },
+      {
+        "from": 75,
+        "to": 76,
+        "kind": "Operator"
+      },
+      {
+        "from": 77,
+        "to": 81,
+        "kind": "Keyword"
+      },
+      {
+        "from": 82,
+        "to": 94,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-55",
+    "input": "select a from t union select b from u intersect select c from v;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 28,
+        "kind": "Keyword"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Name"
+      },
+      {
+        "from": 31,
+        "to": 35,
+        "kind": "Keyword"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Name"
+      },
+      {
+        "from": 38,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 48,
+        "to": 54,
+        "kind": "Keyword"
+      },
+      {
+        "from": 55,
+        "to": 56,
+        "kind": "Name"
+      },
+      {
+        "from": 57,
+        "to": 61,
+        "kind": "Keyword"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-56",
+    "input": "insert into t(a,b) values (1,2), (3,4), (5,6);",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 16,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Name"
+      },
+      {
+        "from": 17,
+        "to": 18,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 27,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Number"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Operator"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Number"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Operator"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Number"
+      },
+      {
+        "from": 35,
+        "to": 36,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Number"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Operator"
+      },
+      {
+        "from": 38,
+        "to": 39,
+        "kind": "Operator"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Operator"
+      },
+      {
+        "from": 41,
+        "to": 42,
+        "kind": "Number"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Operator"
+      },
+      {
+        "from": 43,
+        "to": 44,
+        "kind": "Number"
+      },
+      {
+        "from": 44,
+        "to": 45,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-57",
+    "input": "select t.id, u.name from t as t cross join users as u;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 11,
+        "kind": "Name"
+      },
+      {
+        "from": 11,
+        "to": 12,
+        "kind": "Operator"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Name"
+      },
+      {
+        "from": 15,
+        "to": 19,
+        "kind": "Name"
+      },
+      {
+        "from": 20,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Name"
+      },
+      {
+        "from": 32,
+        "to": 37,
+        "kind": "Keyword"
+      },
+      {
+        "from": 38,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 43,
+        "to": 48,
+        "kind": "Name"
+      },
+      {
+        "from": 49,
+        "to": 51,
+        "kind": "Keyword"
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-58",
+    "input": "select /* multi\nline */ a, b -- trailing\nfrom t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 23,
+        "kind": "Comment"
+      },
+      {
+        "from": 24,
+        "to": 25,
+        "kind": "Name"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 28,
+        "kind": "Name"
+      },
+      {
+        "from": 29,
+        "to": 40,
+        "kind": "Comment"
+      },
+      {
+        "from": 41,
+        "to": 45,
+        "kind": "Keyword"
+      },
+      {
+        "from": 46,
+        "to": 47,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-59",
+    "input": "select a from t order by a nulls last;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 24,
+        "kind": "Keyword"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 32,
+        "kind": "Keyword"
+      },
+      {
+        "from": 33,
+        "to": 37,
+        "kind": "Keyword"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-60",
+    "input": "select $tag$ไทย '😺'$tag$, jsonb_build_object('x', 1);",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 25,
+        "kind": "String"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 45,
+        "kind": "Name"
+      },
+      {
+        "from": 45,
+        "to": 46,
+        "kind": "Operator"
+      },
+      {
+        "from": 46,
+        "to": 49,
+        "kind": "String"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Operator"
+      },
+      {
+        "from": 51,
+        "to": 52,
+        "kind": "Number"
+      },
+      {
+        "from": 52,
+        "to": 53,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-61",
+    "input": "update t set value=u.value from u where t.id=u.id returning t.*;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Name"
+      },
+      {
+        "from": 9,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 13,
+        "to": 18,
+        "kind": "Keyword"
+      },
+      {
+        "from": 18,
+        "to": 19,
+        "kind": "Operator"
+      },
+      {
+        "from": 19,
+        "to": 20,
+        "kind": "Name"
+      },
+      {
+        "from": 21,
+        "to": 26,
+        "kind": "Name"
+      },
+      {
+        "from": 27,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Name"
+      },
+      {
+        "from": 34,
+        "to": 39,
+        "kind": "Keyword"
+      },
+      {
+        "from": 40,
+        "to": 41,
+        "kind": "Name"
+      },
+      {
+        "from": 42,
+        "to": 44,
+        "kind": "Name"
+      },
+      {
+        "from": 44,
+        "to": 45,
+        "kind": "Operator"
+      },
+      {
+        "from": 45,
+        "to": 46,
+        "kind": "Name"
+      },
+      {
+        "from": 47,
+        "to": 49,
+        "kind": "Name"
+      },
+      {
+        "from": 50,
+        "to": 59,
+        "kind": "Keyword"
+      },
+      {
+        "from": 60,
+        "to": 61,
+        "kind": "Name"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-62",
+    "input": "select * from t limit $1 offset $2;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 21,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Number"
+      },
+      {
+        "from": 25,
+        "to": 31,
+        "kind": "Keyword"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-63",
+    "input": "select date '2026-01-01' + interval '1 day';",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Type"
+      },
+      {
+        "from": 12,
+        "to": 24,
+        "kind": "String"
+      },
+      {
+        "from": 25,
+        "to": 26,
+        "kind": "Operator"
+      },
+      {
+        "from": 27,
+        "to": 35,
+        "kind": "Type"
+      },
+      {
+        "from": 36,
+        "to": 43,
+        "kind": "String"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-64",
+    "input": "select count(*) filter (where active), sum(amount) over (order by id rows between unbounded preceding and current row) from t;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Operator"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Operator"
+      },
+      {
+        "from": 16,
+        "to": 22,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 24,
+        "kind": "Operator"
+      },
+      {
+        "from": 24,
+        "to": 29,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 36,
+        "kind": "Name"
+      },
+      {
+        "from": 36,
+        "to": 37,
+        "kind": "Operator"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Operator"
+      },
+      {
+        "from": 39,
+        "to": 42,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Operator"
+      },
+      {
+        "from": 43,
+        "to": 49,
+        "kind": "Name"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Operator"
+      },
+      {
+        "from": 51,
+        "to": 55,
+        "kind": "Keyword"
+      },
+      {
+        "from": 56,
+        "to": 57,
+        "kind": "Operator"
+      },
+      {
+        "from": 57,
+        "to": 62,
+        "kind": "Keyword"
+      },
+      {
+        "from": 63,
+        "to": 65,
+        "kind": "Keyword"
+      },
+      {
+        "from": 66,
+        "to": 68,
+        "kind": "Keyword"
+      },
+      {
+        "from": 69,
+        "to": 73,
+        "kind": "Keyword"
+      },
+      {
+        "from": 74,
+        "to": 81,
+        "kind": "Keyword"
+      },
+      {
+        "from": 82,
+        "to": 91,
+        "kind": "Keyword"
+      },
+      {
+        "from": 92,
+        "to": 101,
+        "kind": "Keyword"
+      },
+      {
+        "from": 102,
+        "to": 105,
+        "kind": "Keyword"
+      },
+      {
+        "from": 106,
+        "to": 113,
+        "kind": "Keyword"
+      },
+      {
+        "from": 114,
+        "to": 117,
+        "kind": "Keyword"
+      },
+      {
+        "from": 117,
+        "to": 118,
+        "kind": "Operator"
+      },
+      {
+        "from": 119,
+        "to": 123,
+        "kind": "Keyword"
+      },
+      {
+        "from": 124,
+        "to": 125,
+        "kind": "Name"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-65",
+    "input": "insert into t(id,value) values(1,2) on conflict(id) do update set value=excluded.value returning *;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 11,
+        "kind": "Keyword"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Name"
+      },
+      {
+        "from": 13,
+        "to": 14,
+        "kind": "Operator"
+      },
+      {
+        "from": 14,
+        "to": 16,
+        "kind": "Keyword"
+      },
+      {
+        "from": 16,
+        "to": 17,
+        "kind": "Operator"
+      },
+      {
+        "from": 17,
+        "to": 22,
+        "kind": "Keyword"
+      },
+      {
+        "from": 22,
+        "to": 23,
+        "kind": "Operator"
+      },
+      {
+        "from": 24,
+        "to": 30,
+        "kind": "Keyword"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 31,
+        "to": 32,
+        "kind": "Number"
+      },
+      {
+        "from": 32,
+        "to": 33,
+        "kind": "Operator"
+      },
+      {
+        "from": 33,
+        "to": 34,
+        "kind": "Number"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 36,
+        "to": 38,
+        "kind": "Keyword"
+      },
+      {
+        "from": 39,
+        "to": 47,
+        "kind": "Keyword"
+      },
+      {
+        "from": 47,
+        "to": 48,
+        "kind": "Operator"
+      },
+      {
+        "from": 48,
+        "to": 50,
+        "kind": "Keyword"
+      },
+      {
+        "from": 50,
+        "to": 51,
+        "kind": "Operator"
+      },
+      {
+        "from": 52,
+        "to": 54,
+        "kind": "Keyword"
+      },
+      {
+        "from": 55,
+        "to": 61,
+        "kind": "Keyword"
+      },
+      {
+        "from": 62,
+        "to": 65,
+        "kind": "Keyword"
+      },
+      {
+        "from": 66,
+        "to": 71,
+        "kind": "Keyword"
+      },
+      {
+        "from": 71,
+        "to": 72,
+        "kind": "Operator"
+      },
+      {
+        "from": 72,
+        "to": 80,
+        "kind": "Name"
+      },
+      {
+        "from": 81,
+        "to": 86,
+        "kind": "Name"
+      },
+      {
+        "from": 87,
+        "to": 96,
+        "kind": "Keyword"
+      },
+      {
+        "from": 97,
+        "to": 98,
+        "kind": "Operator"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-66",
+    "input": "select * from t left join lateral (select * from u where u.id=t.id limit 1) as x on true;",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 8,
+        "kind": "Operator"
+      },
+      {
+        "from": 9,
+        "to": 13,
+        "kind": "Keyword"
+      },
+      {
+        "from": 14,
+        "to": 15,
+        "kind": "Name"
+      },
+      {
+        "from": 16,
+        "to": 20,
+        "kind": "Keyword"
+      },
+      {
+        "from": 21,
+        "to": 25,
+        "kind": "Keyword"
+      },
+      {
+        "from": 26,
+        "to": 33,
+        "kind": "Keyword"
+      },
+      {
+        "from": 34,
+        "to": 35,
+        "kind": "Operator"
+      },
+      {
+        "from": 35,
+        "to": 41,
+        "kind": "Keyword"
+      },
+      {
+        "from": 42,
+        "to": 43,
+        "kind": "Operator"
+      },
+      {
+        "from": 44,
+        "to": 48,
+        "kind": "Keyword"
+      },
+      {
+        "from": 49,
+        "to": 50,
+        "kind": "Name"
+      },
+      {
+        "from": 51,
+        "to": 56,
+        "kind": "Keyword"
+      },
+      {
+        "from": 57,
+        "to": 58,
+        "kind": "Name"
+      },
+      {
+        "from": 59,
+        "to": 61,
+        "kind": "Name"
+      },
+      {
+        "from": 61,
+        "to": 62,
+        "kind": "Operator"
+      },
+      {
+        "from": 62,
+        "to": 63,
+        "kind": "Name"
+      },
+      {
+        "from": 64,
+        "to": 66,
+        "kind": "Name"
+      },
+      {
+        "from": 67,
+        "to": 72,
+        "kind": "Keyword"
+      },
+      {
+        "from": 73,
+        "to": 74,
+        "kind": "Number"
+      },
+      {
+        "from": 74,
+        "to": 75,
+        "kind": "Operator"
+      },
+      {
+        "from": 76,
+        "to": 78,
+        "kind": "Keyword"
+      },
+      {
+        "from": 79,
+        "to": 80,
+        "kind": "Name"
+      },
+      {
+        "from": 81,
+        "to": 83,
+        "kind": "Keyword"
+      },
+      {
+        "from": 84,
+        "to": 88,
+        "kind": "Number"
+      }
+    ]
+  },
+  {
+    "id": "postgresql-67",
+    "input": "select array(select id from t), ARRAY[ARRAY[1,2], ARRAY[3,4]];",
+    "dialect": "postgresql",
+    "ranges": [
+      {
+        "from": 0,
+        "to": 6,
+        "kind": "Keyword"
+      },
+      {
+        "from": 7,
+        "to": 12,
+        "kind": "Type"
+      },
+      {
+        "from": 12,
+        "to": 13,
+        "kind": "Operator"
+      },
+      {
+        "from": 13,
+        "to": 19,
+        "kind": "Keyword"
+      },
+      {
+        "from": 20,
+        "to": 22,
+        "kind": "Keyword"
+      },
+      {
+        "from": 23,
+        "to": 27,
+        "kind": "Keyword"
+      },
+      {
+        "from": 28,
+        "to": 29,
+        "kind": "Name"
+      },
+      {
+        "from": 29,
+        "to": 30,
+        "kind": "Operator"
+      },
+      {
+        "from": 30,
+        "to": 31,
+        "kind": "Operator"
+      },
+      {
+        "from": 32,
+        "to": 37,
+        "kind": "Type"
+      },
+      {
+        "from": 37,
+        "to": 38,
+        "kind": "Operator"
+      },
+      {
+        "from": 38,
+        "to": 43,
+        "kind": "Type"
+      },
+      {
+        "from": 43,
+        "to": 44,
+        "kind": "Operator"
+      },
+      {
+        "from": 44,
+        "to": 45,
+        "kind": "Number"
+      },
+      {
+        "from": 45,
+        "to": 46,
+        "kind": "Operator"
+      },
+      {
+        "from": 46,
+        "to": 47,
+        "kind": "Number"
+      },
+      {
+        "from": 47,
+        "to": 48,
+        "kind": "Operator"
+      },
+      {
+        "from": 48,
+        "to": 49,
+        "kind": "Operator"
+      },
+      {
+        "from": 50,
+        "to": 55,
+        "kind": "Type"
+      },
+      {
+        "from": 55,
+        "to": 56,
+        "kind": "Operator"
+      },
+      {
+        "from": 56,
+        "to": 57,
+        "kind": "Number"
+      },
+      {
+        "from": 57,
+        "to": 58,
+        "kind": "Operator"
+      },
+      {
+        "from": 58,
+        "to": 59,
+        "kind": "Number"
+      },
+      {
+        "from": 59,
+        "to": 60,
+        "kind": "Operator"
+      },
+      {
+        "from": 60,
+        "to": 61,
+        "kind": "Operator"
+      }
+    ]
+  }
+]

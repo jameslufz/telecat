@@ -1,0 +1,6 @@
+Package: simd_helpers@0.1.0
+Repository: https://github.com/lu-zero/simd_helpers
+License declaration: MIT
+Authors (published Cargo.toml): Luca Barbato <lu_zero@gentoo.org>
+
+

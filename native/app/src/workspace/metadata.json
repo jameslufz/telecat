@@ -1,0 +1,540 @@
+{
+  "mysql": {
+    "structure": {
+      "columns": [
+        "#",
+        "column_name",
+        "data_type",
+        "character_set",
+        "collation",
+        "is_nullable",
+        "column_default",
+        "extra",
+        "foreign_key",
+        "comment"
+      ],
+      "numeric": [
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "binary": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "rows": [
+        [
+          "1",
+          "id",
+          "int",
+          null,
+          null,
+          "NO",
+          null,
+          "auto_increment",
+          null,
+          ""
+        ],
+        [
+          "2",
+          "bank_code",
+          "varchar(6)",
+          "utf8mb3",
+          "utf8mb3_general_ci",
+          "YES",
+          null,
+          "",
+          null,
+          ""
+        ],
+        [
+          "3",
+          "bank_name_th",
+          "varchar(100)",
+          "utf8mb3",
+          "utf8mb3_general_ci",
+          "NO",
+          null,
+          "",
+          null,
+          ""
+        ],
+        [
+          "4",
+          "bank_name_en",
+          "varchar(100)",
+          "utf8mb3",
+          "utf8mb3_general_ci",
+          "NO",
+          null,
+          "",
+          null,
+          ""
+        ],
+        [
+          "5",
+          "bank_acronym",
+          "varchar(10)",
+          "utf8mb3",
+          "utf8mb3_general_ci",
+          "NO",
+          null,
+          "",
+          null,
+          ""
+        ],
+        [
+          "6",
+          "logo",
+          "text",
+          "utf8mb3",
+          "utf8mb3_general_ci",
+          "YES",
+          null,
+          "",
+          null,
+          "bank logo url"
+        ],
+        [
+          "7",
+          "country_code",
+          "varchar(4)",
+          "utf8mb3",
+          "utf8mb3_general_ci",
+          "NO",
+          null,
+          "",
+          null,
+          ""
+        ],
+        [
+          "8",
+          "is_disabled",
+          "tinyint",
+          null,
+          null,
+          "NO",
+          "0",
+          "",
+          null,
+          ""
+        ],
+        [
+          "9",
+          "created_at",
+          "timestamp",
+          null,
+          null,
+          "YES",
+          "CURRENT_TIMESTAMP",
+          "DEFAULT_GENERATED",
+          null,
+          ""
+        ],
+        [
+          "10",
+          "swift_code",
+          "varchar(255)",
+          "utf8mb3",
+          "utf8mb3_general_ci",
+          "YES",
+          null,
+          "",
+          null,
+          ""
+        ]
+      ],
+      "durationMs": 9,
+      "sql": "SELECT c.ordinal_position AS `#`, c.column_name AS column_name, CONCAT(c.column_type, IF(c.srs_id IS NULL, '', CONCAT(' SRID ', c.srs_id))) AS data_type, c.character_set_name AS character_set, c.collation_name AS collation, c.is_nullable AS is_nullable, c.column_default AS column_default, c.extra AS extra, (SELECT CONCAT(k.referenced_table_name, '(', k.referenced_column_name, ')') FROM information_schema.key_column_usage k WHERE k.table_schema=c.table_schema AND k.table_name=c.table_name AND k.column_name=c.column_name AND k.referenced_table_name IS NOT NULL LIMIT 1) AS foreign_key, c.column_comment AS comment FROM information_schema.columns c WHERE c.table_schema='zixma' AND c.table_name='sa_banks' ORDER BY c.ordinal_position;"
+    },
+    "indexes": {
+      "columns": [
+        "index_name",
+        "index_algorithm",
+        "is_unique",
+        "column_name"
+      ],
+      "numeric": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "binary": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "rows": [
+        [
+          "PRIMARY",
+          "BTREE",
+          "TRUE",
+          "id"
+        ],
+        [
+          "INDEX_bank_acronym",
+          "BTREE",
+          "FALSE",
+          "bank_acronym"
+        ],
+        [
+          "INDEX_bank_code",
+          "BTREE",
+          "FALSE",
+          "bank_code"
+        ],
+        [
+          "INDEX_country_code",
+          "BTREE",
+          "FALSE",
+          "country_code"
+        ],
+        [
+          "INDEX_swift",
+          "BTREE",
+          "TRUE",
+          "swift_code"
+        ]
+      ],
+      "durationMs": 3,
+      "sql": "SELECT index_name AS index_name, index_type AS index_algorithm, CASE MAX(non_unique) WHEN 0 THEN 'TRUE' ELSE 'FALSE' END AS is_unique, GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ', ') AS column_name FROM information_schema.statistics WHERE table_schema='zixma' AND table_name='sa_banks' GROUP BY index_name, index_type ORDER BY index_name='PRIMARY' DESC, MIN(seq_in_index), index_name;"
+    },
+    "info": {
+      "data_size": "16 KB",
+      "index_size": "48 KB",
+      "total_size": "64 KB",
+      "comment": "banks"
+    }
+  },
+  "postgres": {
+    "structure": {
+      "columns": [
+        "#",
+        "column_name",
+        "data_type",
+        "collation",
+        "is_nullable",
+        "column_default",
+        "extra",
+        "foreign_key",
+        "comment"
+      ],
+      "numeric": [
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "binary": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "rows": [
+        [
+          "1",
+          "id",
+          "integer",
+          null,
+          "NO",
+          "nextval('sa_banks_id_seq'::regclass)",
+          null,
+          null,
+          null
+        ],
+        [
+          "2",
+          "bank_code",
+          "character varying(6)",
+          "default",
+          "YES",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "3",
+          "bank_name_th",
+          "character varying(100)",
+          "default",
+          "NO",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "4",
+          "bank_name_en",
+          "character varying(100)",
+          "default",
+          "NO",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "5",
+          "bank_acronym",
+          "character varying(10)",
+          "default",
+          "NO",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "6",
+          "country_code",
+          "character varying(4)",
+          "default",
+          "NO",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "7",
+          "is_disabled",
+          "boolean",
+          null,
+          "NO",
+          "false",
+          null,
+          null,
+          null
+        ],
+        [
+          "8",
+          "meta",
+          "jsonb",
+          null,
+          "YES",
+          null,
+          null,
+          null,
+          null
+        ]
+      ],
+      "command": "SELECT",
+      "durationMs": 15,
+      "sql": "SELECT a.attnum AS \"#\", a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type, co.collname AS collation, CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END AS is_nullable, pg_get_expr(d.adbin, d.adrelid) AS column_default, CASE WHEN a.attidentity <> '' THEN 'identity' WHEN a.attgenerated <> '' THEN 'generated' ELSE NULL END AS extra, (SELECT confrelid::regclass::text || '(' || (SELECT attname FROM pg_attribute WHERE attrelid = con.confrelid AND attnum = con.confkey[array_position(con.conkey, a.attnum)]) || ')' FROM pg_constraint con WHERE con.conrelid = a.attrelid AND con.contype = 'f' AND a.attnum = ANY(con.conkey) LIMIT 1) AS foreign_key, col_description(a.attrelid, a.attnum) AS comment FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum LEFT JOIN pg_collation co ON co.oid = a.attcollation AND a.attcollation <> 0 WHERE a.attrelid = '\"public\".\"sa_banks\"'::regclass AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum;"
+    },
+    "indexes": {
+      "columns": [
+        "index_name",
+        "index_algorithm",
+        "is_unique",
+        "column_name",
+        "condition",
+        "constraint_type"
+      ],
+      "numeric": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "binary": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "rows": [
+        [
+          "sa_banks_pkey",
+          "btree",
+          "TRUE",
+          "id",
+          null,
+          "primary"
+        ],
+        [
+          "index_country_code",
+          "btree",
+          "FALSE",
+          "country_code",
+          null,
+          null
+        ]
+      ],
+      "command": "SELECT",
+      "durationMs": 3,
+      "sql": "SELECT ic.relname AS index_name, am.amname AS index_algorithm, CASE WHEN i.indisunique THEN 'TRUE' ELSE 'FALSE' END AS is_unique, (SELECT string_agg(pg_get_indexdef(i.indexrelid, k, true), ', ' ORDER BY k) FROM generate_series(1, i.indnkeyatts) k) AS column_name, pg_get_expr(i.indpred, i.indrelid) AS condition, (SELECT CASE c.contype WHEN 'p' THEN 'primary' WHEN 'u' THEN 'unique' WHEN 'x' THEN 'exclusion' END FROM pg_constraint c WHERE c.conindid = i.indexrelid AND c.conrelid = i.indrelid LIMIT 1) AS constraint_type FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid JOIN pg_am am ON am.oid = ic.relam WHERE i.indrelid = '\"public\".\"sa_banks\"'::regclass ORDER BY i.indisprimary DESC, ic.relname;"
+    },
+    "info": {
+      "data_size": "8192 bytes",
+      "index_size": "32 kB",
+      "total_size": "48 kB",
+      "comment": ""
+    }
+  },
+  "invoices": {
+    "structure": {
+      "columns": [
+        "#",
+        "column_name",
+        "data_type",
+        "collation",
+        "is_nullable",
+        "column_default",
+        "extra",
+        "foreign_key",
+        "comment"
+      ],
+      "numeric": [
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "binary": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "rows": [
+        [
+          "1",
+          "id",
+          "bigint",
+          null,
+          "NO",
+          "nextval('billing.invoices_id_seq'::regclass)",
+          null,
+          null,
+          null
+        ],
+        [
+          "2",
+          "bank_id",
+          "integer",
+          null,
+          "YES",
+          null,
+          null,
+          "sa_banks(id)",
+          null
+        ],
+        [
+          "3",
+          "amount",
+          "numeric(12,2)",
+          null,
+          "YES",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "4",
+          "note",
+          "text",
+          "default",
+          "YES",
+          null,
+          null,
+          null,
+          null
+        ]
+      ],
+      "command": "SELECT",
+      "durationMs": 2,
+      "sql": "SELECT a.attnum AS \"#\", a.attname AS column_name, format_type(a.atttypid, a.atttypmod) AS data_type, co.collname AS collation, CASE WHEN a.attnotnull THEN 'NO' ELSE 'YES' END AS is_nullable, pg_get_expr(d.adbin, d.adrelid) AS column_default, CASE WHEN a.attidentity <> '' THEN 'identity' WHEN a.attgenerated <> '' THEN 'generated' ELSE NULL END AS extra, (SELECT confrelid::regclass::text || '(' || (SELECT attname FROM pg_attribute WHERE attrelid = con.confrelid AND attnum = con.confkey[array_position(con.conkey, a.attnum)]) || ')' FROM pg_constraint con WHERE con.conrelid = a.attrelid AND con.contype = 'f' AND a.attnum = ANY(con.conkey) LIMIT 1) AS foreign_key, col_description(a.attrelid, a.attnum) AS comment FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum LEFT JOIN pg_collation co ON co.oid = a.attcollation AND a.attcollation <> 0 WHERE a.attrelid = '\"billing\".\"invoices\"'::regclass AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum;"
+    },
+    "indexes": {
+      "columns": [
+        "index_name",
+        "index_algorithm",
+        "is_unique",
+        "column_name",
+        "condition",
+        "constraint_type"
+      ],
+      "numeric": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "binary": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "rows": [
+        [
+          "invoices_pkey",
+          "btree",
+          "TRUE",
+          "id",
+          null,
+          "primary"
+        ]
+      ],
+      "command": "SELECT",
+      "durationMs": 1,
+      "sql": "SELECT ic.relname AS index_name, am.amname AS index_algorithm, CASE WHEN i.indisunique THEN 'TRUE' ELSE 'FALSE' END AS is_unique, (SELECT string_agg(pg_get_indexdef(i.indexrelid, k, true), ', ' ORDER BY k) FROM generate_series(1, i.indnkeyatts) k) AS column_name, pg_get_expr(i.indpred, i.indrelid) AS condition, (SELECT CASE c.contype WHEN 'p' THEN 'primary' WHEN 'u' THEN 'unique' WHEN 'x' THEN 'exclusion' END FROM pg_constraint c WHERE c.conindid = i.indexrelid AND c.conrelid = i.indrelid LIMIT 1) AS constraint_type FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid JOIN pg_am am ON am.oid = ic.relam WHERE i.indrelid = '\"billing\".\"invoices\"'::regclass ORDER BY i.indisprimary DESC, ic.relname;"
+    },
+    "info": {
+      "data_size": "32 kB",
+      "index_size": "32 kB",
+      "total_size": "96 kB",
+      "comment": ""
+    }
+  }
+}
