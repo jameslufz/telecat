@@ -1,6 +1,20 @@
-# Telecat
+<p align="center">
+  <img src=".github/logo.png" width="160" alt="Telecat icon">
+</p>
 
-A fast, lightweight native MySQL / PostgreSQL client for macOS, in the style of TablePlus.
+<h1 align="center">Telecat</h1>
+
+<p align="center">
+  A fast, lightweight native MySQL / PostgreSQL client for macOS, in the style of TablePlus.
+</p>
+
+<p align="center">
+  <a href="https://github.com/jameslufz/telecat/releases/latest"><img src="https://img.shields.io/github/v/release/jameslufz/telecat?label=download&color=7c3aed" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-11%2B-black?logo=apple" alt="macOS 11+">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-only-orange" alt="Apple Silicon only">
+  <img src="https://img.shields.io/badge/Rust-gpui-b7410e?logo=rust" alt="Rust + gpui">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
+</p>
 
 Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](https://github.com/zed-industries/zed/tree/main/crates/gpui), and it uses pure-Rust database drivers, so it needs no libmysqlclient or libpq. With a workspace open it typically uses about 50–60 MB of memory, launches in under a second and sits at 0% CPU when idle.
 
