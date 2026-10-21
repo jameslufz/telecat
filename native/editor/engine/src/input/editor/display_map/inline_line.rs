@@ -61,7 +61,7 @@ impl InputLine {
     }
     pub(crate) fn closest_index_for_x(&self, x: Pixels) -> usize {
         match &self.content {
-            Content::Text(line) => line.closest_index_for_x(x),
+            Content::Text(line) => closest_boundary(line, x),
             Content::Inline(fragments) => {
                 for f in fragments {
                     if x <= f.x + f.width {
@@ -71,7 +71,7 @@ impl InputLine {
                             } else {
                                 f.range.end
                             },
-                            |line| f.range.start + line.closest_index_for_x(x - f.x),
+                            |line| f.range.start + closest_boundary(line, x - f.x),
                         );
                     }
                 }
@@ -152,5 +152,26 @@ impl InputLine {
                 }
             }
         }
+    }
+}
+
+/// The text boundary nearest to `x`. gpui's `closest_index_for_x` weighs each glyph start
+/// against the previous one, but past the start of the last glyph it always answers the line
+/// end, so a click on the left half of a line's last character landed after it. That case is
+/// decided here by the midpoint between the last grapheme's start and the line end.
+fn closest_boundary(line: &ShapedLine, x: Pixels) -> usize {
+    use unicode_segmentation::UnicodeSegmentation;
+    let ix = line.closest_index_for_x(x);
+    if ix != line.len {
+        return ix;
+    }
+    let Some((start, _)) = line.text.grapheme_indices(true).last() else {
+        return ix;
+    };
+    let start_x = line.x_for_index(start);
+    if x < start_x + (line.width - start_x) / 2. {
+        start
+    } else {
+        ix
     }
 }

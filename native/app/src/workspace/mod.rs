@@ -4,7 +4,10 @@ mod components;
 mod execution;
 pub mod fixtures;
 pub mod host;
+mod import;
+mod inspector;
 mod layout;
+mod link;
 mod panels;
 use layout::{Layout, Splitter};
 mod running;
@@ -16,6 +19,7 @@ mod workflows;
 use crate::ui::InputEvent;
 use crate::{Services, native_menu, ui::*};
 use execution::PendingAction;
+use gpui_kit::base::input::{Textarea, TextareaState};
 use gpui_kit::{prelude::*, *};
 use serde_json::json;
 use std::{
@@ -27,6 +31,8 @@ use std::{
 };
 use table::{TableInputs, TableNavigation};
 use telecat_app::workspace_model::*;
+use telecat_core::position::Location;
+use telecat_core::result_edit::ResultEditPlan;
 use telecat_core::types::*;
 
 pub fn open(
@@ -82,6 +88,11 @@ enum Sheet {
         danger: Option<String>,
         attempts: usize,
     },
+    Import(import::ImportStage),
+    /// The password for a reconnect, when the connection asks for it every time.
+    ReconnectPassword,
+    /// A save the connection dropped during: what is known, and what the user can do.
+    CommitUnknown,
 }
 pub struct Workspace {
     services: Services,
@@ -98,6 +109,8 @@ pub struct Workspace {
     panel: bool,
     console: bool,
     highlight: bool,
+    /// Entity id and last staged-state revision written to the crash-recovery record.
+    recovery: (u64, u64),
     sheet: Option<Sheet>,
     busy: bool,
     cancelled: Arc<AtomicBool>,
@@ -105,9 +118,17 @@ pub struct Workspace {
     history: Vec<LogEntry>,
     subscriptions: Vec<Subscription>,
     tree_scroll: ScrollHandle,
+    /// The open-tabs bar, and the tab it last scrolled into view.
+    tab_scroll: ScrollHandle,
+    tab_scrolled_to: std::cell::Cell<Option<u64>>,
     console_scroll: ScrollHandle,
     console_log_count: std::cell::Cell<usize>,
     table_inputs: std::collections::BTreeMap<u64, TableInputs>,
+    inspector: Option<inspector::Inspector>,
+    /// A short message shown over the grid (why a cell can't be edited), and when it appeared.
+    hint: Option<(SharedString, std::time::Instant)>,
+    /// Each query tab's Messages text, read-only but selectable, and the results it shows.
+    messages: std::collections::BTreeMap<u64, (u64, Entity<TextareaState>)>,
     saving: bool,
     pending: Option<PendingAction>,
     approval: QueryApproval,
@@ -130,6 +151,19 @@ pub struct Workspace {
     detail_scroll: ScrollHandle,
     ddl_scroll: ScrollHandle,
     databases_loading: bool,
+    link: link::LinkState,
+    /// Counts saves, so a save's late result can be matched to it.
+    commit_run: u64,
+    commit_in_flight: Option<link::InFlightCommit>,
+    commit_unknown: Option<link::UnknownCommit>,
+    /// Counts query runs, so the result of one cut off by a lost connection is ignored.
+    query_run: u64,
+    query_abort: Option<tokio::task::AbortHandle>,
+    /// The tab whose query is running.
+    query_tab: Option<u64>,
+    import_in_flight: Option<link::InFlightImport>,
+    /// An import cut off by a lost connection, to check after reconnecting: (session, file).
+    import_check: Option<(Arc<telecat_db::Session>, String)>,
 }
 impl Workspace {
     fn new(
@@ -217,12 +251,27 @@ impl Workspace {
             },
             databases: vec![state.database.clone()],
             picker_selection: 0,
-            layout: Layout::default(),
+            layout: {
+                let mut layout = Layout::default();
+                if scenario == "d1-narrow-sidebar" {
+                    layout.set_sidebar(0.);
+                }
+                layout
+            },
             picker_scroll: ScrollHandle::new(),
             panel_scroll: ScrollHandle::new(),
             detail_scroll: ScrollHandle::new(),
             ddl_scroll: ScrollHandle::new(),
             databases_loading: false,
+            link: Default::default(),
+            commit_run: 0,
+            commit_in_flight: None,
+            commit_unknown: None,
+            query_run: 0,
+            query_abort: None,
+            query_tab: None,
+            import_in_flight: None,
+            import_check: None,
             host: None,
             host_active: true,
             rail_visible: false,
@@ -243,6 +292,7 @@ impl Workspace {
             panel: true,
             console: true,
             highlight: false,
+            recovery: (cx.entity_id().as_u64(), 0),
             sheet,
             busy: false,
             cancelled: Arc::new(AtomicBool::new(false)),
@@ -250,9 +300,14 @@ impl Workspace {
             history,
             subscriptions,
             tree_scroll: ScrollHandle::new(),
+            tab_scroll: ScrollHandle::new(),
+            tab_scrolled_to: std::cell::Cell::new(None),
             console_scroll: ScrollHandle::new(),
             console_log_count: std::cell::Cell::new(usize::MAX),
             table_inputs: Default::default(),
+            inspector: None,
+            hint: None,
+            messages: Default::default(),
             saving: false,
             pending: None,
             approval: QueryApproval::default(),
@@ -261,10 +316,22 @@ impl Workspace {
             components: components::Components::default(),
             viewport_height: fixtures::height(&scenario),
         };
+        this.link.link = match scenario.as_str() {
+            "d4-reconnecting" => link::Link::Reconnecting {
+                attempt: 3,
+                error: "Lost connection to MySQL server during query".into(),
+            },
+            "d5-disconnected" => link::Link::Disconnected {
+                error: "No route to host (os error 65)".into(),
+                retry_at: None,
+            },
+            _ => link::Link::Connected,
+        };
         this.update_completion_schema(cx);
         if this.session.is_some() {
             this.refresh_objects(cx);
             this.load_databases(cx);
+            this.start_keepalive(window, cx);
         }
         this
     }
@@ -289,10 +356,43 @@ impl Workspace {
         self.sheet = Some(Sheet::Error(error.to_string()));
         cx.notify();
     }
+    /// Marks a load as started and repaints once the indicator delay has passed.
+    fn begin_load(&mut self, tab: Option<(u64, LoadSlot)>, cx: &mut Context<Self>) {
+        match tab {
+            Some((id, slot)) => {
+                if let Some(t) = self.state.tabs.iter_mut().find(|t| t.id == id) {
+                    t.loads.insert(slot, LoadState::loading());
+                }
+            }
+            None => self.state.objects_load = LoadState::loading(),
+        }
+        let timer = cx.background_executor().timer(LOADING_INDICATOR_DELAY);
+        cx.spawn(async move |this, cx| {
+            timer.await;
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+    fn end_load<T, E: std::fmt::Display>(
+        &mut self,
+        tab: Option<(u64, LoadSlot)>,
+        result: &Result<T, E>,
+    ) {
+        let state = LoadState::finished(&result.as_ref().map(|_| ()).map_err(|e| e.to_string()));
+        match tab {
+            Some((id, slot)) => {
+                if let Some(t) = self.state.tabs.iter_mut().find(|t| t.id == id) {
+                    t.loads.insert(slot, state);
+                }
+            }
+            None => self.state.objects_load = state,
+        }
+    }
     fn refresh_objects(&mut self, cx: &mut Context<Self>) {
         let Some(session) = self.session.clone() else {
             return;
         };
+        self.begin_load(None, cx);
         let backend = session.backend_id.clone();
         let task = self
             .services
@@ -308,12 +408,13 @@ impl Workspace {
                 {
                     return;
                 }
+                this.end_load(None, &flatten(&result));
                 match result {
                     Ok(Ok(objects)) => {
                         this.state.objects = objects;
                         this.update_completion_schema(cx);
                     }
-                    Ok(Err(e)) => this.error(e, cx),
+                    Ok(Err(e)) => this.failed(e, cx),
                     Err(e) => this.error(e, cx),
                 }
                 cx.notify();
@@ -336,6 +437,10 @@ impl Workspace {
                 if editor.is_new {
                     return;
                 }
+                self.begin_load(
+                    Some((id, LoadSlot::Part(telecat_app::table_model::Part::Data))),
+                    cx,
+                );
                 let task = self.services.runtime.spawn(async move {
                     let data = session
                         .table_data(&TableDataRequest {
@@ -360,8 +465,13 @@ impl Workspace {
                         {
                             return;
                         }
+                        this.end_load(
+                            Some((id, LoadSlot::Part(telecat_app::table_model::Part::Data))),
+                            &flatten(&r),
+                        );
                         match r {
                             Ok(Ok((data, info))) => {
+                                let remembered = this.remember_selection(id, cx);
                                 if let Some(t) = this.state.tabs.iter_mut().find(|t| t.id == id) {
                                     if t.table.as_ref().is_some_and(|e| e.data.dirty()) {
                                         return;
@@ -372,6 +482,7 @@ impl Workspace {
                                     });
                                     if let Some(editor) = &mut t.table {
                                         editor.load_data(&data);
+                                        this.inspector = None;
                                     }
                                     t.grid = GridDocument {
                                         revision: t.grid.revision.wrapping_add(1),
@@ -381,8 +492,9 @@ impl Workspace {
                                     t.total = data.total;
                                     t.info = Some(info);
                                 }
+                                this.restore_selection(id, remembered);
                             }
-                            Ok(Err(e)) => this.error(e, cx),
+                            Ok(Err(e)) => this.failed(e, cx),
                             Err(e) => this.error(e, cx),
                         }
                         this.update_completion_schema(cx);
@@ -396,6 +508,7 @@ impl Workspace {
                     return;
                 }
                 self.running.loading = true;
+                self.begin_load(Some((id, LoadSlot::Results)), cx);
                 let database = self.running.database.clone();
                 let task = self
                     .services
@@ -412,6 +525,7 @@ impl Workspace {
                             return;
                         }
                         this.running.loading = false;
+                        this.end_load(Some((id, LoadSlot::Results)), &flatten(&r));
                         this.running.updated = timestamp()
                             .split_whitespace()
                             .last()
@@ -443,7 +557,7 @@ impl Workspace {
                                     };
                                 }
                             }
-                            Ok(Err(e)) => this.error(e, cx),
+                            Ok(Err(e)) => this.failed(e, cx),
                             Err(e) => this.error(e, cx),
                         }
                         cx.notify();
@@ -467,9 +581,50 @@ impl Workspace {
         self.persist_drafts();
         cx.notify();
     }
-    fn run(&mut self, all: bool, cx: &mut Context<Self>) {
+    /// Runs the query; staged edits to the shown result are saved or discarded first.
+    fn run(&mut self, all: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.busy && !self.saving && self.state.current().result_dirty() {
+            let prompt = window.prompt(
+                PromptLevel::Warning,
+                "Discard the staged changes to these results?",
+                Some("Running the query again replaces the results. Save the changes with ⌘S first, or discard them."),
+                &["Discard and Run", "Cancel"],
+                cx,
+            );
+            let id = self.state.active;
+            cx.spawn(async move |this, cx| {
+                if prompt.await == Ok(0) {
+                    let _ = this.update(cx, |this, cx| {
+                        if let Some(r) = this
+                            .state
+                            .tabs
+                            .iter_mut()
+                            .find(|t| t.id == id)
+                            .and_then(|t| t.result_edit.as_mut())
+                        {
+                            r.data.discard();
+                        }
+                        if this.state.active == id {
+                            this.run_now(all, cx);
+                        }
+                    });
+                }
+            })
+            .detach();
+            return;
+        }
+        self.run_now(all, cx);
+    }
+    fn run_now(&mut self, all: bool, cx: &mut Context<Self>) {
         self.sync_editor_document(cx);
         if self.busy || self.saving || self.state.current().kind != TabKind::Query {
+            return;
+        }
+        if !self.connected() {
+            self.show_hint(
+                "Not connected: press ⌘⇧R to reconnect, then run the query.",
+                cx,
+            );
             return;
         }
         let plan = QueryPlan::new(
@@ -504,6 +659,7 @@ impl Workspace {
             return;
         };
         self.busy = true;
+        self.begin_load(Some((id, LoadSlot::Results)), cx);
         self.cancelled.store(false, Ordering::SeqCst);
         let cancel = self.cancelled.clone();
         let history = LogEntry {
@@ -516,19 +672,56 @@ impl Workspace {
                 sql: sql.clone(),
             });
         }
+        // Only the result of a single statement can be edited.
+        let single = (plan.statements.len() == 1).then(|| plan.statements[0].clone());
+        let text = self
+            .state
+            .tabs
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| t.editor.text.clone())
+            .unwrap_or_default();
+        let ran = plan.clone();
         let task = self
             .services
             .runtime
             .spawn(async move { run_plan(&session, &plan, approval, &cancel).await });
+        self.query_run += 1;
+        let run = self.query_run;
+        self.query_abort = Some(task.abort_handle());
+        self.query_tab = Some(id);
         cx.spawn(async move |this, cx| {
             let r = task.await;
             let _ = this.update(cx, |this, cx| {
+                // Cut off by a lost connection: already reported as interrupted.
+                if this.query_run != run {
+                    return;
+                }
+                this.query_abort = None;
+                this.query_tab = None;
                 this.busy = false;
+                if this.cancelled.load(Ordering::SeqCst) {
+                    this.end_load(
+                        Some((id, LoadSlot::Results)),
+                        &Err::<(), _>("was cancelled"),
+                    );
+                } else {
+                    this.end_load(Some((id, LoadSlot::Results)), &flatten(&r));
+                }
                 match r {
                     Ok(Ok(results)) => {
+                        let lost = results
+                            .last()
+                            .and_then(|r| r.error.as_deref())
+                            .filter(|e| e.starts_with(INTERRUPTED))
+                            .map(str::to_owned);
                         if let Some(t) = this.state.tabs.iter_mut().find(|t| t.id == id) {
-                            t.set_results(results);
+                            t.set_run_results(results, &ran, &text);
                         }
+                        if let Some(error) = lost {
+                            this.connection_lost(error, cx);
+                        }
+                        this.resolve_result_edit(id, single, cx);
                         if let Err(e) = this
                             .services
                             .profile
@@ -538,7 +731,7 @@ impl Workspace {
                         }
                         this.history = this.services.profile.history(&this.state.connection.id);
                     }
-                    Ok(Err(e)) => this.error(e, cx),
+                    Ok(Err(e)) => this.failed(e, cx),
                     Err(e) => this.error(e, cx),
                 }
                 cx.notify();
@@ -547,20 +740,68 @@ impl Workspace {
         .detach();
         cx.notify();
     }
+    /// Works out which cells of tab `id`'s new result can be edited (see
+    /// `telecat_core::result_edit`). `sql` is the statement that produced it, when it ran alone.
+    fn resolve_result_edit(&mut self, id: u64, sql: Option<String>, cx: &mut Context<Self>) {
+        let driver = self.state.connection.driver;
+        let Some(tab) = self.state.tabs.iter_mut().find(|t| t.id == id) else {
+            return;
+        };
+        let result = tab.grid.result.clone();
+        if result.columns.is_empty() {
+            return;
+        }
+        let (revision, n) = (tab.grid.revision, result.columns.len());
+        let (Some(sql), 1, Some(session)) = (sql, tab.results.len(), self.session.clone()) else {
+            tab.attach_result_plan(
+                revision,
+                ResultEditPlan::read_only(driver, n, "the run had several statements"),
+            );
+            return;
+        };
+        let task = self.services.runtime.spawn({
+            let session = session.clone();
+            async move { session.result_edit_plan(&sql, &result).await }
+        });
+        cx.spawn(async move |this, cx| {
+            let plan = match task.await {
+                Ok(Ok(plan)) => plan,
+                Ok(Err(e)) => {
+                    ResultEditPlan::read_only(driver, n, format!("couldn't check its tables ({e})"))
+                }
+                Err(e) => {
+                    ResultEditPlan::read_only(driver, n, format!("couldn't check its tables ({e})"))
+                }
+            };
+            let _ = this.update(cx, |this, cx| {
+                // Made on a session a reconnect has replaced since: its settings are gone.
+                let plan = if this.is_current(&session) {
+                    plan
+                } else {
+                    ResultEditPlan::read_only(driver, n, RESULT_BEFORE_RECONNECT)
+                };
+                if let Some(t) = this.state.tabs.iter_mut().find(|t| t.id == id) {
+                    t.attach_result_plan(revision, plan);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
     fn cancel(&mut self, cx: &mut Context<Self>) {
         if !self.busy {
             return;
         }
         self.cancelled.store(true, Ordering::SeqCst);
         if let Some(session) = self.session.clone() {
-            let task = self
-                .services
-                .runtime
-                .spawn(async move { session.cancel().await });
+            let task = self.services.runtime.spawn({
+                let session = session.clone();
+                async move { session.cancel().await }
+            });
             cx.spawn(async move |this, cx| match task.await {
                 Ok(Ok(())) => {}
                 Ok(Err(e)) => {
-                    let _ = this.update(cx, |this, cx| this.error(e, cx));
+                    let _ = this.update(cx, |this, cx| this.failed_on(&session, e, cx));
                 }
                 Err(e) => {
                     let _ = this.update(cx, |this, cx| this.error(e, cx));
@@ -572,10 +813,25 @@ impl Workspace {
     fn keyboard(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = &event.keystroke.key;
         let mods = event.keystroke.modifiers;
+        // Reconnecting must work whatever is open or hung, a save that never returns included.
+        if key == "r"
+            && mods.platform
+            && mods.shift
+            && !matches!(self.sheet, Some(Sheet::ReconnectPassword))
+        {
+            self.reconnect(window, cx);
+            cx.stop_propagation();
+            return;
+        }
         if key == "escape" && self.sheet.is_some() {
             self.cancel_sheet(cx);
             cx.stop_propagation();
             cx.notify();
+            return;
+        }
+        if key == "enter" && matches!(self.sheet, Some(Sheet::ReconnectPassword)) {
+            self.submit_reconnect_password(window, cx);
+            cx.stop_propagation();
             return;
         }
         if key == "enter" && matches!(self.sheet, Some(Sheet::SaveQuery { .. })) {
@@ -683,6 +939,14 @@ impl Workspace {
                 return;
             }
         }
+        if key == "escape" && self.state.current().result_dirty() {
+            if let Some(r) = self.state.current_mut().result_edit.as_mut() {
+                r.data.discard();
+            }
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         if mods.platform {
             let mut handled = true;
             match (key.as_str(), mods.shift) {
@@ -706,8 +970,8 @@ impl Workspace {
                     self.refresh_tab(cx);
                 }
                 ("r", false) => self.reload_workspace(window, cx),
-                ("enter", false) => self.run(false, cx),
-                ("enter", true) => self.run(true, cx),
+                ("enter", false) => self.run(false, window, cx),
+                ("enter", true) => self.run(true, window, cx),
                 ("p", true) => {
                     self.flush_grid_edits(window, cx);
                     self.sheet = Some(Sheet::Preview);
@@ -786,7 +1050,7 @@ impl Workspace {
                     if let Ok(mode)=serde_json::from_value(json!(id)){this.change_safe_mode(mode,cx);}
                 });
             }))).child(tool("database","Database.svg",false).on_click(cx.listener(|this,_,window,cx|{this.open_database_picker(window,cx);}))).child(tool_box("sql").text_size(px(13.)).font_weight(FontWeight::BOLD).child("SQL").on_click(cx.listener(|this,_,_,cx|this.new_query("",cx)))))
-            .child(div().flex_1().min_w(px(120.)).h(px(36.)).px(px(16.)).rounded(px(10.)).bg(color(&self.state.connection.color)).text_color(rgb(0xffffff)).font(mono()).text_size(px(13.)).line_height(px(36.)).overflow_hidden().text_ellipsis().child(self.state.status_text()))
+            .child(self.status_pill(cx))
             .child(tool_group().child(tool("refresh","Refresh.svg",false).on_click(cx.listener(|this,_,window,cx|{this.reload_workspace(window,cx);}))))
             .child(tool_group().child(tool("console","Console.svg",!self.console).on_click(cx.listener(|this,_,_,cx|{this.console=!this.console;cx.notify();}))).child(tool("panel","PanelRight.svg",!self.panel).on_click(cx.listener(|this,_,_,cx|{this.panel=!this.panel;cx.notify();}))))
     }
@@ -817,64 +1081,63 @@ impl Workspace {
                     }),
                 ),
             )
-            .child(
+            .child({
+                // Bring the active tab (including a newly opened one) into view once, when it
+                // changes, so wheel and trackpad scrolling stay free afterwards. gpui ignores the
+                // request until the bar has been laid out once, so keep asking until then.
+                let active_index = self
+                    .state
+                    .tabs
+                    .iter()
+                    .position(|t| t.id == self.state.active);
+                let laid_out = self.tab_scroll.bounds().size.width > px(0.);
+                if self.tab_scrolled_to.get() != Some(self.state.active) {
+                    if let Some(ix) = active_index {
+                        self.tab_scroll.scroll_to_item(ix);
+                    }
+                    if laid_out {
+                        self.tab_scrolled_to.set(Some(self.state.active));
+                    } else {
+                        cx.notify();
+                    }
+                }
+                let offset = -self.tab_scroll.offset().x.as_f32();
+                let max = self.tab_scroll.max_offset().x.as_f32();
+                let fade = |left: bool| {
+                    let bar = rgb(0x242424);
+                    let clear = rgba(0x24242400);
+                    div()
+                        .absolute()
+                        .top_0()
+                        .bottom_0()
+                        .w(px(18.))
+                        .when(left, |d| {
+                            d.left_0().bg(linear_gradient(
+                                90.,
+                                linear_color_stop(bar, 0.),
+                                linear_color_stop(clear, 1.),
+                            ))
+                        })
+                        .when(!left, |d| {
+                            d.right_0().bg(linear_gradient(
+                                90.,
+                                linear_color_stop(clear, 0.),
+                                linear_color_stop(bar, 1.),
+                            ))
+                        })
+                };
                 div()
+                    .relative()
                     .flex_1()
                     .min_w_0()
-                    .overflow_hidden()
                     .ml(px(4.))
+                    .h_full()
                     .flex()
-                    .gap(px(4.))
-                    .children(self.state.tabs.iter().map(|t| {
-                        let id = t.id;
-                        let active = id == self.state.active;
-                        div()
-                            .id(ElementId::Name(format!("tab-{id}").into()))
-                            .relative()
-                            .flex_1()
-                            .min_w(px(150.))
-                            .max_w(px(600.))
-                            .h(px(28.))
-                            .px(px(26.))
-                            .rounded(px(7.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_size(px(13.5))
-                            .text_color(rgb(if active { 0xffffff } else { 0xb8b8b8 }))
-                            .when(active, |d| d.bg(rgb(0x4a4a4a)))
-                            .child(
-                                div()
-                                    .truncate()
-                                    .when(matches!(t.kind, TabKind::Table(_)), |d| d.italic())
-                                    .child(t.title.clone()),
-                            )
-                            .when(t.table.as_ref().is_some_and(|e| e.dirty()), |d| {
-                                d.child(div().text_color(rgb(0xe0b84a)).child("•"))
-                            })
-                            .when(active && self.state.tabs.len() > 1, |d| {
-                                d.child(
-                                    div()
-                                        .id(ElementId::Name(format!("close-{id}").into()))
-                                        .absolute()
-                                        .left(px(7.))
-                                        .size(px(16.))
-                                        .flex()
-                                        .items_center()
-                                        .justify_center()
-                                        .child(icon("X.svg", 12., 0xb8b8b8))
-                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                            cx.stop_propagation();
-                                            this.request_close_tab(id, window, cx);
-                                        })),
-                                )
-                            })
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.state.activate(id);
-                                cx.notify();
-                            }))
-                    })),
-            )
+                    .items_center()
+                    .child(tab_list(self, cx))
+                    .when(offset > 0.5, |d| d.child(fade(true)))
+                    .when(max - offset > 0.5, |d| d.child(fade(false)))
+            })
     }
     fn has_rail(&self) -> bool {
         self.rail_visible || matches!(self.scenario.as_str(), "95-rail" | "a2-switched")
@@ -882,13 +1145,20 @@ impl Workspace {
 }
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.update_recovery_record();
         self.viewport_height = window.viewport_size().height.as_f32();
         self.prepare_table_inputs(window, cx);
         self.prepare_components(window, cx);
+        self.prepare_inspector(window, cx);
+        self.lock_sql_editor(cx);
+        self.prepare_messages(window, cx);
         self.prepare_running_timer(cx);
         if !self.services.scenario
             && !self.gate_focused
-            && matches!(self.sheet, Some(Sheet::Gate { password: true, .. }))
+            && matches!(
+                self.sheet,
+                Some(Sheet::Gate { password: true, .. } | Sheet::ReconnectPassword)
+            )
         {
             self.gate_focused = true;
             self.gate_password.update(cx, |s, cx| s.focus(window, cx));
@@ -953,8 +1223,38 @@ impl Render for Workspace {
             .when_some(self.sheet.as_ref(), |d, s| d.child(self.sheet_view(s, cx)))
     }
 }
+impl Workspace {
+    /// Keeps the staged-but-unsaved changes where the panic hook can write them out
+    /// (see `telecat_app::recovery`). Only recomputed when the staged state changed.
+    fn update_recovery_record(&mut self) {
+        let revision = self
+            .state
+            .tabs
+            .iter()
+            .filter_map(|t| t.table.as_ref().map(|e| (t.id, e)))
+            .fold(self.state.operations.len() as u64, |acc, (id, e)| {
+                acc.wrapping_mul(31)
+                    .wrapping_add(id)
+                    .wrapping_add(e.data.revision)
+                    .wrapping_add(e.structure.revision << 20)
+                    .wrapping_add(e.index.revision << 40)
+                    .wrapping_add(u64::from(e.is_new || e.name != e.table.name))
+            });
+        if revision == self.recovery.1 {
+            return;
+        }
+        self.recovery.1 = revision;
+        let staged = self
+            .state
+            .has_changes()
+            .then(|| self.preview_text().ok())
+            .flatten();
+        telecat_app::recovery::remember(self.recovery.0, &self.state.connection.name, staged);
+    }
+}
 impl Drop for Workspace {
     fn drop(&mut self) {
+        telecat_app::recovery::remember(self.recovery.0, "", None);
         self.persist_drafts();
         if let Some(s) = self.session.clone() {
             self.services.runtime.spawn(async move {
@@ -1038,4 +1338,82 @@ fn timestamp() -> String {
             tm.tm_sec
         )
     }
+}
+
+/// A runtime task's result with join failures folded into the error.
+fn flatten<T, E: std::fmt::Display, J: std::fmt::Display>(
+    r: &Result<Result<T, E>, J>,
+) -> Result<(), String> {
+    match r {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// The open tabs, scrollable sideways with the wheel (vertical wheel maps to horizontal) and
+/// the trackpad.
+fn tab_list(this: &Workspace, cx: &mut Context<Workspace>) -> Stateful<Div> {
+    div()
+        .id("open-tabs")
+        .flex_1()
+        .min_w_0()
+        .h_full()
+        .overflow_x_scroll()
+        .track_scroll(&this.tab_scroll)
+        .flex()
+        .items_center()
+        .gap(px(4.))
+        .children(this.state.tabs.iter().map(|t| {
+            let id = t.id;
+            let active = id == this.state.active;
+            div()
+                .id(ElementId::Name(format!("tab-{id}").into()))
+                .relative()
+                .flex_1()
+                .flex_shrink_0()
+                .min_w(px(150.))
+                .max_w(px(600.))
+                .tooltip(text_tooltip(t.title.clone()))
+                .h(px(28.))
+                .px(px(26.))
+                .rounded(px(7.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(px(13.5))
+                .text_color(rgb(if active { 0xffffff } else { 0xb8b8b8 }))
+                .when(active, |d| d.bg(rgb(0x4a4a4a)))
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .when(matches!(t.kind, TabKind::Table(_)), |d| d.italic())
+                        .child(t.title.clone()),
+                )
+                .when(t.table.as_ref().is_some_and(|e| e.dirty()), |d| {
+                    d.child(div().text_color(rgb(0xe0b84a)).child("•"))
+                })
+                .when(active && this.state.tabs.len() > 1, |d| {
+                    d.child(
+                        div()
+                            .id(ElementId::Name(format!("close-{id}").into()))
+                            .absolute()
+                            .left(px(7.))
+                            .size(px(16.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(icon("X.svg", 12., 0xb8b8b8))
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.request_close_tab(id, window, cx);
+                            })),
+                    )
+                })
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.state.activate(id);
+                    cx.notify();
+                }))
+        }))
 }

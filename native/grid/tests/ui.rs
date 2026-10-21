@@ -379,7 +379,7 @@ fn real_dispatch_edit_tab_enter_escape_and_clipboard(cx: &mut TestAppContext) {
         events
             .borrow()
             .iter()
-            .any(|e| matches!(e,GridEvent::Edit{cell,value} if cell.col==0&&value=="edited 😺"))
+            .any(|e| matches!(e,GridEvent::Edit{cell,value,..} if cell.col==0&&value=="edited 😺"))
     );
     cx.simulate_input(w.into(), "discard");
     cx.simulate_keystrokes(w.into(), "escape");
@@ -624,4 +624,267 @@ fn paste_inside_single_and_multiline_editors_matches_html_inputs(cx: &mut TestAp
         g.read_with(cx, |g, _| g.model().editing.as_ref().unwrap().value.clone()),
         "ab\na\nb"
     );
+}
+/// Double-clicking the body below the last row, or anywhere in an empty table's body, asks the
+/// host for a new row; only where inserting is allowed, and never instead of editing a cell.
+#[gpui::test]
+fn double_click_empty_area_requests_a_new_row(cx: &mut TestAppContext) {
+    let (w, g, events) = setup(cx);
+    let inserts = |events: &Rc<RefCell<Vec<GridEvent>>>| {
+        events
+            .borrow()
+            .iter()
+            .filter(|e| matches!(e, GridEvent::InsertRow))
+            .count()
+    };
+    let columns = || {
+        let mut c = ["id", "name"].map(Column::new).to_vec();
+        for c in &mut c {
+            c.editable = true;
+        }
+        c
+    };
+    let set = |cx: &mut TestAppContext, rows: usize, insert: bool| {
+        update(cx, w, &g, |g, _, cx| {
+            g.update_model(
+                |m| {
+                    m.replace_data(
+                        columns(),
+                        (0..rows)
+                            .map(|i| vec![Some(i.to_string()), Some("x".into())])
+                            .collect::<Vec<_>>(),
+                    );
+                    m.options.hooks.insert = insert;
+                    m.options.hooks.edit = true;
+                },
+                cx,
+            )
+        });
+        paint(cx, w);
+        events.borrow_mut().clear();
+    };
+    // Short table: below the two rows.
+    set(cx, 2, true);
+    click(cx, w, 200., 300., 1, MouseButton::Left);
+    assert_eq!(
+        inserts(&events),
+        0,
+        "a single click on empty space does nothing new"
+    );
+    click(cx, w, 200., 300., 2, MouseButton::Left);
+    assert_eq!(inserts(&events), 1);
+    // Also from the row-number gutter below the rows.
+    click(cx, w, 10., 300., 2, MouseButton::Left);
+    assert_eq!(inserts(&events), 2);
+    // A double click on an existing cell still edits that cell.
+    events.borrow_mut().clear();
+    click(cx, w, 70., 43., 2, MouseButton::Left);
+    assert_eq!(inserts(&events), 0);
+    assert!(g.read_with(cx, |g, _| g.model().editing.is_some()));
+    // Empty table: anywhere in the body, including over the "No rows" pill.
+    set(cx, 0, true);
+    for (x, y) in [(200., 60.), (424., 255.), (800., 480.)] {
+        click(cx, w, x, y, 2, MouseButton::Left);
+    }
+    assert_eq!(inserts(&events), 3);
+    // Not where inserting isn't allowed (query results, structure, read-only grids).
+    set(cx, 0, false);
+    click(cx, w, 424., 255., 2, MouseButton::Left);
+    set(cx, 2, false);
+    click(cx, w, 200., 300., 2, MouseButton::Left);
+    assert_eq!(inserts(&events), 0);
+    // The header is not empty space.
+    set(cx, 2, true);
+    click(cx, w, 200., 10., 2, MouseButton::Left);
+    assert_eq!(inserts(&events), 0);
+}
+/// Double-clicking an existing cell opens a focused editor with the cell's value, but only where
+/// the grid is editable: never with the edit hook off or on a read-only column.
+#[gpui::test]
+fn double_click_existing_cell_opens_the_editor_only_where_editable(cx: &mut TestAppContext) {
+    let (w, g, events) = setup(cx);
+    paint(cx, w);
+    let editing = |cx: &mut TestAppContext| {
+        cx.update_window(w.into(), |_, window, cx| {
+            let g = g.read(cx);
+            (
+                g.model()
+                    .editing
+                    .as_ref()
+                    .map(|e| (e.cell, e.value.clone())),
+                g.editor_state().is_some_and(|e| {
+                    gpui_kit::Focusable::focus_handle(e.read(cx), cx).is_focused(window)
+                }),
+            )
+        })
+        .unwrap()
+    };
+    let close = |cx: &mut TestAppContext| {
+        update(cx, w, &g, |g, _, cx| {
+            g.flush_edit(cx);
+        });
+        paint(cx, w);
+    };
+    let set = |cx: &mut TestAppContext, edit: bool, editable: bool| {
+        update(cx, w, &g, |g, _, cx| {
+            g.update_model(
+                |m| {
+                    m.options.hooks.edit = edit;
+                    m.columns[1].editable = editable;
+                },
+                cx,
+            )
+        });
+        paint(cx, w);
+    };
+    // Row 0, column "name".
+    click(cx, w, 130., 43., 1, MouseButton::Left);
+    click(cx, w, 130., 43., 2, MouseButton::Left);
+    paint(cx, w);
+    assert_eq!(
+        editing(cx),
+        (Some((Cell { row: 0, col: 1 }, "ธนาคาร😺".to_owned())), true)
+    );
+    assert!(
+        !events
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, GridEvent::InsertRow)),
+        "a cell is not empty space"
+    );
+    close(cx);
+    set(cx, false, true);
+    click(cx, w, 130., 43., 2, MouseButton::Left);
+    assert_eq!(editing(cx), (None, false), "read-only grid");
+    set(cx, true, false);
+    click(cx, w, 130., 43., 2, MouseButton::Left);
+    assert_eq!(editing(cx), (None, false), "read-only column");
+}
+/// The open editor and the selection follow their rows by identity when the host replaces the
+/// rows, and close or clear when their row is gone: an edit can never land on whatever row now
+/// has the old index.
+#[gpui::test]
+fn editor_and_selection_follow_row_identity_across_reloads(cx: &mut TestAppContext) {
+    let (w, g, events) = setup(cx);
+    let rows = |names: &[&str]| -> Vec<Vec<Option<String>>> {
+        names
+            .iter()
+            .map(|n| vec![Some(n.to_string()), Some(n.to_string()), None])
+            .collect()
+    };
+    let keys = |names: &[&str]| names.iter().map(|n| format!("k-{n}")).collect::<Vec<_>>();
+    let load = |cx: &mut TestAppContext, names: &[&str], ks: Vec<String>| {
+        let data = rows(names);
+        update(cx, w, &g, |g, _, cx| {
+            g.update_model(
+                |m| {
+                    m.set_row_keys(ks);
+                    let columns = m.columns.clone();
+                    m.replace_data(columns, data);
+                },
+                cx,
+            )
+        });
+        paint(cx, w);
+    };
+    load(
+        cx,
+        &["alpha", "bravo", "charlie"],
+        keys(&["alpha", "bravo", "charlie"]),
+    );
+    click(cx, w, 130., 43., 1, MouseButton::Left);
+    click(cx, w, 130., 43., 2, MouseButton::Left);
+    paint(cx, w);
+    cx.simulate_input(w.into(), "typed");
+    // Same rows in another order: the editor and the selection move with "alpha".
+    load(
+        cx,
+        &["bravo", "charlie", "alpha"],
+        keys(&["bravo", "charlie", "alpha"]),
+    );
+    let (cell, selection) = g.read_with(cx, |g, _| {
+        (
+            g.model().editing.as_ref().map(|e| e.cell),
+            g.model().selection.rows.iter().copied().collect::<Vec<_>>(),
+        )
+    });
+    assert_eq!(cell, Some(Cell { row: 2, col: 1 }));
+    assert_eq!(selection, vec![2]);
+    events.borrow_mut().clear();
+    cx.simulate_keystrokes(w.into(), "enter");
+    assert!(
+        events.borrow().iter().any(|e| matches!(
+            e,
+            GridEvent::Edit { cell: Cell { row: 2, col: 1 }, value, key }
+                if value == "typed" && key.as_deref() == Some("k-alpha")
+        )),
+        "the edit is applied to alpha, now at row 2: {:?}",
+        events.borrow()
+    );
+    // A reload with new identities (the rows were re-read): nothing survives by index.
+    click(cx, w, 130., 43., 2, MouseButton::Left);
+    paint(cx, w);
+    assert!(g.read_with(cx, |g, _| g.model().editing.is_some()));
+    load(cx, &["bravo", "charlie", "alpha"], keys(&["x", "y", "z"]));
+    events.borrow_mut().clear();
+    cx.simulate_keystrokes(w.into(), "enter");
+    paint(cx, w);
+    let (editing, has_editor, selected) = g.read_with(cx, |g, _| {
+        (
+            g.model().editing.clone(),
+            g.editor_state().is_some(),
+            g.model().selection.rows.len(),
+        )
+    });
+    assert_eq!((editing, has_editor, selected), (None, false, 0));
+    assert!(
+        !events
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, GridEvent::Edit { .. })),
+        "nothing is staged after the row is gone: {:?}",
+        events.borrow()
+    );
+}
+/// A hidden column has no width and no editor: it can't be edited, requested or scrolled to.
+#[gpui::test]
+fn hidden_columns_never_get_an_editor(cx: &mut TestAppContext) {
+    let (w, g, _) = setup(cx);
+    paint(cx, w);
+    update(cx, w, &g, |g, _, cx| {
+        g.update_model(|m| m.columns[1].hidden = true, cx)
+    });
+    paint(cx, w);
+    g.read_with(cx, |g, _| {
+        let m = g.model();
+        assert_eq!(m.cell_rect(Cell { row: 0, col: 1 }).width, 0.);
+        assert_eq!(
+            m.column_left(1),
+            m.column_left(2),
+            "where the hidden column would be"
+        );
+        assert!(m.column_left(2) < m.layout().width);
+    });
+    let begun = update(cx, w, &g, |g, window, cx| {
+        g.request_edit(Cell { row: 0, col: 1 }, 7, window, cx);
+        g.model().editing.is_some()
+    });
+    assert!(
+        !begun,
+        "an explicit request on a hidden column opens nothing"
+    );
+    let x = g.read_with(cx, |g, _| (g.model().scroll_x, g.model().editing.is_none()));
+    assert_eq!(x, (0., true), "and doesn't scroll away");
+    // Hiding the column under an open editor closes it.
+    update(cx, w, &g, |g, _, cx| {
+        g.update_model(|m| m.columns[1].hidden = false, cx)
+    });
+    paint(cx, w);
+    click(cx, w, 130., 43., 2, MouseButton::Left);
+    assert!(g.read_with(cx, |g, _| g.model().editing.is_some()));
+    update(cx, w, &g, |g, _, cx| {
+        g.update_model(|m| m.columns[1].hidden = true, cx)
+    });
+    assert!(g.read_with(cx, |g, _| g.model().editing.is_none()
+        && g.editor_state().is_none()));
 }

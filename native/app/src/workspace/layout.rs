@@ -21,6 +21,9 @@ enum Drag {
         scale: f32,
     },
 }
+/// Narrowest sidebar that still shows the Items / Queries / History control in full.
+pub(super) const SIDEBAR_MIN: f32 = 240.;
+pub(super) const SIDEBAR_MAX: f32 = 520.;
 pub(super) struct Layout {
     pub sidebar: f32,
     pub panel: f32,
@@ -42,6 +45,9 @@ impl Default for Layout {
     }
 }
 impl Layout {
+    pub fn set_sidebar(&mut self, width: f32) {
+        self.sidebar = width.clamp(SIDEBAR_MIN, SIDEBAR_MAX);
+    }
     pub fn query_split(&self, id: u64) -> f32 {
         self.query_splits.get(&id).copied().unwrap_or(0.5)
     }
@@ -69,7 +75,7 @@ impl Layout {
                 let dx = (position.x - origin.x).as_f32();
                 let dy = (position.y - origin.y).as_f32();
                 match kind {
-                    Splitter::Sidebar => self.sidebar = (start + dx).clamp(180., 520.),
+                    Splitter::Sidebar => self.set_sidebar(start + dx),
                     Splitter::Panel => self.panel = (start - dx).clamp(220., 600.),
                     Splitter::Console => self.console = (start - dy).clamp(60., 500.),
                     Splitter::Query(id) => {
@@ -294,7 +300,7 @@ mod tests {
     fn electron_splitter_limits_and_scroll_geometry() {
         let mut l = Layout::default();
         for (kind, min, max) in [
-            (Splitter::Sidebar, 180., 520.),
+            (Splitter::Sidebar, SIDEBAR_MIN, SIDEBAR_MAX),
             (Splitter::Panel, 220., 600.),
             (Splitter::Console, 60., 500.),
         ] {
@@ -320,5 +326,20 @@ mod tests {
         assert_eq!((thumb.length, thumb.top, thumb.scale), (40., 160., 5.));
         l.drag = None;
         assert!(!l.drag_to(point(px(0.), px(0.))));
+    }
+    #[::core::prelude::v1::test]
+    fn sidebar_width_is_clamped_on_drag_and_restore() {
+        let mut layout = Layout::default();
+        layout.set_sidebar(40.);
+        assert_eq!(layout.sidebar, SIDEBAR_MIN);
+        layout.set_sidebar(5000.);
+        assert_eq!(layout.sidebar, SIDEBAR_MAX);
+        layout.start(Splitter::Sidebar, point(px(300.), px(0.)));
+        layout.drag_to(point(px(0.), px(0.)));
+        assert_eq!(
+            layout.sidebar, SIDEBAR_MIN,
+            "dragging far left stops at the minimum"
+        );
+        assert!(Layout::default().sidebar >= SIDEBAR_MIN);
     }
 }

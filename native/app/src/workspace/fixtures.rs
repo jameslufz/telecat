@@ -33,11 +33,20 @@ pub const SCENARIOS: &[&str] = &[
     "a2-switched",
     "a3-shortcuts",
     "c1-lock",
+    "d1-narrow-sidebar",
+    "d2-loading",
+    "d3-many-tabs",
+    "d4-reconnecting",
+    "d5-disconnected",
 ];
 pub fn is_workspace_scenario(name: &str) -> bool {
     SCENARIOS.contains(&name) || name == "perf-1000"
 }
 pub fn height(name: &str) -> f32 {
+    // The polish scenarios have no Electron reference, so they fit smaller displays too.
+    if name.starts_with("d") && name.as_bytes().get(1).is_some_and(u8::is_ascii_digit) {
+        return 760.;
+    }
     if [
         "95-rail",
         "a1-preview",
@@ -77,7 +86,14 @@ pub fn connection(name: &str) -> ConnectionConfig {
     }
     if matches!(
         name,
-        "57-running" | "95-rail" | "a1-preview" | "a2-switched" | "a3-shortcuts" | "c1-lock"
+        "57-running"
+            | "95-rail"
+            | "a1-preview"
+            | "a2-switched"
+            | "a3-shortcuts"
+            | "c1-lock"
+            | "d4-reconnecting"
+            | "d5-disconnected"
     ) {
         c.tag = "local".into();
     }
@@ -234,6 +250,7 @@ pub fn state(name: &str) -> WorkspaceState {
             text: SQL.into(),
             cursor_utf16: SQL.encode_utf16().count(),
             selection: None,
+            selection_from: 0,
         };
         let result = QueryResult {
             columns: vec!["bank_name_th".into()],
@@ -422,12 +439,60 @@ pub fn state(name: &str) -> WorkspaceState {
             s.activate(1);
         }
     }
+    if name == "d1-narrow-sidebar" {
+        for long in [
+            "log_call_back_winnerxpay_deposit",
+            "log_call_back_winnerxpay_withdraw",
+            "log_call_back_worldpay_settlement_reconciliation",
+        ] {
+            s.objects.push(DbObject {
+                table: TableRef {
+                    schema: "zixma".into(),
+                    name: long.into(),
+                },
+                kind: ObjectKind::Table,
+            });
+        }
+        s.objects.sort_by(|a, b| a.table.name.cmp(&b.table.name));
+    }
+    if name == "d2-loading" {
+        s.open_table(TableRef {
+            schema: "zixma".into(),
+            name: "sa_banks".into(),
+        });
+        let since = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        s.current_mut().loads.insert(
+            LoadSlot::Part(telecat_app::table_model::Part::Data),
+            LoadState::Loading { since },
+        );
+    }
+    if name == "d3-many-tabs" {
+        for i in 1..=6 {
+            s.open_query(&format!("SQL Query {i}"), "");
+        }
+        for table in [
+            "sa_banks",
+            "log_call_back_winnerxpay_deposit_history",
+            "members",
+            "nopk",
+        ] {
+            s.open_table(TableRef {
+                schema: "zixma".into(),
+                name: table.into(),
+            });
+        }
+        s.open_query(
+            "A query with a very long title that does not fit in one tab",
+            "",
+        );
+    }
     if name == "c1-lock" {
         let sql = "UPDATE sa_banks SET bank_code = '002' WHERE id = 1";
         s.current_mut().editor = EditorDocument {
             text: sql.into(),
             cursor_utf16: sql.len(),
             selection: None,
+            selection_from: 0,
         };
         s.current_mut().set_results(vec![QueryResult {
             sql: sql.into(),

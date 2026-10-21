@@ -140,6 +140,34 @@ pub struct QueryResult {
     pub sql: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Where each column's values come from, as the server's protocol reported it. Only read
+    /// results carry it; it decides whether a query result can be edited.
+    #[serde(skip)]
+    pub origins: Option<Vec<Option<ColumnOrigin>>>,
+    /// PostgreSQL: the 1-based character in the statement the error points at.
+    #[serde(skip)]
+    pub error_position: Option<usize>,
+    /// PostgreSQL: where the error happened (CONTEXT) and, inside a function body, the internal
+    /// query position and text.
+    #[serde(skip)]
+    pub error_context: Option<String>,
+    #[serde(skip)]
+    pub error_internal: Option<(usize, String)>,
+}
+/// The source of a result column according to the wire protocol's column metadata, never the
+/// SQL text. A computed column has no origin.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ColumnOrigin {
+    /// MySQL column definition: database, the table's alias in the query, the base table and the
+    /// base column.
+    Mysql {
+        schema: String,
+        alias: String,
+        table: String,
+        column: String,
+    },
+    /// PostgreSQL RowDescription: the table's OID and the column's number in it.
+    Postgres { table_oid: u32, attnum: i16 },
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

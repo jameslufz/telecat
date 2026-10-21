@@ -148,7 +148,7 @@ fn actual_electron_oracle() {
         let edits: Vec<_> = events
             .iter()
             .filter_map(|e| {
-                if let GridEvent::Edit { cell, value } = e {
+                if let GridEvent::Edit { cell, value, .. } = e {
                     Some(json!({"row":cell.row,"col":cell.col,"value":value}))
                 } else {
                     None
@@ -231,7 +231,8 @@ fn editor_commit_cancel_null_default_tab_and_nonce() {
         m.finish_edit(true, 0),
         vec![GridEvent::Edit {
             cell,
-            value: "NULL".into()
+            value: "NULL".into(),
+            key: None,
         }]
     );
     assert_eq!(m.rows.cell(0, 2), None);
@@ -419,10 +420,19 @@ fn duplicate_names_share_widths_and_editor_compares_current_caller_value() {
 #[test]
 fn hooks_are_typed_and_edits_remain_caller_owned() {
     let mut m = model(10);
+    m.set_row_keys((0..10).map(|i| format!("k{i}")).collect());
     m.selection.rows = [7, 2, 3].into();
+    let refs = || {
+        [2, 3, 7]
+            .map(|row| RowRef {
+                row,
+                key: Some(format!("k{row}")),
+            })
+            .to_vec()
+    };
     assert_eq!(
         m.navigate(Key::Delete, Modifiers::default()),
-        vec![GridEvent::DeleteRows(vec![2, 3, 7])]
+        vec![GridEvent::DeleteRows(refs())]
     );
     assert_eq!(m.rows.len(), 10);
     assert_eq!(
@@ -433,7 +443,7 @@ fn hooks_are_typed_and_edits_remain_caller_owned() {
                 ..Default::default()
             }
         ),
-        vec![GridEvent::DuplicateRows(vec![2, 3, 7])]
+        vec![GridEvent::DuplicateRows(refs())]
     );
     assert_eq!(
         m.navigate(

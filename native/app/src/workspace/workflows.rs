@@ -278,7 +278,7 @@ impl Workspace {
                         this.refresh_objects(cx);
                         this.load_databases(cx);
                     }
-                    Ok(Err(e)) => this.error(e, cx),
+                    Ok(Err(e)) => this.failed(e, cx),
                     Err(e) => this.error(e, cx),
                 }
                 cx.notify();
@@ -533,6 +533,10 @@ impl Workspace {
 impl Workspace {
     pub(super) fn reload_workspace(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.saving {
+            return;
+        }
+        if !self.connected() {
+            self.show_hint("Not connected: press ⌘⇧R to reconnect.", cx);
             return;
         }
         self.flush_grid_edits(window, cx);

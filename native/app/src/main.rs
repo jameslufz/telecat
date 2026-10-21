@@ -108,7 +108,7 @@ fn print_window(
         }
         let failure_name = name.clone();
         let result = handle.update(cx, |_, window, cx| {
-            if scenario {
+            if scenario && window_frame::test_screen().is_none() {
                 cx.activate(true);
                 window.activate_window();
             }
@@ -124,7 +124,17 @@ fn print_window(
                     scenario.then_some(requested),
                     Some(viewport),
                 ) {
-                    Ok(id) => println!("WINDOW {name} {id}"),
+                    Ok(id) => {
+                        if window_frame::test_screen().is_some() {
+                            if let Some(f) = window_frame::screen_frame(&view) {
+                                println!(
+                                    "SCREEN {name} {} {} {} {}",
+                                    f.origin.x, f.origin.y, f.size.width, f.size.height
+                                );
+                            }
+                        }
+                        println!("WINDOW {name} {id}")
+                    }
                     Err(e) => window_failure(&name, scenario, e),
                 }
             });
@@ -137,11 +147,16 @@ fn print_window(
 }
 pub fn options(cx: &App, width: f32, height: f32, blurred: bool) -> WindowOptions {
     WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-            None,
-            size(px(width), px(height)),
-            cx,
-        ))),
+        window_bounds: Some(WindowBounds::Windowed(match window_frame::test_screen() {
+            Some([x, y, w, h]) => Bounds::new(
+                point(
+                    px(x + ((w - width) / 2.).max(0.)),
+                    px(y + ((h - height) / 2.).max(0.)),
+                ),
+                size(px(width), px(height)),
+            ),
+            None => Bounds::centered(None, size(px(width), px(height)), cx),
+        })),
         titlebar: Some(TitlebarOptions {
             title: Some("Telecat".into()),
             appears_transparent: true,
@@ -347,7 +362,9 @@ fn main() {
                 .expect("welcome window");
             }
             install_menus(services.clone(), cx);
-            cx.activate(true);
+            if window_frame::test_screen().is_none() {
+                cx.activate(true);
+            }
         });
 }
 
@@ -355,6 +372,8 @@ gpui_kit::actions!(
     telecat,
     [Quit, NewConnection, SwitchConnection, CloseWindow]
 );
+// Shortcuts dispatch these global actions while GPUI is updating the active window, which can't be
+// updated again until that dispatch returns, so each handler defers its window work.
 fn install_menus(services: Services, cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("cmd-q", Quit, None),
@@ -363,63 +382,73 @@ fn install_menus(services: Services, cx: &mut App) {
         KeyBinding::new("cmd-shift-w", CloseWindow, None),
     ]);
     cx.on_action(|_: &Quit, cx| {
-        let mut dirty = false;
-        for handle in cx.windows() {
-            let state = handle
-                .update(cx, |_, window, cx| {
-                    if let Some(host) = workspace::host::root_host(window, cx) {
-                        host.update(cx, |host, cx| host.flush(window, cx));
-                    } else if let Some(view) = workspace::host::active_workspace(window, cx) {
-                        view.update(cx, |w, cx| w.flush_grid_edits(window, cx));
-                    }
-                    workspace::host::close_state(window, cx)
-                })
-                .unwrap_or((false, false));
-            if state.0 {
+        cx.defer(|cx| {
+            let mut dirty = false;
+            for handle in cx.windows() {
+                let state = handle
+                    .update(cx, |_, window, cx| {
+                        if let Some(host) = workspace::host::root_host(window, cx) {
+                            host.update(cx, |host, cx| host.flush(window, cx));
+                        } else if let Some(view) = workspace::host::active_workspace(window, cx) {
+                            view.update(cx, |w, cx| w.flush_grid_edits(window, cx));
+                        }
+                        workspace::host::close_state(window, cx)
+                    })
+                    .unwrap_or((false, false));
+                if state.0 {
+                    return;
+                }
+                dirty |= state.1;
+            }
+            if !dirty {
+                cx.quit();
                 return;
             }
-            dirty |= state.1;
-        }
-        if !dirty {
-            cx.quit();
-            return;
-        }
-        if let Some(handle) = cx.active_window() {
-            let prompt = handle.update(cx, |_, window, cx| {
-                window.prompt(
-                    PromptLevel::Warning,
-                    "Discard unsaved changes?",
-                    Some("Quitting discards all staged changes. SQL drafts are kept."),
-                    &["Discard and Quit", "Cancel"],
-                    cx,
-                )
-            });
-            if let Ok(prompt) = prompt {
-                cx.spawn(async move |cx| {
-                    if prompt.await == Ok(0) {
-                        let _ = cx.update(|cx| cx.quit());
-                    }
-                })
-                .detach();
+            if let Some(handle) = cx.active_window() {
+                let prompt = handle.update(cx, |_, window, cx| {
+                    window.prompt(
+                        PromptLevel::Warning,
+                        "Discard unsaved changes?",
+                        Some("Quitting discards all staged changes. SQL drafts are kept."),
+                        &["Discard and Quit", "Cancel"],
+                        cx,
+                    )
+                });
+                if let Ok(prompt) = prompt {
+                    cx.spawn(async move |cx| {
+                        if prompt.await == Ok(0) {
+                            let _ = cx.update(|cx| cx.quit());
+                        }
+                    })
+                    .detach();
+                }
             }
-        }
+        });
     });
     cx.on_action(|_: &CloseWindow, cx| {
-        if let Some(w) = cx.active_window() {
-            let _ = w.update(cx, |_, window, cx| {
-                if let Some(host) = workspace::host::root_host(window, cx) {
-                    host.update(cx, |host, cx| host.close_window(window, cx));
-                } else if let Some(workspace) = workspace::host::active_workspace(window, cx) {
-                    workspace.update(cx, |this, cx| this.request_close_window(window, cx));
-                } else {
-                    window.remove_window();
-                }
-            });
-        }
+        cx.defer(|cx| {
+            if let Some(w) = cx.active_window() {
+                let _ = w.update(cx, |_, window, cx| {
+                    if let Some(host) = workspace::host::root_host(window, cx) {
+                        host.update(cx, |host, cx| host.close_window(window, cx));
+                    } else if let Some(workspace) = workspace::host::active_workspace(window, cx) {
+                        workspace.update(cx, |this, cx| this.request_close_window(window, cx));
+                    } else {
+                        window.remove_window();
+                    }
+                });
+            }
+        });
     });
     let svc = services.clone();
-    cx.on_action(move |_: &NewConnection, cx| show_welcome(svc.clone(), true, cx));
-    cx.on_action(move |_: &SwitchConnection, cx| show_welcome(services.clone(), false, cx));
+    cx.on_action(move |_: &NewConnection, cx| {
+        let svc = svc.clone();
+        cx.defer(move |cx| show_welcome(svc, true, cx));
+    });
+    cx.on_action(move |_: &SwitchConnection, cx| {
+        let services = services.clone();
+        cx.defer(move |cx| show_welcome(services, false, cx));
+    });
     workspace::commands::install(cx);
     use workspace::commands::Command as Ws;
     cx.set_menus([
@@ -442,6 +471,7 @@ fn install_menus(services: Services, cx: &mut App) {
             MenuItem::action("Open SQL Query", Ws::new("open-sql-query")),
             MenuItem::action("Open Anything…", Ws::new("quick-open")),
             MenuItem::action("Open SQL File…", Ws::new("open-file")),
+            MenuItem::action("Import SQL Dump…", Ws::new("import-dump")),
             MenuItem::action("Save SQL As…", Ws::new("save-file")),
             MenuItem::separator(),
             MenuItem::action("Close Tab", Ws::new("close-tab")),
@@ -469,6 +499,7 @@ fn install_menus(services: Services, cx: &mut App) {
             MenuItem::separator(),
             MenuItem::action("Reload Workspace", Ws::new("refresh")),
         ]),
+        Menu::new("Connection").items([MenuItem::action("Reconnect", Ws::new("reconnect"))]),
         Menu::new("View").items([
             MenuItem::action("Toggle Sidebar", Ws::new("toggle-sidebar")),
             MenuItem::action("Toggle Console Log", Ws::new("toggle-console")),

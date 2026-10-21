@@ -77,10 +77,20 @@ pub fn validate_test_endpoint(c: &ConnectionConfig) -> Result<()> {
     } else {
         5434
     };
-    if c.host != "127.0.0.1" || c.port != port {
+    if c.host != "127.0.0.1" || (c.port != port && !test_proxy_for(c.port, port)) {
         bail!("Test safety: only 127.0.0.1:{port} is permitted");
     }
     Ok(())
+}
+/// A test-only proxy in front of the test server (see `test_proxy`); never in a release build.
+fn test_proxy_for(port: u16, upstream: u16) -> bool {
+    #[cfg(feature = "test-support")]
+    return crate::test_proxy::forwards(port, upstream);
+    #[cfg(not(feature = "test-support"))]
+    {
+        let _ = (port, upstream);
+        false
+    }
 }
 fn fatal(e: &anyhow::Error) -> bool {
     if let Some(e) = e.downcast_ref::<tokio_postgres::Error>() {
@@ -106,6 +116,10 @@ fn fatal(e: &anyhow::Error) -> bool {
         })
     }) || e.to_string().to_lowercase().contains("timeout")
 }
+/// How long opening one connection may take: a blackholed VPN route otherwise waits for the
+/// operating system's TCP timeout, minutes.
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const KEEPALIVE_IDLE: Duration = Duration::from_secs(15);
 impl Wire {
     pub async fn connect(c: &ConnectionConfig, password: &str) -> Result<Self> {
         validate_endpoint(c)?;
@@ -161,8 +175,10 @@ impl Wire {
                     .ssl_opts(ssl)
                     .prefer_socket(false)
                     .client_found_rows(true)
+                    // Notices a dead idle link (a VPN that went away) without any query.
+                    .tcp_keepalive(Some(KEEPALIVE_IDLE.as_millis() as u32))
                     .init(vec!["SET NAMES utf8mb4"]);
-                let conn = tokio::time::timeout(Duration::from_secs(10), Conn::new(opts))
+                let conn = tokio::time::timeout(CONNECT_TIMEOUT, Conn::new(opts))
                     .await
                     .context("Connection timeout")??;
                 Ok(Self::Mysql(conn))
@@ -179,7 +195,11 @@ impl Wire {
                         &c.database
                     })
                     .application_name("Telecat")
-                    .connect_timeout(Duration::from_secs(10));
+                    .connect_timeout(CONNECT_TIMEOUT)
+                    .keepalives(true)
+                    .keepalives_idle(KEEPALIVE_IDLE)
+                    .keepalives_interval(Duration::from_secs(5))
+                    .keepalives_retries(3);
                 cfg.ssl_mode(if tls {
                     tokio_postgres::config::SslMode::Require
                 } else {
@@ -195,7 +215,11 @@ impl Wire {
                     tls_config.ssl_key = None;
                 }
                 let connector = tokio_postgres_rustls::MakeRustlsConnect::new(pg_tls(&tls_config)?);
-                let (client, connection) = cfg.connect(connector).await?;
+                // connect_timeout covers the socket only; TLS and authentication can hang too.
+                let (client, connection) =
+                    tokio::time::timeout(CONNECT_TIMEOUT, cfg.connect(connector))
+                        .await
+                        .context("Connection timeout")??;
                 let task = tokio::spawn(async move {
                     // Client requests receive connection failures through their Result.
                     // Server error text may contain SQL/values: never duplicate it to stderr.
@@ -206,9 +230,7 @@ impl Wire {
         }
     }
     pub async fn run(&mut self, sql: &str, params: &[Value]) -> Result<(QueryResult, u64)> {
-        self.run_inner(sql, params)
-            .await
-            .map_err(|e| anyhow::anyhow!(err_message(&e)))
+        self.run_inner(sql, params).await.map_err(server_error)
     }
     async fn run_inner(&mut self, sql: &str, params: &[Value]) -> Result<(QueryResult, u64)> {
         let d = match self {
@@ -268,6 +290,22 @@ impl Wire {
                     result.command = (!info.is_empty()).then_some(info);
                 } else {
                     result.columns = fields.iter().map(|f| f.name_str().into_owned()).collect();
+                    result.origins = Some(
+                        fields
+                            .iter()
+                            .map(|f| {
+                                let (table, column) = (f.org_table_str(), f.org_name_str());
+                                (!table.is_empty() && !column.is_empty()).then(|| {
+                                    ColumnOrigin::Mysql {
+                                        schema: f.schema_str().into_owned(),
+                                        alias: f.table_str().into_owned(),
+                                        table: table.into_owned(),
+                                        column: column.into_owned(),
+                                    }
+                                })
+                            })
+                            .collect(),
+                    );
                     result.numeric = Some(
                         fields
                             .iter()
@@ -313,6 +351,17 @@ impl Wire {
                     ..Default::default()
                 };
                 if !columns.is_empty() {
+                    result.origins = Some(
+                        columns
+                            .iter()
+                            .map(|c| match (c.table_oid(), c.column_id()) {
+                                (Some(table_oid), Some(attnum)) if table_oid != 0 && attnum > 0 => {
+                                    Some(ColumnOrigin::Postgres { table_oid, attnum })
+                                }
+                                _ => None,
+                            })
+                            .collect(),
+                    );
                     result.numeric = Some(
                         columns
                             .iter()
@@ -357,6 +406,49 @@ impl Wire {
             }
         }
     }
+    /// Runs one statement of a script as written: MySQL's text protocol, PostgreSQL's simple
+    /// query protocol. No splitting or parameters: the caller has already split the script.
+    pub async fn execute_raw(&mut self, sql: &str) -> Result<()> {
+        let r: Result<()> = match self {
+            Self::Mysql(conn) => conn.query_drop(sql).await.map_err(Into::into),
+            // The extended protocol: the server itself refuses more than one statement.
+            Self::Postgres { client, .. } => client
+                .execute(sql, &[])
+                .await
+                .map(|_| ())
+                .map_err(Into::into),
+        };
+        r.map_err(server_error)
+    }
+    /// PostgreSQL `COPY … FROM STDIN`: the sink the data rows are written to.
+    pub async fn copy_in(&mut self, sql: &str) -> Result<tokio_postgres::CopyInSink<bytes::Bytes>> {
+        match self {
+            Self::Postgres { client, .. } => client
+                .copy_in(sql)
+                .await
+                .map_err(|e| server_error(e.into())),
+            Self::Mysql(_) => bail!("COPY is PostgreSQL only"),
+        }
+    }
+    /// The cheapest round trip: COM_PING, or an empty simple query.
+    pub async fn ping(&mut self) -> Result<()> {
+        let r: Result<()> = match self {
+            Self::Mysql(conn) => conn.ping().await.map_err(Into::into),
+            Self::Postgres { client, .. } => client
+                .simple_query("")
+                .await
+                .map(|_| ())
+                .map_err(Into::into),
+        };
+        r.map_err(server_error)
+    }
+    /// PostgreSQL knows without a round trip when its connection task has ended.
+    pub fn is_closed(&self) -> bool {
+        match self {
+            Self::Mysql(_) => false,
+            Self::Postgres { client, .. } => client.is_closed(),
+        }
+    }
     pub async fn close(self) {
         match self {
             Self::Mysql(c) => {
@@ -370,16 +462,13 @@ impl Wire {
     }
 }
 pub fn buffer_cell(bytes: &[u8]) -> String {
-    let s = String::from_utf8_lossy(bytes);
-    if s.chars()
-        .any(|c| matches!(c,'\u{0}'..='\u{8}'|'\u{e}'..='\u{1f}'|'�'))
-    {
+    if telecat_core::changes::binary_shown_as_text(bytes) {
+        String::from_utf8_lossy(bytes).into_owned()
+    } else {
         format!(
             "0x{}",
             bytes.iter().map(|b| format!("{b:02X}")).collect::<String>()
         )
-    } else {
-        s.into_owned()
     }
 }
 fn mysql_cell(v: MyValue, f: &mysql_async::Column) -> Option<String> {
@@ -450,6 +539,55 @@ pub fn format_bytes(v: f64) -> String {
 }
 
 /// Electron's errMessage, including symbolic MySQL codes and PostgreSQL SQLSTATE.
+/// A server's error with where it points in the statement, when the server said.
+#[derive(Debug)]
+pub struct ServerError {
+    pub message: String,
+    /// PostgreSQL ErrorResponse 'P': 1-based character position in the statement.
+    pub position: Option<usize>,
+    /// PostgreSQL 'p'/'q': a position inside an internally generated query (a function body).
+    pub internal: Option<(usize, String)>,
+    /// PostgreSQL 'W': where it happened ("COPY t, line 3", "PL/pgSQL function … line 4").
+    pub context: Option<String>,
+    /// The SQLSTATE code.
+    pub code: Option<String>,
+    /// The connection itself failed (see [`is_connection_lost`]), not the statement.
+    pub lost: bool,
+}
+impl std::fmt::Display for ServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+impl std::error::Error for ServerError {}
+pub(crate) fn server_error(e: anyhow::Error) -> anyhow::Error {
+    let pg = e
+        .downcast_ref::<tokio_postgres::Error>()
+        .and_then(|e| e.as_db_error());
+    let context = pg.and_then(|d| d.where_()).map(str::to_owned);
+    let code = pg.map(|d| d.code().code().to_owned()).or_else(|| {
+        e.downcast_ref::<tokio_postgres::Error>()
+            .and_then(|e| e.code())
+            .map(|c| c.code().to_owned())
+    });
+    let db = pg.and_then(|d| d.position().cloned());
+    let (position, internal) = match db {
+        Some(tokio_postgres::error::ErrorPosition::Original(p)) => (Some(p as usize), None),
+        Some(tokio_postgres::error::ErrorPosition::Internal { position, query }) => {
+            (None, Some((position as usize, query)))
+        }
+        None => (None, None),
+    };
+    let lost = lost_cause(&e);
+    anyhow::Error::new(ServerError {
+        lost,
+        message: err_message(&e),
+        position,
+        internal,
+        context,
+        code,
+    })
+}
 pub fn err_message(e: &anyhow::Error) -> String {
     for cause in e.chain() {
         if let Some(pg) = cause.downcast_ref::<tokio_postgres::Error>() {
@@ -473,4 +611,126 @@ pub fn err_message(e: &anyhow::Error) -> String {
         }
     }
     e.to_string()
+}
+
+/// Whether `e` means the connection to the server is gone or unusable: the network or VPN
+/// dropped, the server restarted or ended the session, a timeout, TLS or name resolution. A
+/// statement the server refused is not.
+pub fn is_connection_lost(e: &anyhow::Error) -> bool {
+    lost_cause(e)
+}
+/// Whether `e` is the server refusing the credentials or the database: retrying with the same
+/// password can't help and may lock the account.
+pub fn is_auth_failure(e: &anyhow::Error) -> bool {
+    e.chain().any(|cause| {
+        if let Some(s) = cause.downcast_ref::<ServerError>() {
+            return s
+                .code
+                .as_deref()
+                .is_some_and(|c| matches!(c, "28P01" | "28000" | "3D000"))
+                || [
+                    "ER_ACCESS_DENIED_ERROR",
+                    "ER_BAD_DB_ERROR",
+                    "ER_DBACCESS_DENIED_ERROR",
+                ]
+                .iter()
+                .any(|n| s.message.starts_with(n));
+        }
+        if let Some(pg) = cause.downcast_ref::<tokio_postgres::Error>() {
+            return pg
+                .code()
+                .is_some_and(|c| matches!(c.code(), "28P01" | "28000" | "3D000"));
+        }
+        if let Some(mysql_async::Error::Server(s)) = cause.downcast_ref::<mysql_async::Error>() {
+            return matches!(s.code, 1044 | 1045 | 1049 | 1698);
+        }
+        false
+    })
+}
+fn lost_cause(e: &anyhow::Error) -> bool {
+    use std::io::ErrorKind::*;
+    for cause in e.chain() {
+        if let Some(s) = cause.downcast_ref::<ServerError>() {
+            return s.lost;
+        }
+        if cause.is::<tokio::time::error::Elapsed>() || cause.is::<crate::CommitInterrupted>() {
+            return true;
+        }
+        if let Some(pg) = cause.downcast_ref::<tokio_postgres::Error>() {
+            if pg.is_closed() {
+                return true;
+            }
+            if let Some(code) = pg.code() {
+                let code = code.code();
+                return code.starts_with("08") || matches!(code, "57P01" | "57P02" | "57P03");
+            }
+            // tokio_postgres doesn't expose its error kinds; these are the transport ones.
+            let text = pg.to_string();
+            if [
+                "error communicating with the server",
+                "error performing TLS handshake",
+                "timeout waiting for server",
+                "error connecting to server",
+            ]
+            .iter()
+            .any(|k| text.starts_with(k))
+            {
+                return true;
+            }
+        }
+        if let Some(my) = cause.downcast_ref::<mysql_async::Error>() {
+            match my {
+                mysql_async::Error::Io(_) => return true,
+                mysql_async::Error::Driver(mysql_async::DriverError::ConnectionClosed) => {
+                    return true;
+                }
+                // Server shutdown, connection killed, idle session closed by the server.
+                mysql_async::Error::Server(s) => {
+                    return matches!(s.code, 1053 | 1927 | 2006 | 2013 | 4031);
+                }
+                _ => {}
+            }
+        }
+        if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+            if matches!(
+                io.kind(),
+                ConnectionReset
+                    | ConnectionAborted
+                    | ConnectionRefused
+                    | BrokenPipe
+                    | UnexpectedEof
+                    | TimedOut
+                    | NotConnected
+                    | HostUnreachable
+                    | NetworkUnreachable
+                    | NetworkDown
+                    | AddrNotAvailable
+            ) {
+                return true;
+            }
+        }
+    }
+    let text = format!("{e:#}").to_lowercase();
+    [
+        "server has gone away",
+        "lost connection",
+        "connection closed",
+        "connection is closed",
+        "connection reset",
+        "connection refused",
+        "connection timeout",
+        "broken pipe",
+        "timed out",
+        "no route to host",
+        "network is unreachable",
+        "host is unreachable",
+        "network is down",
+        "failed to lookup address",
+        "nodename nor servname",
+        "name or service not known",
+        "unexpected eof",
+        "error performing tls handshake",
+    ]
+    .iter()
+    .any(|k| text.contains(k))
 }

@@ -3,6 +3,26 @@ use anyhow::{Context, Result, bail, ensure};
 use objc2_app_kit::{NSScreen, NSView};
 use objc2_foundation::{MainThreadMarker, NSPoint, NSRect, NSSize};
 
+/// Test runs only: `TELECAT_TEST_SCREEN="x,y,width,height"` is the display, in GPUI's top-left
+/// global coordinates, that windows open on. They then open there without taking focus.
+pub fn test_screen() -> Option<[f32; 4]> {
+    parse_test_screen(&std::env::var("TELECAT_TEST_SCREEN").ok()?)
+}
+fn parse_test_screen(value: &str) -> Option<[f32; 4]> {
+    let parts: Vec<f32> = value
+        .split(',')
+        .map(|p| p.trim().parse().ok().filter(|v: &f32| v.is_finite()))
+        .collect::<Option<_>>()?;
+    match parts[..] {
+        [x, y, w, h] if w > 0. && h > 0. => Some([x, y, w, h]),
+        _ => None,
+    }
+}
+/// The display a placed window ended up on, in AppKit coordinates, for test verification.
+pub fn screen_frame(view: &NSView) -> Option<NSRect> {
+    Some(view.window()?.screen()?.frame())
+}
+
 fn positive(size: NSSize) -> bool {
     size.width.is_finite() && size.height.is_finite() && size.width > 0. && size.height > 0.
 }
@@ -95,7 +115,11 @@ pub fn place_scenario(view: &NSView, requested: NSSize) -> Result<()> {
     check_window(view, Some(requested), None)?;
     // Moving between displays may change key status. Scenario captures must use
     // the real active window appearance, including AppKit's traffic lights.
-    window.makeKeyAndOrderFront(None);
+    if test_screen().is_some() {
+        window.orderFront(None);
+    } else {
+        window.makeKeyAndOrderFront(None);
+    }
     Ok(())
 }
 
@@ -213,5 +237,33 @@ mod tests {
         // Production accepts AppKit's smaller positive frame; it never forces 1440x816.
         check_sizes(None, &[("window frame", NSSize::new(1280., 775.))]).unwrap();
         assert!(check_sizes(None, &[("window frame", NSSize::new(0., 0.))]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod test_screen_tests {
+    use super::parse_test_screen;
+    #[test]
+    fn test_screen_accepts_only_four_finite_numbers_with_a_positive_size() {
+        assert_eq!(
+            parse_test_screen("168,-1080,1920,1080"),
+            Some([168., -1080., 1920., 1080.])
+        );
+        assert_eq!(
+            parse_test_screen(" 0, 0 , 10, 10"),
+            Some([0., 0., 10., 10.])
+        );
+        for bad in [
+            "",
+            "1,2,3",
+            "1,2,3,4,5",
+            "a,0,1,1",
+            "0,0,0,10",
+            "0,0,10,-1",
+            "NaN,0,1,1",
+            "inf,0,1,1",
+        ] {
+            assert_eq!(parse_test_screen(bad), None, "{bad}");
+        }
     }
 }

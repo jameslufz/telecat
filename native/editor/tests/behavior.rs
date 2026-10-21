@@ -579,3 +579,42 @@ fn frozen_scenario_caret_stays_idle_after_window_reactivation(cx: &mut TestAppCo
         "idle suspension must not stop input"
     );
 }
+/// At the editor's font size a click within ±2 px of a caret position places the caret there:
+/// hit-testing and caret drawing agree, including before a line's last character.
+#[gpui::test]
+fn clicks_land_on_the_caret_position_under_the_pointer(cx: &mut TestAppContext) {
+    use gpui::{Modifiers, VisualTestContext};
+    let (w, v) = setup(cx, "abcd\nabcd");
+    paint(cx, w);
+    for offset in 0usize..=9 {
+        edit(cx, w, &v, |v, _, cx| {
+            v.set_selections(
+                &[Selection {
+                    anchor: offset,
+                    head: offset,
+                }],
+                cx,
+            )
+        });
+        paint(cx, w);
+        let b = v.read_with(cx, |v, cx| {
+            v.input_state().read(cx).cursor_layout().unwrap().0
+        });
+        for dx in [-2., 0., 2.] {
+            edit(cx, w, &v, |v, _, cx| {
+                v.set_selections(&[Selection { anchor: 0, head: 0 }], cx)
+            });
+            paint(cx, w);
+            let mut visual = VisualTestContext::from_window(w.into(), cx);
+            visual.simulate_click(point(b.left() + px(dx), b.center().y), Modifiers::default());
+            assert_eq!(
+                v.read_with(cx, |v, cx| v.selections(cx)),
+                vec![Selection {
+                    anchor: offset,
+                    head: offset
+                }],
+                "offset {offset}, {dx} px"
+            );
+        }
+    }
+}

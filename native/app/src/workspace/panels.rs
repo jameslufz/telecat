@@ -10,6 +10,7 @@ impl Workspace {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
+            .overflow_x_hidden()
             .track_scroll(&self.tree_scroll)
             .px(px(6.))
             .pb(px(10.))
@@ -88,9 +89,15 @@ impl Workspace {
                                     )))
                                     .h(px(25.))
                                     .flex_shrink_0()
+                                    .min_w_0()
+                                    .overflow_hidden()
                                     .pl(px(6.))
                                     .pr(px(4.))
                                     .rounded(px(5.))
+                                    .tooltip(text_tooltip(display_name(
+                                        &table,
+                                        self.state.connection.driver,
+                                    )))
                                     .flex()
                                     .items_center()
                                     .gap(px(5.))
@@ -143,7 +150,7 @@ impl Workspace {
                                         if selected { 0xffffff } else { 0x6fa0e8 },
                                     ))
                                     .child(
-                                        div().truncate().child(display_name(
+                                        div().flex_1().min_w_0().truncate().child(display_name(
                                             &table,
                                             self.state.connection.driver,
                                         )),
@@ -151,6 +158,7 @@ impl Workspace {
                                     .on_mouse_down(
                                         MouseButton::Right,
                                         cx.listener(move |this, e: &MouseDownEvent, window, cx| {
+                                            cx.stop_propagation();
                                             this.object_menu(
                                                 menu_object.clone(),
                                                 e.position,
@@ -182,6 +190,8 @@ impl Workspace {
                                                     sidebar::table_key(&object.table)
                                                 )))
                                                 .h(px(20.))
+                                                .min_w_0()
+                                                .overflow_hidden()
                                                 .pl(px(44.))
                                                 .pr(px(8.))
                                                 .flex()
@@ -189,9 +199,19 @@ impl Workspace {
                                                 .justify_between()
                                                 .gap(px(10.))
                                                 .text_size(px(12.))
-                                                .child(div().truncate().child(name.clone()))
+                                                .tooltip(text_tooltip(format!("{name}  {ty}")))
                                                 .child(
                                                     div()
+                                                        .flex_1()
+                                                        .min_w_0()
+                                                        .truncate()
+                                                        .child(name.clone()),
+                                                )
+                                                .child(
+                                                    div()
+                                                        .flex_shrink_1()
+                                                        .min_w_0()
+                                                        .truncate()
                                                         .text_color(rgb(telecat_theme::MUTED))
                                                         .child(ty.clone()),
                                                 )
@@ -234,11 +254,14 @@ impl Workspace {
                         div()
                             .id(SharedString::from(q.id.clone()))
                             .h(px(25.))
+                            .min_w_0()
+                            .overflow_hidden()
                             .flex()
                             .items_center()
                             .px(px(6.))
                             .font(ui_font())
-                            .child(q.name.clone())
+                            .tooltip(text_tooltip(q.name.clone()))
+                            .child(div().flex_1().min_w_0().truncate().child(q.name.clone()))
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 this.open_named_query(&sql, &title, cx)
                             }))
@@ -271,6 +294,8 @@ impl Workspace {
                     tree = tree.child(
                         div()
                             .id(("history", i))
+                            .min_w_0()
+                            .overflow_hidden()
                             .px(px(8.))
                             .py(px(6.))
                             .border_b_1()
@@ -285,7 +310,7 @@ impl Workspace {
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .max_h(px(48.))
+                                    .line_clamp(3)
                                     .overflow_hidden()
                                     .child(entry.sql.clone()),
                             )
@@ -317,11 +342,65 @@ impl Workspace {
             self.tree_scroll.max_offset().y > px(0.)
         };
         tree = tree.pr(px(if overflow { 16. } else { 6. }));
-        div().w(px(self.layout.sidebar)).flex_shrink_0().h_full().bg(rgb(telecat_theme::PANEL)).flex().flex_col()
-            .child(div().h(px(40.)).flex_shrink_0().pt(px(10.)).pb(px(6.)).px(px(8.)).flex().justify_center().gap(px(4.)).children([(Segment::Items,"Items"),(Segment::Queries,"Queries"),(Segment::History,"History")].into_iter().map(|(segment,label)|div().id(label).px(px(16.)).py(px(4.)).rounded(px(6.)).text_size(px(13.5)).line_height(px(16.)).text_color(rgb(if self.segment==segment{0xe8e8e8}else{0xb8b8b8})).when(self.segment==segment,|d|d.bg(rgba(0xffffff16))).child(label).on_click(cx.listener(move|this,_,_,cx|{this.segment=segment;cx.notify();})))))
+        // The three segments share the width and never overflow it; the sidebar's minimum width
+        // (layout::SIDEBAR_MIN) keeps every label whole.
+        let segment_tabs = [
+            (Segment::Items, "Items"),
+            (Segment::Queries, "Queries"),
+            (Segment::History, "History"),
+        ]
+        .into_iter()
+        .map(|(segment, label)| {
+            div()
+                .id(label)
+                .flex_1()
+                .min_w_0()
+                .max_w(px(96.))
+                .flex()
+                .justify_center()
+                .px(px(6.))
+                .py(px(4.))
+                .rounded(px(6.))
+                .text_size(px(13.5))
+                .line_height(px(16.))
+                .text_color(rgb(if self.segment == segment {
+                    0xe8e8e8
+                } else {
+                    0xb8b8b8
+                }))
+                .when(self.segment == segment, |d| d.bg(rgba(0xffffff16)))
+                .child(div().min_w_0().truncate().child(label))
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.segment = segment;
+                    cx.notify();
+                }))
+        });
+        let items_state = (self.segment == Segment::Items).then(|| {
+            self.state
+                .objects_load
+                .placeholder(!self.state.objects.is_empty(), std::time::Instant::now())
+        });
+        let tree_dimmed = matches!(items_state, Some(Placeholder::Loading { dimmed: true }));
+        let tree_state = items_state.as_ref().and_then(|p| match p {
+            Placeholder::Empty => Some(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .font(ui_font())
+                    .text_color(rgb(telecat_theme::MUTED))
+                    .child("No tables or views"),
+            ),
+            p => load_state_view(p, "items-state"),
+        });
+        div().w(px(self.layout.sidebar)).flex_shrink_0().h_full().overflow_hidden().bg(rgb(telecat_theme::PANEL)).flex().flex_col()
+            .child(div().h(px(40.)).flex_shrink_0().min_w_0().overflow_hidden().pt(px(10.)).pb(px(6.)).px(px(8.)).flex().justify_center().gap(px(4.)).children(segment_tabs))
             .child(search_box(&self.search,28.).mx(px(8.)).mt(px(4.)).mb(px(8.)))
-            .child(div().flex_1().min_h_0().relative().flex().child(tree).child(scrollbar(&self.tree_scroll, cx)))
-            .child(div().h(px(34.)).flex_shrink_0().border_t_1().border_color(rgb(0x111111)).px(px(8.)).flex().items_center().gap(px(4.)).child(nav("side-add","Plus.svg",false).on_click(cx.listener(|this,_,_,cx|this.new_table(cx)))).child(nav("side-menu","ChevronDown.svg",false).on_mouse_down(MouseButton::Left,cx.listener(|_this,e:&MouseDownEvent,window,cx|{native_menu::choose(json!([{"id":"table","label":"New Table"},{"id":"query","label":"New SQL Query"}]),e.position,window,cx,|this,id,_,cx|{if id=="query"{this.new_query("",cx);}else if id=="table"{this.new_table(cx);}else{this.sheet=Some(Sheet::Shortcuts);cx.notify();}});}))))
+            .child(div().id("items-area").flex_1().min_h_0().min_w_0().relative().flex().child(tree.when(tree_dimmed, |d| d.opacity(0.35))).child(scrollbar(&self.tree_scroll, cx)).children(tree_state)
+                .when(self.segment == Segment::Items, |d| d.on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, window, cx| this.items_menu(e.position, window, cx)))))
+            .child(div().h(px(34.)).flex_shrink_0().border_t_1().border_color(rgb(0x111111)).px(px(8.)).flex().items_center().gap(px(4.)).child(nav("side-add","Plus.svg",false).on_click(cx.listener(|this,_,_,cx|this.new_table(cx)))).child(nav("side-menu","ChevronDown.svg",false).on_mouse_down(MouseButton::Left,cx.listener(|_this,e:&MouseDownEvent,window,cx|{native_menu::choose(json!([{"id":"table","label":"New Table"},{"id":"query","label":"New SQL Query"},{"type":"separator"},{"id":"import","label":"Import SQL Dump…"}]),e.position,window,cx,|this,id,_,cx|{if id=="query"{this.new_query("",cx);}else if id=="table"{this.new_table(cx);}else if id=="import"{this.import_dump_file(cx);}else{this.sheet=Some(Sheet::Shortcuts);cx.notify();}});}))))
     }
     pub(super) fn right_panel(&self, cx: &mut Context<Self>) -> Div {
         let tab = self.state.current();
@@ -362,10 +441,12 @@ impl Workspace {
             vec![]
         };
         let empty = fields.is_empty();
+        let editable_fields = self.inspector_fields(&query, cx);
         div()
             .w(px(self.layout.panel))
             .flex_shrink_0()
             .h_full()
+            .overflow_hidden()
             .bg(rgb(telecat_theme::PANEL))
             .flex()
             .flex_col()
@@ -409,65 +490,76 @@ impl Workspace {
                                 .id("fields")
                                 .flex_1()
                                 .min_h_0()
+                                .min_w_0()
                                 .overflow_y_scroll()
+                                .overflow_x_hidden()
                                 .track_scroll(&self.panel_scroll)
                                 .px(px(10.))
                                 .pt(px(4.))
                                 .pb(px(16.))
-                                .children(
-                                    fields
-                                        .into_iter()
-                                        .filter(|(label, _)| label.to_lowercase().contains(&query))
-                                        .map(|(label, value)| {
-                                            let muted = value.as_ref().is_none_or(|s| s.is_empty());
-                                            let multi = value
-                                                .as_ref()
-                                                .is_some_and(|s| s.len() > 60 || s.contains('\n'));
-                                            div()
-                                                .mb(px(8.))
-                                                .child(
-                                                    div()
-                                                        .font(mono())
-                                                        .text_size(px(12.5))
-                                                        .line_height(px(15.))
-                                                        .text_color(rgb(
-                                                            telecat_theme::TEXT_SECONDARY,
-                                                        ))
-                                                        .mb(px(3.))
-                                                        .child(label),
-                                                )
-                                                .child(
-                                                    div()
-                                                        .h(px(if multi { 90. } else { 30. }))
-                                                        .w_full()
-                                                        .overflow_hidden()
-                                                        .px(px(8.))
-                                                        .py(px(5.))
-                                                        .border_1()
-                                                        .border_color(rgb(telecat_theme::BORDER))
-                                                        .rounded(px(6.))
-                                                        .bg(rgb(telecat_theme::INPUT))
-                                                        .font(mono())
-                                                        .text_size(px(13.))
-                                                        .text_color(rgb(if muted {
-                                                            0x666666
-                                                        } else {
-                                                            0xe8e8e8
-                                                        }))
-                                                        .child(
-                                                            value
-                                                                .map(|s| {
-                                                                    if s.is_empty() {
-                                                                        "EMPTY".into()
-                                                                    } else {
-                                                                        s
-                                                                    }
-                                                                })
-                                                                .unwrap_or("NULL".into()),
-                                                        ),
-                                                )
-                                        }),
-                                ),
+                                .child(editable_fields.unwrap_or_else(|| {
+                                    div().children(
+                                        fields
+                                            .into_iter()
+                                            .filter(|(label, _)| {
+                                                label.to_lowercase().contains(&query)
+                                            })
+                                            .map(|(label, value)| {
+                                                let muted =
+                                                    value.as_ref().is_none_or(|s| s.is_empty());
+                                                let multi = value.as_ref().is_some_and(|s| {
+                                                    s.len() > 60 || s.contains('\n')
+                                                });
+                                                div()
+                                                    .mb(px(8.))
+                                                    .child(
+                                                        div()
+                                                            .font(mono())
+                                                            .text_size(px(12.5))
+                                                            .line_height(px(15.))
+                                                            .text_color(rgb(
+                                                                telecat_theme::TEXT_SECONDARY,
+                                                            ))
+                                                            .mb(px(3.))
+                                                            .truncate()
+                                                            .child(label),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .h(px(if multi { 90. } else { 30. }))
+                                                            .w_full()
+                                                            .overflow_hidden()
+                                                            .px(px(8.))
+                                                            .py(px(5.))
+                                                            .border_1()
+                                                            .border_color(rgb(
+                                                                telecat_theme::BORDER,
+                                                            ))
+                                                            .rounded(px(6.))
+                                                            .bg(rgb(telecat_theme::INPUT))
+                                                            .font(mono())
+                                                            .text_size(px(13.))
+                                                            .text_color(rgb(if muted {
+                                                                0x666666
+                                                            } else {
+                                                                0xe8e8e8
+                                                            }))
+                                                            .child(
+                                                                value
+                                                                    .map(|s| {
+                                                                        if s.is_empty() {
+                                                                            "EMPTY".into()
+                                                                        } else {
+                                                                            super::inspector::preview(&s)
+                                                                                .into_owned()
+                                                                        }
+                                                                    })
+                                                                    .unwrap_or("NULL".into()),
+                                                            ),
+                                                    )
+                                            }),
+                                    )
+                                })),
                         )
                         .child(scrollbar(&self.panel_scroll, cx)),
                 )
@@ -639,8 +731,8 @@ impl Workspace {
                 .child(small_button("query-limit",format!("Limit {}",tab.limit)).h(px(28.)).font(ui_font()).gap(px(6.)).child(icon("UpDown.svg",12.,0xb8b8b8)).on_mouse_down(MouseButton::Left,cx.listener(|this,e:&MouseDownEvent,window,cx|{let items:Vec<_>=[0,100,300,500,1000,5000].iter().map(|n|json!({"id":n.to_string(),"label":if *n==0{"No limit".into()}else{format!("Limit {n}")},"checked":*n==this.state.current().limit})).collect();native_menu::choose(json!(items),e.position,window,cx,|this,id,_,cx|{if let Ok(n)=id.parse(){this.state.current_mut().limit=n;cx.notify();}});})))
                 .child(small_button("beautify","Beautify ⌘I").font(ui_font()).on_click(cx.listener(|this,_,window,cx|this.format_editor(false,window,cx))))
                 .child(div().h(px(28.)).flex_shrink_0().rounded(px(7.)).border_1().border_color(rgb(0x3c3c3c)).bg(rgb(telecat_theme::INPUT_2)).flex().items_center().font(ui_font()).text_size(px(13.)).text_color(rgb(telecat_theme::TEXT))
-                    .child(div().id("run-current").px(px(12.)).h_full().flex().items_center().child(if self.busy{"Cancel"}else{"Run Current ⌘↵"}).on_click(cx.listener(|this,_,_,cx|{if this.busy{this.cancel(cx);}else{this.run(false,cx);}})))
-                    .child(div().id("run-menu").px(px(7.)).h_full().flex().items_center().border_l_1().border_color(rgba(0xffffff18)).child(icon("ChevronDown.svg",13.,0xe8e8e8)).on_mouse_down(MouseButton::Left,cx.listener(|_this,e:&MouseDownEvent,window,cx|native_menu::choose(json!([{"id":"current","label":"Run Current  ⌘↵"},{"id":"all","label":"Run All  ⇧⌘↵"}]),e.position,window,cx,|this,id,_,cx|this.run(id=="all",cx))))))))
+                    .child(div().id("run-current").px(px(12.)).h_full().flex().items_center().child(if self.busy{"Cancel"}else{"Run Current ⌘↵"}).on_click(cx.listener(|this,_,window,cx|{if this.busy{this.cancel(cx);}else{this.run(false,window,cx);}})))
+                    .child(div().id("run-menu").px(px(7.)).h_full().flex().items_center().border_l_1().border_color(rgba(0xffffff18)).child(icon("ChevronDown.svg",13.,0xe8e8e8)).on_mouse_down(MouseButton::Left,cx.listener(|_this,e:&MouseDownEvent,window,cx|native_menu::choose(json!([{"id":"current","label":"Run Current  ⌘↵"},{"id":"all","label":"Run All  ⇧⌘↵"}]),e.position,window,cx,|this,id,window,cx|this.run(id=="all",window,cx))))))))
                 .child(self.splitter(Splitter::Query(tab.id), cx))
                 .child(self.query_measure(cx));
         }
@@ -723,61 +815,77 @@ impl Workspace {
             );
         }
         if tab.message && query {
+            let locations: Vec<Location> = tab.error_locations.iter().flatten().copied().collect();
+            // Locations are offsets into the SQL as it ran: no jumping once it was edited.
+            let stale = tab.run_text != tab.editor.text;
+            let text = self.messages.get(&tab.id).map(|m| m.1.clone());
             content = content.child(
                 div()
                     .id("messages")
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
-                    .px(px(14.))
-                    .py(px(10.))
-                    .font(mono())
-                    .text_size(px(12.5))
-                    .line_height(px(19.))
-                    .children(tab.results.iter().enumerate().map(|(i, r)| {
+                    .flex()
+                    .flex_col()
+                    .child(
                         div()
+                            .flex_shrink_0()
+                            .px(px(14.))
                             .pt(px(6.))
-                            .pb(px(10.))
-                            .border_b_1()
-                            .border_color(rgba(0xffffff0d))
-                            .child(
+                            .flex()
+                            .flex_wrap()
+                            .gap(px(6.))
+                            .items_center()
+                            .font(ui_font())
+                            .text_size(px(12.))
+                            .children(locations.into_iter().enumerate().map(|(i, at)| {
                                 div()
-                                    .text_color(rgb(telecat_theme::TEXT_SECONDARY))
-                                    .mb(px(4.))
-                                    .child(r.sql.clone()),
-                            )
-                            .child(
-                                div()
-                                    .text_color(rgb(if r.error.is_some() {
-                                        0xff8a80
+                                    .id(("error-location", i))
+                                    .px(px(8.))
+                                    .py(px(2.))
+                                    .rounded(px(5.))
+                                    .border_1()
+                                    .border_color(rgb(0x6b2b27))
+                                    .text_color(rgb(0xff8a80))
+                                    .cursor_pointer()
+                                    .hover(|d| d.bg(rgba(0xff8a8018)))
+                                    .when(stale, |d| d.opacity(0.5).cursor_default())
+                                    .child(if stale {
+                                        format!(
+                                            "Line {}, column {} (SQL changed since run)",
+                                            at.line, at.column
+                                        )
                                     } else {
-                                        0x9fd59f
+                                        format!("Go to line {}, column {}", at.line, at.column)
+                                    })
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.jump_to_location(at, window, cx)
                                     }))
-                                    .child(if let Some(e) = &r.error {
-                                        format!("Query {} ERROR: {e}", i + 1)
-                                    } else if !r.columns.is_empty() {
-                                        format!(
-                                            "OK, {} rows returned ({} ms)",
-                                            r.rows.len(),
-                                            r.duration_ms
-                                        )
-                                    } else {
-                                        format!(
-                                            "OK, {} row{} affected ({} ms){}",
-                                            r.affected_rows.unwrap_or(0),
-                                            if r.affected_rows == Some(1) { "" } else { "s" },
-                                            r.duration_ms,
-                                            r.command
-                                                .as_ref()
-                                                .map(|c| format!(" — {c}"))
-                                                .unwrap_or_default()
-                                        )
-                                    }),
-                            )
-                    })),
+                            }))
+                            .child(div().flex_1())
+                            .child(small_button("copy-messages", "Copy").on_click(cx.listener(
+                                |this, _, _, cx| {
+                                    let text = this.state.current().messages_text();
+                                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                                },
+                            ))),
+                    )
+                    .child(
+                        div()
+                            .id("messages-text")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .px(px(14.))
+                            .py(px(8.))
+                            .font(mono())
+                            .text_size(px(12.5))
+                            .line_height(px(19.))
+                            .text_color(rgb(telecat_theme::TEXT_SECONDARY))
+                            .children(text.map(|state| Textarea::new(&state))),
+                    ),
             );
         } else {
-            content = content.child(self.grid_view());
+            content = content.child(self.grid_view(cx));
         }
         let mut bottom = subbar();
         if query {
@@ -800,6 +908,32 @@ impl Workspace {
                     "{} ms",
                     tab.results.iter().map(|r| r.duration_ms).sum::<u64>()
                 )));
+            }
+            if let Some(re) = &tab.result_edit {
+                let editable = re.plan.read_only.is_none();
+                let label = if re.data.dirty() {
+                    "Unsaved changes · ⌘S save · Esc discard · SQL locked".to_owned()
+                } else {
+                    re.plan.badge()
+                };
+                bottom = bottom.child(
+                    div()
+                        .id("result-badge")
+                        .max_w(px(360.))
+                        .px(px(8.))
+                        .py(px(2.))
+                        .rounded(px(5.))
+                        .border_1()
+                        .border_color(rgb(if editable { 0x2f5a2a } else { 0x3a3a3a }))
+                        .text_color(rgb(if editable {
+                            0x8fd18a
+                        } else {
+                            telecat_theme::MUTED
+                        }))
+                        .truncate()
+                        .tooltip(text_tooltip(re.plan.badge()))
+                        .child(label),
+                );
             }
             bottom = bottom
                 .child(
@@ -1005,4 +1139,51 @@ fn highlight_sql(sql: &str, highlight: bool) -> StyledText {
             },
         )
     }))
+}
+
+/// The loading / error / cancelled state shown centred over a grid or list, styled like the
+/// grid's "No rows" pill. `None` when the content should show as it is.
+pub(super) fn load_state_view(placeholder: &Placeholder, id: &'static str) -> Option<Div> {
+    let (spinner, text, color) = match placeholder {
+        Placeholder::Loading { .. } => (true, "Loading…".to_owned(), 0xb8b8b8),
+        Placeholder::Failed(e) => (false, format!("Couldn't load: {e}"), 0xff8a80),
+        Placeholder::Cancelled => (false, "Loading was cancelled".to_owned(), 0xb8b8b8),
+        _ => return None,
+    };
+    Some(
+        div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .items_center()
+            .justify_center()
+            .p(px(24.))
+            .child(
+                div()
+                    .id(id)
+                    .max_w(px(460.))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .px(px(14.))
+                    .py(px(7.))
+                    .rounded(px(8.))
+                    .border_1()
+                    .border_color(rgb(0x3a3a3a))
+                    .bg(rgba(0x2a2a2aee))
+                    .font(ui_font())
+                    .text_size(px(13.))
+                    .text_color(rgb(color))
+                    .when(spinner, |d| {
+                        d.child(icon("spinner.svg", 14., 0xb8b8b8).with_animation(
+                            "load-spin",
+                            Animation::new(std::time::Duration::from_millis(900)).repeat(),
+                            |icon, delta| {
+                                icon.with_transformation(Transformation::rotate(percentage(delta)))
+                            },
+                        ))
+                    })
+                    .child(div().min_w_0().line_clamp(3).child(text)),
+            ),
+    )
 }

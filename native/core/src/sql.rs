@@ -348,6 +348,16 @@ fn code_only(sql: &str, d: Driver) -> String {
     // Stack frames are ranges into one UTF-16 buffer. Nested executable comments
     // use neither recursive Rust calls nor quadratic retained string copies.
     let source = units(sql);
+    // Where the next `*/` starts, for every position. Searching for it afresh for each nested,
+    // unterminated `/*!` made long inputs quadratic.
+    let mut next_close = vec![source.len(); source.len() + 1];
+    for j in (0..source.len().saturating_sub(1)).rev() {
+        next_close[j] = if source[j] == 42 && source[j + 1] == 47 {
+            j
+        } else {
+            next_close[j + 1]
+        };
+    }
     let mut stack = vec![(0usize, source.len(), 0usize)];
     let mut out = Vec::new();
     while let Some((base, limit, i)) = stack.last_mut() {
@@ -359,7 +369,23 @@ fn code_only(sql: &str, d: Driver) -> String {
             }
             continue;
         }
-        if let Some((end, k)) = skip(s, *i, d) {
+        let mysql_comment =
+            (d == Driver::Mysql && at(s, *i) == 47 && at(s, *i + 1) == 42).then(|| {
+                // Same result as `skip`: the first `*/` inside this frame, else the frame's end.
+                let close = next_close[*base + *i + 2];
+                let end = if close + 2 <= *limit {
+                    close + 2 - *base
+                } else {
+                    s.len()
+                };
+                let kind = if matches!(at(s, *i + 2), 33 | 43) {
+                    Kind::Hint
+                } else {
+                    Kind::Comment
+                };
+                (end, kind)
+            });
+        if let Some((end, k)) = mysql_comment.or_else(|| skip(s, *i, d)) {
             let start = *i;
             *i = end;
             if k == Kind::Hint && at(s, start + 2) == 33 {
@@ -430,7 +456,11 @@ pub fn first_keyword(sql: &str, d: Driver) -> String {
         .captures(&code_only(sql, d))
         .map_or(String::new(), |m| m[1].to_ascii_uppercase())
 }
+/// False when the server could write. Stricter than Electron's classification.
 pub fn is_read_only(sql: &str, d: Driver) -> bool {
+    legacy_is_read_only(sql, d) && crate::guard::server_read_only(sql, d)
+}
+fn legacy_is_read_only(sql: &str, d: Driver) -> bool {
     let code = code_only(sql, d);
     let kw = first_keyword(sql, d);
     let write = re(
@@ -450,7 +480,17 @@ pub fn is_read_only(sql: &str, d: Driver) -> bool {
         _ => false,
     }
 }
+/// Why the statement needs explicit confirmation. Electron's reasons come first and keep their
+/// wording; the server-accurate checks add what it misses.
 pub fn dangerous_reason(sql: &str, d: Driver) -> Option<String> {
+    legacy_dangerous_reason(sql, d).or_else(|| crate::guard::server_dangerous_reason(sql, d))
+}
+/// A reason to confirm that only applies outside Silent mode: routine statements that may still
+/// change data or session behaviour, such as `CALL` or `SET autocommit = 0`.
+pub fn caution_reason(sql: &str, d: Driver) -> Option<String> {
+    crate::guard::server_caution_reason(sql, d)
+}
+fn legacy_dangerous_reason(sql: &str, d: Driver) -> Option<String> {
     let raw = code_only(sql, d);
     let mut code = re(r";+\s*$").replace(trim(&raw), "").into_owned();
     let mut kw = first_keyword(sql, d);
@@ -505,7 +545,7 @@ pub fn apply_limit(sql: &str, limit: Option<i64>, d: Driver) -> String {
         return sql.into();
     };
     let kw = first_keyword(sql, d);
-    if !["SELECT", "WITH"].contains(&kw.as_str()) || !is_read_only(sql, d) {
+    if !["SELECT", "WITH"].contains(&kw.as_str()) || !legacy_is_read_only(sql, d) {
         return sql.into();
     }
     let body = strip_comments(sql, d);

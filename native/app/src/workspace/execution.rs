@@ -1,14 +1,16 @@
 use super::*;
 use telecat_core::changes::inline_params;
+use telecat_db::CommitVerdict;
 
 pub(super) enum PendingAction {
     Query { id: u64, plan: QueryPlan },
     Commit(Vec<CommitUnit>),
     Unlock(SafeMode),
+    Import(super::import::ImportRequest),
 }
 impl Workspace {
     pub(super) fn request_commit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.saving || self.busy {
+        if self.saving || self.busy || !self.can_commit(cx) {
             return;
         }
         self.flush_grid_edits(window, cx);
@@ -28,6 +30,26 @@ impl Workspace {
         if !self.next_gate(cx) {
             self.execute_pending(window, cx);
         }
+    }
+    /// Whether a save may start now: never while disconnected, and never before an interrupted
+    /// save is settled, which could otherwise be saved twice. Says why when not.
+    fn can_commit(&mut self, cx: &mut Context<Self>) -> bool {
+        if let Some(unknown) = &self.commit_unknown {
+            if self.connected() && unknown.verdict.is_none() {
+                self.verify_commit(cx);
+            }
+            self.sheet = Some(Sheet::CommitUnknown);
+            cx.notify();
+            return false;
+        }
+        if !self.connected() {
+            self.show_hint(
+                "Not connected: press ⌘⇧R to reconnect, then ⌘S. Your changes stay staged.",
+                cx,
+            );
+            return false;
+        }
+        !self.results_need_recheck(cx)
     }
     pub(super) fn next_gate(&mut self, cx: &mut Context<Self>) -> bool {
         let Some(pending) = &self.pending else {
@@ -71,6 +93,7 @@ impl Workspace {
                 )
             }
             PendingAction::Unlock(_) => (String::new(), Gate::Password, None),
+            PendingAction::Import(request) => self.import_gate(request),
         };
         if danger.is_some() || (gate != Gate::None && !self.approval.safe_mode) {
             self.gate_focused = false;
@@ -121,13 +144,20 @@ impl Workspace {
         }
     }
     pub(super) fn cancel_sheet(&mut self, cx: &mut Context<Self>) {
+        // A running import is stopped with its own Cancel, never by closing the sheet.
+        if matches!(
+            self.sheet,
+            Some(Sheet::Import(super::import::ImportStage::Running { .. }))
+        ) {
+            return;
+        }
         self.pending = None;
         self.sheet = None;
         self.saving = false;
         self.approval = QueryApproval::default();
         cx.notify();
     }
-    fn execute_pending(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn execute_pending(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(pending) = self.pending.take() else {
             return;
         };
@@ -142,6 +172,7 @@ impl Workspace {
                 self.saving = false;
                 self.set_safe_mode(mode, cx);
             }
+            PendingAction::Import(request) => self.start_import(request, cx),
         }
     }
     pub(super) fn change_safe_mode(&mut self, mode: SafeMode, cx: &mut Context<Self>) {
@@ -178,6 +209,12 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // The link may have dropped while a confirmation was open.
+        if !self.can_commit(cx) {
+            self.saving = false;
+            cx.notify();
+            return;
+        }
         let Some(session) = self.session.clone() else {
             self.saving = false;
             cx.notify();
@@ -186,17 +223,41 @@ impl Workspace {
         self.saving = true;
         cx.notify();
         let runtime = self.services.runtime.clone();
+        let driver = self.state.connection.driver;
+        let batches = commit_batches(units, driver);
+        let notice = partial_commit_notice(&batches).map(|detail| {
+            window.prompt(
+                PromptLevel::Warning,
+                "Part of this save can't be rolled back",
+                Some(&detail),
+                &["Save", "Cancel"],
+                cx,
+            )
+        });
+        self.commit_run += 1;
+        let run = self.commit_run;
         cx.spawn_in(window, async move |this, cx| {
-            for unit in units {
+            let proceed = match notice {
+                Some(answer) => answer.await == Ok(0),
+                None => true,
+            };
+            for batch in batches.into_iter().take_while(|_| proceed) {
+                // A lost connection stops the save: later batches never start.
+                let live = this
+                    .update(cx, |this, _| this.connected() && this.commit_run == run)
+                    .unwrap_or(false);
+                if !live {
+                    break;
+                }
                 let s = session.clone();
-                let stmts = unit.statements.clone();
+                let stmts = batch.statements.clone();
                 let review = runtime
                     .spawn(async move { s.review_commit(&stmts).await })
                     .await;
                 let review = match review {
                     Ok(Ok(r)) => r,
                     Ok(Err(e)) => {
-                        let _ = this.update(cx, |this, cx| this.error(e, cx));
+                        let _ = this.update(cx, |this, cx| this.failed_on(&session, e, cx));
                         break;
                     }
                     Err(e) => {
@@ -218,59 +279,108 @@ impl Workspace {
                     true
                 };
                 let s = session.clone();
-                let statements = unit.statements.clone();
-                let transaction = unit.transaction;
-                let _ = this.update(cx, |this, cx| {
-                    for st in &unit.statements {
-                        this.state.logs.push(LogEntry {
-                            time: timestamp(),
-                            sql: inline_params(this.state.connection.driver, st),
+                let statements = batch.statements.clone();
+                let transaction = batch.transaction;
+                let started = this
+                    .update(cx, |this, cx| {
+                        if !this.connected() || this.commit_run != run {
+                            return false;
+                        }
+                        for st in &batch.statements {
+                            this.state.logs.push(LogEntry {
+                                time: timestamp(),
+                                sql: inline_params(driver, st),
+                            });
+                        }
+                        this.commit_in_flight = Some(super::link::InFlightCommit {
+                            run,
+                            session: session.clone(),
+                            batch: batch.clone(),
                         });
-                    }
-                    cx.notify();
-                });
+                        cx.notify();
+                        true
+                    })
+                    .unwrap_or(false);
+                if !started {
+                    break;
+                }
+                let settings = batch.session.clone();
                 let result = runtime
                     .spawn(async move {
-                        telecat_app::commit::execute_reviewed_part(
+                        telecat_app::commit::execute_reviewed_part_with(
                             &s,
                             &statements,
                             transaction,
+                            &settings,
                             move |_| async move { consent },
                         )
                         .await
                     })
                     .await;
-                match result {
-                    Ok(Ok(_)) => {
-                        let _ = this.update(cx, |this, cx| {
-                            this.state.committed(&unit.target);
-                            cx.notify();
-                        });
-                    }
-                    Ok(Err(e)) => {
-                        let _ = this.update(cx, |this, cx| {
-                            this.error(
+                let next = this
+                    .update(cx, |this, cx| {
+                        // Not in flight any more: the connection was declared lost meanwhile
+                        // and this save is "result unknown"; a late answer settles it.
+                        let in_flight = this.commit_in_flight.take_if(|c| c.run == run).is_some();
+                        match result {
+                            Ok(Ok(_)) if in_flight => {
+                                for target in &batch.targets {
+                                    this.state.committed(target);
+                                    this.reset_inspector();
+                                }
+                                cx.notify();
+                                return true;
+                            }
+                            Ok(Ok(_)) => this.resolve_commit(run, CommitVerdict::Applied, cx),
+                            Ok(Err(e)) if telecat_db::is_connection_lost(&e) => {
+                                if in_flight {
+                                    // Disconnected first: the check waits for a live session.
+                                    if this.is_current(&session) {
+                                        this.connection_lost(format!("{e:#}"), cx);
+                                    }
+                                    this.mark_commit_unknown(
+                                        run,
+                                        session.clone(),
+                                        batch.clone(),
+                                        cx,
+                                    );
+                                }
+                            }
+                            // The server answered with an error: it rolled the save back.
+                            Ok(Err(_)) if !in_flight => {
+                                this.resolve_commit(run, CommitVerdict::NotApplied, cx)
+                            }
+                            Ok(Err(e)) => this.error(
                                 format!(
                                     "{e}\n\n{}",
-                                    unit.statements
+                                    batch
+                                        .statements
                                         .iter()
-                                        .map(|s| inline_params(this.state.connection.driver, s))
+                                        .map(|s| inline_params(driver, s))
                                         .collect::<Vec<_>>()
                                         .join("\n")
                                 ),
                                 cx,
-                            )
-                        });
-                        break;
-                    }
-                    Err(e) => {
-                        let _ = this.update(cx, |this, cx| this.error(e, cx));
-                        break;
-                    }
+                            ),
+                            Err(e) => this.error(e, cx),
+                        }
+                        false
+                    })
+                    .unwrap_or(false);
+                if !next {
+                    break;
                 }
             }
             let _ = this.update(cx, |this, cx| {
+                // A newer save started after this one was cut off: it owns `saving` now.
+                if this.commit_run != run {
+                    return;
+                }
                 this.saving = false;
+                if !this.connected() {
+                    cx.notify();
+                    return;
+                }
                 this.refresh_objects(cx);
                 this.refresh_tab(cx);
                 this.load_metadata(cx);
@@ -372,8 +482,14 @@ impl Workspace {
                         if let Some(e) = &mut t.table {
                             e.discard();
                         }
+                        if let Some(r) = &mut t.result_edit {
+                            r.data.discard();
+                        }
                     }
                     this.state.operations.clear();
+                    // Nothing typed but not yet staged may come back after a discard.
+                    this.reset_inspector();
+                    this.cancel_grid_edits(cx);
                     this.sheet = None;
                     this.table_inputs.clear();
                     this.refresh_objects(cx);
@@ -503,7 +619,7 @@ impl Workspace {
             return;
         };
         let query = tab.kind == TabKind::Query && !tab.editor.text.trim().is_empty();
-        let dirty = tab.table.as_ref().is_some_and(|t| t.dirty());
+        let dirty = tab.table.as_ref().is_some_and(|t| t.dirty()) || tab.result_dirty();
         if !query && !dirty {
             self.state.close_tab(id);
             self.table_inputs.remove(&id);

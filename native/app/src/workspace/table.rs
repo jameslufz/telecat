@@ -156,6 +156,7 @@ impl Workspace {
         if part == Part::Data || t.buffer().loaded {
             return;
         }
+        self.begin_load(Some((id, LoadSlot::Part(part))), cx);
         let task = self.services.runtime.spawn(async move {
             let result = if part == Part::Structure {
                 session.structure(&table).await?
@@ -172,6 +173,7 @@ impl Workspace {
         cx.spawn(async move |this, cx| {
             let r = task.await;
             let _ = this.update(cx, |this, cx| {
+                this.end_load(Some((id, LoadSlot::Part(part))), &super::flatten(&r));
                 match r {
                     Ok(Ok((result, structure))) => {
                         this.state.logs.push(LogEntry {
@@ -201,7 +203,7 @@ impl Workspace {
                             }
                         }
                     }
-                    Ok(Err(e)) => this.error(e, cx),
+                    Ok(Err(e)) => this.failed(e, cx),
                     Err(e) => this.error(e, cx),
                 }
                 cx.notify();
@@ -535,7 +537,7 @@ impl Workspace {
             let r = task.await;
             let _ = this.update(cx, |this, cx| match r {
                 Ok(Ok(sql)) => this.new_query(&sql, cx),
-                Ok(Err(e)) => this.error(e, cx),
+                Ok(Err(e)) => this.failed(e, cx),
                 Err(e) => this.error(e, cx),
             });
         })
@@ -658,7 +660,7 @@ impl Workspace {
                     .child(super::layout::scrollbar(&self.ddl_scroll, cx)),
             );
         } else {
-            view = view.child(self.grid_view());
+            view = view.child(self.grid_view(cx));
         }
         let mut bottom = subbar().child(
             div()
@@ -795,7 +797,7 @@ impl Workspace {
                             t.ddl = Some(ddl);
                         }
                     }
-                    Ok(Err(e)) => this.error(e, cx),
+                    Ok(Err(e)) => this.failed(e, cx),
                     Err(e) => this.error(e, cx),
                 }
                 cx.notify();

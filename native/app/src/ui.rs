@@ -225,3 +225,27 @@ pub fn backdrop() -> Div {
         .items_start()
         .pt(px(60.))
 }
+/// The full text of something shown truncated, as a hover tooltip.
+pub struct TextTooltip(SharedString);
+impl Render for TextTooltip {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .max_w(px(520.))
+            .px(px(8.))
+            .py(px(5.))
+            .rounded(px(6.))
+            .border_1()
+            .border_color(rgb(0x3a3a3a))
+            .bg(rgb(0x2b2b2b))
+            .text_color(rgb(0xe8e8e8))
+            .text_size(px(12.))
+            .line_height(px(16.))
+            .child(self.0.clone())
+    }
+}
+pub fn text_tooltip(
+    text: impl Into<SharedString>,
+) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    let text = text.into();
+    move |_, cx| cx.new(|_| TextTooltip(text.clone())).into()
+}

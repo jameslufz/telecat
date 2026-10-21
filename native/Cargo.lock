@@ -5781,7 +5781,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-app"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -5816,7 +5816,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-core"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "regex",
@@ -5827,10 +5827,11 @@ dependencies = [
 
 [[package]]
 name = "telecat-db"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "bytes",
+ "flate2",
  "futures-util",
  "mysql_async",
  "regex",
@@ -5838,6 +5839,7 @@ dependencies = [
  "rustls-pemfile",
  "serde_json",
  "telecat-core",
+ "telecat-db",
  "tokio",
  "tokio-postgres",
  "tokio-postgres-rustls",
@@ -5846,7 +5848,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-editor"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "gpui-kit",
  "gpui-pre",
@@ -5889,7 +5891,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-grid"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "gpui-kit",
  "gpui-pre",
@@ -5905,7 +5907,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-theme"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "gpui-kit",
  "gpui-pre-apple",

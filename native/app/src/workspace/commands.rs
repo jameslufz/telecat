@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(test)]
+mod tests;
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, Action)]
 #[action(namespace = workspace, no_json)]
 pub struct Command {
@@ -30,6 +32,7 @@ pub fn install(cx: &mut App) {
             ("cmd-e", "open-sql-query"),
             ("cmd-w", "close-tab"),
             ("cmd-r", "refresh"),
+            ("cmd-shift-r", "reconnect"),
             ("cmd-.", "running-queries"),
             ("cmd-0", "toggle-sidebar"),
             ("cmd-shift-0", "toggle-panel"),
@@ -58,23 +61,28 @@ pub fn install(cx: &mut App) {
         .map(|(key, name)| KeyBinding::new(key, Command::new(name), None)),
     );
     cx.on_action(|command: &Command, cx| {
-        if let Some(handle) = cx.active_window() {
-            let _ = handle.update(cx, |_, window, cx| {
-                match command.name.as_str() {
-                    "about"=>{unsafe {let app:*mut objc2::runtime::AnyObject=objc2::msg_send![objc2::class!(NSApplication), sharedApplication];let _:()=objc2::msg_send![app,orderFrontStandardAboutPanel:std::ptr::null::<objc2::runtime::AnyObject>()];}return;},
-                    "show-all"=>{cx.unhide_other_apps();return;},
-                    "minimize"=>{window.minimize_window();return;},"zoom"=>{window.zoom_window();return;},"fullscreen"=>{window.toggle_fullscreen();return;},"hide"=>{cx.hide();return;},"hide-others"=>{cx.hide_other_apps();return;},"front"=>{cx.activate(true);return;},_=>{}
-                }
-                let view = host::active_workspace(window,cx);
-                if let Some(view) = view {
-                    view.update(cx, |this, cx| this.command(&command.name, window, cx));
-                } else if ["undo","redo","cut","copy","paste","paste-match","select-all","delete"].contains(&command.name.as_str()) {
-                    components::native_edit(&command.name,window,cx);
-                } else if command.name == "close-tab" {
-                    window.remove_window();
-                }
-            });
-        }
+        let command = command.clone();
+        // Key bindings dispatch this while GPUI is updating the active window, which
+        // can't be updated again until that dispatch returns.
+        cx.defer(move |cx| {
+            if let Some(handle) = cx.active_window() {
+                let _ = handle.update(cx, |_, window, cx| {
+                    match command.name.as_str() {
+                        "about"=>{unsafe {let app:*mut objc2::runtime::AnyObject=objc2::msg_send![objc2::class!(NSApplication), sharedApplication];let _:()=objc2::msg_send![app,orderFrontStandardAboutPanel:std::ptr::null::<objc2::runtime::AnyObject>()];}return;},
+                        "show-all"=>{cx.unhide_other_apps();return;},
+                        "minimize"=>{window.minimize_window();return;},"zoom"=>{window.zoom_window();return;},"fullscreen"=>{window.toggle_fullscreen();return;},"hide"=>{cx.hide();return;},"hide-others"=>{cx.hide_other_apps();return;},"front"=>{cx.activate(true);return;},_=>{}
+                    }
+                    let view = host::active_workspace(window,cx);
+                    if let Some(view) = view {
+                        view.update(cx, |this, cx| this.command(&command.name, window, cx));
+                    } else if ["undo","redo","cut","copy","paste","paste-match","select-all","delete"].contains(&command.name.as_str()) {
+                        components::native_edit(&command.name,window,cx);
+                    } else if command.name == "close-tab" {
+                        window.remove_window();
+                    }
+                });
+            }
+        });
     });
 }
 impl Workspace {
@@ -95,6 +103,13 @@ impl Workspace {
             components::native_edit(name, window, cx);
             return;
         }
+        // Reconnecting must work whatever is open or hung, a save that never returns included.
+        if name == "reconnect" {
+            if !matches!(self.sheet, Some(Sheet::ReconnectPassword)) {
+                self.reconnect(window, cx);
+            }
+            return;
+        }
         if self.sheet.is_some() || (self.saving && !name.starts_with("toggle-")) {
             return;
         }
@@ -113,6 +128,7 @@ impl Workspace {
             "commit" => self.save_command(window, cx),
             "save-file" => self.save_sql_file(cx),
             "open-file" => self.open_sql_file(cx),
+            "import-dump" => self.import_dump_file(cx),
             "quick-open" => self.open_anything(window, cx),
             "discard" => self.discard_all(window, cx),
             "new-table" => self.new_table(cx),
@@ -150,8 +166,8 @@ impl Workspace {
             }
             "switch-db" => self.open_database_picker(window, cx),
             "shortcuts" => self.sheet = Some(Sheet::Shortcuts),
-            "run-current" => self.run(false, cx),
-            "run-all" => self.run(true, cx),
+            "run-current" => self.run(false, window, cx),
+            "run-all" => self.run(true, window, cx),
             _ => {}
         }
         cx.notify();

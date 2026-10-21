@@ -74,7 +74,7 @@ impl Workspace {
                     }
                     Ok(Err(e)) => {
                         this.tree_state.columns.remove(&key);
-                        this.error(e, cx);
+                        this.failed(e, cx);
                     }
                     Err(e) => this.error(e, cx),
                 }

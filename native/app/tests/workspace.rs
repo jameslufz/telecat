@@ -88,6 +88,7 @@ fn query_selection_utf16_limits_and_both_gates() {
         text: "SELECT '😺';\nUPDATE t SET name = 'ไทย' WHERE id = 1;\nDELETE FROM t".into(),
         cursor_utf16: 15,
         selection: None,
+        selection_from: 0,
     };
     let p = QueryPlan::new(&doc, false, Driver::Mysql, SafeMode::Alert2, 1000);
     assert_eq!(p.original.len(), 1);

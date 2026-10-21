@@ -139,7 +139,7 @@ fn main() {
                 let events = cx.subscribe(&grid, |_, grid, event, cx| {
                     println!("EVENT {event:?}");
                     grid.update(cx, |g, cx| match event {
-                        GridEvent::Edit { cell, value } => g.update_model(
+                        GridEvent::Edit { cell, value, .. } => g.update_model(
                             |m| {
                                 m.rows.set(cell.row, cell.col, Some(value.clone()));
                                 m.edits.defaults.remove(cell);

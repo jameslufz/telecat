@@ -330,6 +330,9 @@ impl Workspace {
                                 .on_click(cx.listener(|this, _, _, cx| this.save_named_query(cx))),
                         ),
                 ),
+            Sheet::Import(stage) => self.import_sheet(stage, cx),
+            Sheet::ReconnectPassword => self.reconnect_password_sheet(cx),
+            Sheet::CommitUnknown => self.commit_unknown_sheet(cx),
             Sheet::Error(message) => sheet(560., "Telecat")
                 .child(div().text_color(rgb(0xff8a80)).child(message.clone()))
                 .child(div().mt(px(16.)).flex().justify_end().child(close())),

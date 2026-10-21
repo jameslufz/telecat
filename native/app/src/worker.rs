@@ -28,6 +28,12 @@ impl Runtime {
     }
 }
 pub struct Task<T>(tokio::task::JoinHandle<T>);
+impl<T> Task<T> {
+    /// Stops the task at its next await point, dropping what it holds (its connections too).
+    pub fn abort_handle(&self) -> tokio::task::AbortHandle {
+        self.0.abort_handle()
+    }
+}
 #[derive(Debug, Clone, Copy)]
 pub enum WorkerError {
     Panicked,
@@ -61,6 +67,20 @@ impl<T> Future for Task<T> {
 pub fn install_private_panic_hook() {
     std::panic::set_hook(Box::new(|_| {
         eprintln!("Telecat: unexpected internal failure (details withheld).");
+        // A UI-thread panic aborts the app; keep the user's staged edits on disk first.
+        // Worker panics become errors (see `Runtime`) and lose nothing.
+        let ui_thread = std::thread::current().name() == Some("main");
+        if let Some(root) = ui_thread
+            .then(crate::store::Profile::default_path)
+            .and_then(Result::ok)
+        {
+            if let Some(path) = crate::recovery::write(&root) {
+                eprintln!(
+                    "Telecat: unsaved staged changes written to {}",
+                    path.display()
+                );
+            }
+        }
     }));
 }
 

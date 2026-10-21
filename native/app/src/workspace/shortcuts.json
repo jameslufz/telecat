@@ -72,6 +72,10 @@
         "Reload workspace"
       ],
       [
+        "⇧⌘R",
+        "Reconnect (after the network or VPN dropped)"
+      ],
+      [
         "⌘.",
         "Running queries"
       ],

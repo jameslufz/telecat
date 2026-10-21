@@ -25,6 +25,20 @@ where
     F: FnOnce(CommitReview) -> Fut,
     Fut: Future<Output = bool>,
 {
+    execute_reviewed_part_with(session, statements, transaction, &[], confirm).await
+}
+/// [`execute_reviewed_part`] with the session settings the values were typed under.
+pub async fn execute_reviewed_part_with<F, Fut>(
+    session: &Session,
+    statements: &[Stmt],
+    transaction: bool,
+    settings: &[(String, String)],
+    confirm: F,
+) -> Result<Vec<QueryResult>>
+where
+    F: FnOnce(CommitReview) -> Fut,
+    Fut: Future<Output = bool>,
+{
     let review = session.review_commit(statements).await?;
     let approved = if review.non_transactional.is_empty() {
         false
@@ -35,7 +49,7 @@ where
         true
     };
     session
-        .execute_after_review(statements, transaction, approved)
+        .execute_after_review_with(statements, transaction, approved, settings)
         .await
 }
 /// Native confirmation, matching Electron's use of platform warning dialogs.

@@ -33,9 +33,26 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
   - Data, Structure and Index views;
   - filters with AND/OR;
   - column picker, paging and a row inspector.
-- **Staged editing:** edits are colour-coded (modified / deleted / new). Commit with ⌘S, undo with ⌘Z and discard with Esc. Writes are guarded: there are checks for tables without a primary key and for dangerous statements, and commits run on a separate connection.
+- **Staged editing:**
+  - Edits are colour-coded (modified / deleted / new). Make them in the grid or in the row inspector.
+  - Commit with ⌘S, undo with ⌘Z and discard with Esc.
+  - Double-click the empty area below the rows to add a row.
+  - Writes are guarded:
+    - every UPDATE / DELETE is keyed to exactly one row;
+    - dangerous statements are checked;
+    - commits run in a transaction on a separate connection.
+- **Editable query results:** edit or delete rows in the results of a plain `SELECT`. Writes are allowed only when the server's column metadata proves which base table each column comes from and the table's full key is in the result. JOINs, aggregates, views and anything ambiguous stay read-only, and the results header shows the reason.
+- **Import SQL dump:** right-click the sidebar, then **Import ▸ From SQL Dump…** (`.sql` / `.sql.gz` from mysqldump or pg_dump).
+  - The dump is streamed, with progress and Cancel.
+  - Risky statements are listed before anything runs.
+  - Statements that would reach another database are blocked.
+  - PostgreSQL imports run in a single transaction.
+- **Messages:** the text is selectable and copyable. Errors show their line and column, with a jump-to-location button.
+- **Reconnect:** a dropped connection (for example, when a VPN goes down) is detected and shown in the status pill.
+  - **⌘⇧R** reconnects, and Telecat also retries automatically. Staged edits survive.
+  - If a connection drops mid-save, the save is never retried. Telecat checks the server and tells you whether the save was applied.
 - **Admin:** create tables, Drop / Truncate with confirmation, and Running Queries (⌘.) with kill and auto-refresh.
-- **Sidebar:** Items / Queries / History.
+- **Sidebar:** Items / Queries / History; right-click a group to add a connection to it.
 - **Thai text:** shaped correctly in both the grid and the editor.
 
 ## Install

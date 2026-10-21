@@ -1,10 +1,23 @@
 use crate::{Session, format_bytes};
 use anyhow::{Context, Result};
 use telecat_core::{
-    changes::{Stmt, inline_params, literal, qualified, quote_ident},
+    changes::{
+        IdentityKind, Stmt, inline_params, literal, mysql_identity_columns, mysql_row_id,
+        qualified, quote_ident,
+    },
     filters::{Where, build_where},
     types::*,
 };
+pub(crate) enum Identity {
+    None,
+    Postgres,
+    Mysql {
+        columns: Vec<String>,
+        kinds: Vec<IdentityKind>,
+        keys: Vec<(String, IdentityKind)>,
+        exprs: Vec<String>,
+    },
+}
 impl Session {
     fn table(&self, t: &TableRef) -> TableRef {
         TableRef {
@@ -90,10 +103,41 @@ impl Session {
         }
         Ok(out)
     }
+    /// MySQL column names and identity kinds in `SELECT *` order (invisible columns excluded),
+    /// and the kinds of every column, invisible ones included.
+    async fn mysql_visible_columns(
+        &self,
+        t: &TableRef,
+    ) -> Result<(Vec<String>, Vec<IdentityKind>, Vec<(String, IdentityKind)>)> {
+        let d = self.driver;
+        let rows = self
+            .query(&format!(
+                "SELECT column_name, data_type, extra, column_type FROM information_schema.columns WHERE table_schema={} AND table_name={} ORDER BY ordinal_position",
+                literal(d, &t.schema),
+                literal(d, &t.name)
+            ))
+            .await?
+            .rows;
+        let mut visible = (vec![], vec![]);
+        let mut all = vec![];
+        for r in rows {
+            let field = |i: usize| r.get(i).cloned().flatten().unwrap_or_default();
+            let (name, kind) = (
+                field(0),
+                IdentityKind::from_mysql_type(&field(1), &field(3)),
+            );
+            if !field(2).to_ascii_uppercase().contains("INVISIBLE") {
+                visible.0.push(name.clone());
+                visible.1.push(kind);
+            }
+            all.push((name, kind));
+        }
+        Ok((visible.0, visible.1, all))
+    }
     async fn select(
         &self,
         req: &TableDataRequest,
-    ) -> Result<(String, Where, Vec<String>, String, bool)> {
+    ) -> Result<(String, Where, Vec<String>, String, Identity)> {
         let d = self.driver;
         let t = self.table(&req.table);
         let rel = qualified(d, &t);
@@ -113,29 +157,61 @@ impl Session {
         } else {
             String::new()
         };
-        let ids = if d == Driver::Postgres {
-            self.strings(&format!(
-                "SELECT relkind::text FROM pg_class WHERE oid = {}::regclass",
-                literal(d, &rel)
-            ))
-            .await?
-            .first()
-            .is_some_and(|s| s == "r" || s == "p")
+        let identity = if d == Driver::Postgres {
+            let physical = self
+                .strings(&format!(
+                    "SELECT relkind::text FROM pg_class WHERE oid = {}::regclass",
+                    literal(d, &rel)
+                ))
+                .await?
+                .first()
+                .is_some_and(|s| s == "r" || s == "p");
+            if physical {
+                Identity::Postgres
+            } else {
+                Identity::None
+            }
         } else {
-            false
+            let (columns, kinds, all) = self.mysql_visible_columns(&t).await?;
+            let key_kinds: Vec<(String, IdentityKind)> = pk
+                .iter()
+                .map(|k| {
+                    let kind = all
+                        .iter()
+                        .find(|c| &c.0 == k)
+                        .map_or(IdentityKind::Other, |c| c.1);
+                    (k.clone(), kind)
+                })
+                .collect();
+            if columns.is_empty() {
+                Identity::None
+            } else {
+                let exprs = mysql_identity_columns(&columns, &kinds, &key_kinds);
+                Identity::Mysql {
+                    columns,
+                    kinds,
+                    keys: key_kinds,
+                    exprs,
+                }
+            }
+        };
+        let extra = match &identity {
+            Identity::None => String::new(),
+            Identity::Postgres => {
+                ", tableoid::oid::text AS \"__telecat_tableoid\", ctid::text AS \"__telecat_ctid\""
+                    .into()
+            }
+            Identity::Mysql { exprs, .. } => exprs
+                .iter()
+                .enumerate()
+                .map(|(i, e)| format!(", {e} AS `__telecat_id{i}`"))
+                .collect(),
         };
         let sql = format!(
-            "SELECT *{} FROM {rel}{}{order} LIMIT {} OFFSET {};",
-            if ids {
-                ", tableoid::oid::text AS \"__telecat_tableoid\", ctid::text AS \"__telecat_ctid\""
-            } else {
-                ""
-            },
-            w.sql,
-            req.limit,
-            req.offset
+            "SELECT *{extra} FROM {rel}{}{order} LIMIT {} OFFSET {};",
+            w.sql, req.limit, req.offset
         );
-        Ok((sql, w, pk, rel, ids))
+        Ok((sql, w, pk, rel, identity))
     }
     pub async fn table_data_sql(&self, req: &TableDataRequest) -> Result<String> {
         let (sql, w, _, _, _) = self.select(req).await?;
@@ -147,35 +223,111 @@ impl Session {
             inline_params(self.driver, &st)
         })
     }
-    pub async fn table_data(&self, req: &TableDataRequest) -> Result<TableDataResult> {
-        let (sql, w, pk, rel, ids) = self.select(req).await?;
-        let mut result = self.run(&sql, &w.params).await?;
-        let total = self
-            .run(
-                &format!(
-                    "SELECT COUNT(*) {}count FROM {rel}{};",
+    /// Table reads run on the reader connection: the editor's connection may hold the user's own
+    /// transaction or session settings (time zone, sql_mode…) that would change what rows look
+    /// like, and a slow read there or on the commit connection would block the editor or ⌘S.
+    /// Raw SQL filters are user-written expressions that may call functions with side effects, so
+    /// those reads run in a read-only transaction that is always rolled back.
+    async fn read_rows(
+        &self,
+        page: &str,
+        count: &str,
+        params: &[serde_json::Value],
+        raw: bool,
+    ) -> Result<(QueryResult, QueryResult)> {
+        let mut slot = self.reader.lock().await;
+        let mut conn = match slot.take() {
+            Some(c) => c,
+            None => self.open_reader().await?,
+        };
+        let id = self.backend_id_of(&mut conn).await?;
+        *self.reader_busy.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
+        let begin = if self.driver == Driver::Mysql {
+            "START TRANSACTION READ ONLY"
+        } else {
+            "BEGIN TRANSACTION READ ONLY"
+        };
+        let result = async {
+            if raw {
+                conn.run(begin, &[]).await?;
+            }
+            let page = conn.run(page, params).await?.0;
+            let count = conn.run(count, params).await?.0;
+            Ok::<_, anyhow::Error>((page, count))
+        }
+        .await;
+        *self.reader_busy.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        if raw {
+            // A raw filter can leave session state behind that a rollback doesn't undo (GET_LOCK,
+            // pg_advisory_lock, user variables, temporary tables). Its connection is discarded.
+            let _ = conn.run("ROLLBACK", &[]).await;
+            // Released explicitly too: the server drops a closed session's locks asynchronously.
+            let _ = conn
+                .run(
                     if self.driver == Driver::Mysql {
-                        "as "
+                        "SELECT RELEASE_ALL_LOCKS()"
                     } else {
-                        "AS "
+                        "SELECT pg_advisory_unlock_all()"
                     },
-                    w.sql
-                ),
-                &w.params,
-            )
-            .await?
+                    &[],
+                )
+                .await;
+            conn.close().await;
+        } else {
+            *slot = Some(conn);
+        }
+        result.map_err(|e| {
+            let text = format!("{e:#}");
+            if text.starts_with("ER_QUERY_INTERRUPTED") || text.starts_with("57014") {
+                anyhow::anyhow!("Loading the table was cancelled.")
+            } else if raw
+                && (text.starts_with("ER_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION")
+                    || text.starts_with("25006"))
+            {
+                anyhow::anyhow!(
+                    "{text}\n\nRaw SQL filters run in a read-only transaction, so a filter that would change data is refused."
+                )
+            } else {
+                e
+            }
+        })
+    }
+    pub async fn table_data(&self, req: &TableDataRequest) -> Result<TableDataResult> {
+        let (sql, w, pk, rel, identity) = self.select(req).await?;
+        let raw = req
+            .filters
+            .iter()
+            .any(|f| f.enabled && f.column == RAW_SQL && !f.value.trim().is_empty());
+        let count_sql = format!(
+            "SELECT COUNT(*) {}count FROM {rel}{};",
+            if self.driver == Driver::Mysql {
+                "as "
+            } else {
+                "AS "
+            },
+            w.sql
+        );
+        let (mut result, count) = self.read_rows(&sql, &count_sql, &w.params, raw).await?;
+        let total = count
             .rows
             .first()
             .and_then(|r| r.first())
             .and_then(|v| v.as_ref())
             .context("Missing row count")?
             .parse()?;
-        let row_ids = if ids {
+        let hidden = match &identity {
+            Identity::None => 0,
+            Identity::Postgres => 2,
+            Identity::Mysql { exprs, .. } => exprs.len(),
+        };
+        let row_ids = if hidden == 0 {
+            None
+        } else {
             let n = result
                 .columns
                 .len()
-                .checked_sub(2)
-                .context("Missing physical identity columns")?;
+                .checked_sub(hidden)
+                .context("Missing row identity columns")?;
             result.columns.truncate(n);
             if let Some(v) = &mut result.numeric {
                 v.truncate(n);
@@ -183,20 +335,41 @@ impl Session {
             if let Some(v) = &mut result.binary {
                 v.truncate(n);
             }
-            Some(
-                result
-                    .rows
-                    .iter_mut()
-                    .map(|r| {
-                        r.split_off(n)
-                            .into_iter()
-                            .map(Option::unwrap_or_default)
-                            .collect()
-                    })
-                    .collect(),
-            )
+            let ids: Vec<Vec<Option<String>>> =
+                result.rows.iter_mut().map(|r| r.split_off(n)).collect();
+            match &identity {
+                Identity::Mysql {
+                    columns,
+                    kinds,
+                    keys,
+                    ..
+                } => {
+                    // Fail closed: if `SELECT *` didn't return exactly the columns the identity
+                    // was built from, or the server returned no fingerprint, the row gets an
+                    // identity that every write refuses ("reload the table").
+                    let matches = *columns == result.columns;
+                    Some(
+                        ids.iter()
+                            .map(|v| {
+                                matches
+                                    .then(|| mysql_row_id(kinds, keys, v))
+                                    .flatten()
+                                    .unwrap_or_else(unidentified_mysql_row)
+                            })
+                            .collect(),
+                    )
+                }
+                _ => Some(
+                    ids.into_iter()
+                        .map(|v| v.into_iter().map(Option::unwrap_or_default).collect())
+                        .collect(),
+                ),
+            }
+        };
+        let row_ids = if self.driver == Driver::Mysql && row_ids.is_none() {
+            Some(vec![unidentified_mysql_row(); result.rows.len()])
         } else {
-            None
+            row_ids
         };
         Ok(TableDataResult {
             result,
@@ -343,11 +516,34 @@ impl Session {
     }
 }
 
-/// mysql2.format display semantics (including its quote/backslash escapes).
+/// A MySQL row id that every write refuses, for rows Telecat couldn't identify exactly.
+fn unidentified_mysql_row() -> Vec<String> {
+    vec!["mysql".into()]
+}
+/// mysql2.format display semantics (including its quote/backslash escapes), applied only where
+/// the server sees placeholders: never inside quoted identifiers, strings or comments.
 fn mysql_preview(sql: &str, params: &[serde_json::Value]) -> String {
-    let mut out = String::new();
-    let mut i = 0;
     let mut args = params.iter();
+    let mut out = String::new();
+    let mut done = 0;
+    for code in telecat_core::guard::code_ranges(sql, Driver::Mysql) {
+        out.push_str(&sql[done..code.start]);
+        if !format_placeholders(&sql[code.clone()], &mut args, &mut out) {
+            out.push_str(&sql[code.end..]);
+            return out;
+        }
+        done = code.end;
+    }
+    out.push_str(&sql[done..]);
+    out
+}
+/// False once the parameters run out; the rest of the text is then kept as written.
+fn format_placeholders<'a>(
+    sql: &str,
+    args: &mut impl Iterator<Item = &'a serde_json::Value>,
+    out: &mut String,
+) -> bool {
+    let mut i = 0;
     while let Some(rel) = sql[i..].find('?') {
         let start = i + rel;
         out.push_str(&sql[i..start]);
@@ -359,7 +555,7 @@ fn mysql_preview(sql: &str, params: &[serde_json::Value]) -> String {
         }
         let Some(v) = args.next() else {
             out.push_str(&sql[start..]);
-            return out;
+            return false;
         };
         if end - start == 2 {
             out.push_str(&quote_ident(
@@ -391,5 +587,5 @@ fn mysql_preview(sql: &str, params: &[serde_json::Value]) -> String {
         i = end;
     }
     out.push_str(&sql[i..]);
-    out
+    true
 }

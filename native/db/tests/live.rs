@@ -11,9 +11,41 @@ fn fixture(d: Driver) -> Value {
         .unwrap_or_else(|| serde_json::from_str(include_str!("fixtures/postgres.json")).unwrap())
 }
 fn normalize(mut v: Value) -> Value {
+    if let Some(sql) = v.as_str() {
+        // The MySQL row identity columns (see table_data) are additions to Electron's SELECT.
+        let start = sql.find(", SHA2(CONCAT_WS(");
+        let end = sql
+            .rfind(" AS `__telecat_id")
+            .and_then(|i| sql[i..].find("` ").map(|j| i + j + 1));
+        if let (Some(start), Some(end)) = (start, end) {
+            return json!(format!("{}{}", &sql[..start], &sql[end..]));
+        }
+    }
     if let Some(o) = v.as_object_mut() {
         o.remove("durationMs");
         o.remove("sql");
+        // Telecat gives MySQL rows an exact identity that Electron's fixtures predate.
+        let mysql_identity = o
+            .get("rowIds")
+            .and_then(Value::as_array)
+            .is_some_and(|ids| ids.iter().all(|id| id[0] == json!("mysql")));
+        if mysql_identity {
+            // Only a real identity may be dropped: the fail-closed sentinel ["mysql"] would make
+            // every row of an editable fixture table read-only.
+            for id in o["rowIds"].as_array().unwrap() {
+                let parts = id.as_array().unwrap();
+                assert!(
+                    parts
+                        .iter()
+                        .any(|p| p.as_str().is_some_and(|p| p.starts_with("fp=")))
+                        && parts
+                            .iter()
+                            .any(|p| p.as_str().is_some_and(|p| p.starts_with("kinds="))),
+                    "MySQL row without an exact identity: {id}"
+                );
+            }
+            o.remove("rowIds");
+        }
         if let Some(ids) = o.get_mut("rowIds") {
             for id in ids.as_array_mut().unwrap() {
                 *id = json!(["OID", "CTID"]);

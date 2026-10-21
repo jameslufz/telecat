@@ -15,5 +15,13 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 webpki-roots = "1"
 rustls-pemfile = "2"
 bytes = "1"
+flate2 = "1"
 futures-util = "0.3"
 regex.workspace = true
+
+[features]
+# A loopback proxy for tests that cut or blackhole the network (src/test_proxy.rs).
+test-support = []
+
+[dev-dependencies]
+telecat-db = { path = ".", features = ["test-support"] }

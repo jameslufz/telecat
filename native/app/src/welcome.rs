@@ -4,7 +4,7 @@ use serde_json::json;
 use std::sync::Arc;
 use telecat_app::{
     credentials::{NATIVE_SERVICE, resolve_password},
-    store::{connection_matches, connection_menu},
+    store::{connection_matches, connection_menu, group_menu, new_connection},
 };
 use telecat_core::types::*;
 #[derive(Clone)]
@@ -25,7 +25,8 @@ impl Render for DragLabel {
     }
 }
 enum Sheet {
-    Picker(Driver),
+    /// Choosing a driver for a new connection, created inside the group when one is given.
+    Picker(Driver, Option<String>),
     Group {
         group: ConnectionGroup,
         move_id: Option<String>,
@@ -49,7 +50,7 @@ pub struct Welcome {
 }
 impl Welcome {
     pub fn show_picker(&mut self, cx: &mut Context<Self>) {
-        self.sheet = Some(Sheet::Picker(Driver::Postgres));
+        self.sheet = Some(Sheet::Picker(Driver::Postgres, None));
         cx.notify();
     }
     fn keyboard(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -65,16 +66,10 @@ impl Welcome {
 
     fn accept_sheet(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match self.sheet.as_ref() {
-            Some(Sheet::Picker(driver)) => {
-                let driver = *driver;
+            Some(Sheet::Picker(driver, group)) => {
+                let c = new_connection(*driver, group.clone());
                 self.sheet = None;
-                crate::open_form(
-                    self.services.clone(),
-                    empty_connection(driver),
-                    String::new(),
-                    "",
-                    cx,
-                );
+                crate::open_form(self.services.clone(), c, String::new(), "", cx);
                 cx.notify();
             }
             Some(Sheet::Password { connection, input }) => {
@@ -133,6 +128,9 @@ impl Welcome {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let notice = (!services.scenario)
+            .then(|| telecat_app::recovery::take_notice(&services.profile.root))
+            .flatten();
         let search = text_input("", "Search for connection...", false, window, cx);
         if scenario.is_empty() || scenario == "welcome" {
             search.update(cx, |s, cx| s.focus(window, cx));
@@ -160,9 +158,9 @@ impl Welcome {
             search,
             selected: None,
             sheet: if scenario == "02-picker-mysql" {
-                Some(Sheet::Picker(Driver::Mysql))
+                Some(Sheet::Picker(Driver::Mysql, None))
             } else {
-                None
+                notice.map(Sheet::Error)
             },
             busy: false,
             smoke: scenario == "smoke",
@@ -376,10 +374,18 @@ impl Welcome {
             .as_str()
             .unwrap_or("#8a8a8a")
             .to_string();
-        let tag_num = u32::from_str_radix(tag_color.trim_start_matches('#'), 16).unwrap();
+        let tag_num =
+            u32::from_str_radix(tag_color.trim_start_matches('#'), 16).unwrap_or(0x8a8a8a);
         div()
             .id(SharedString::from(c.id.clone()))
             .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            .tooltip(text_tooltip(if c.name.is_empty() {
+                "Untitled".to_owned()
+            } else {
+                c.name.clone()
+            }))
             .flex()
             .items_center()
             .gap(px(10.))
@@ -400,12 +406,13 @@ impl Welcome {
                     .min_w_0()
                     .child(
                         div()
+                            .min_w_0()
                             .flex()
                             .items_center()
                             .gap(px(8.))
                             .text_size(px(15.))
                             .line_height(px(18.))
-                            .child(div().truncate().child(if c.name.is_empty() {
+                            .child(div().min_w_0().truncate().child(if c.name.is_empty() {
                                 "Untitled".into()
                             } else {
                                 c.name.clone()
@@ -418,6 +425,7 @@ impl Welcome {
                                         .py(px(1.))
                                         .px(px(7.))
                                         .rounded(px(5.))
+                                        .flex_shrink_0()
                                         .bg(rgba((tag_num << 8) | 0x26))
                                         .text_color(rgb(tag_num))
                                         .child(c.tag.clone()),
@@ -542,6 +550,8 @@ impl Welcome {
                 .child(
                     div()
                         .flex_1()
+                        .min_w_0()
+                        .truncate()
                         .text_size(px(16.))
                         .font_weight(FontWeight::MEDIUM)
                         .child(group.name),
@@ -568,12 +578,33 @@ impl Welcome {
                     }
                     this.services.refresh(cx);
                 }));
-            let group_row=group_row.on_mouse_down(MouseButton::Right,cx.listener(move|_,event:&MouseDownEvent,window,cx|{
-                cx.stop_propagation();let g=context.clone();
-                native_menu::choose(json!([{"id":"rename","label":"Rename…"},{"id":"delete","label":"Delete Group"}]),event.position,window,cx,move|this,id,window,cx|{
-                    if id=="rename"{this.group_sheet(Some(g),None,window,cx);}else{if let Err(e)=this.services.profile.delete_group(&g.id){this.error(e,cx);}this.services.refresh(cx);}
-                });
-            }));
+            let group_row = group_row.on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |_, event: &MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
+                    let g = context.clone();
+                    native_menu::choose(
+                        group_menu(),
+                        event.position,
+                        window,
+                        cx,
+                        move |this, id, window, cx| {
+                            if id == "new" {
+                                this.sheet =
+                                    Some(Sheet::Picker(Driver::Postgres, Some(g.id.clone())));
+                                cx.notify();
+                            } else if id == "rename" {
+                                this.group_sheet(Some(g), None, window, cx);
+                            } else {
+                                if let Err(e) = this.services.profile.delete_group(&g.id) {
+                                    this.error(e, cx);
+                                }
+                                this.services.refresh(cx);
+                            }
+                        },
+                    );
+                }),
+            );
             list = list.child(
                 div()
                     .id(SharedString::from(format!("drop-{}", group.id)))
@@ -646,8 +677,9 @@ impl Welcome {
     }
     fn render_sheet(&self, cx: &mut Context<Self>) -> Option<Div> {
         match self.sheet.as_ref()? {
-            Sheet::Picker(driver) => {
+            Sheet::Picker(driver, group) => {
                 let driver = *driver;
+                let group = group.clone();
                 Some(
                     backdrop().child(
                         sheet(420., "Select a database driver")
@@ -659,6 +691,7 @@ impl Welcome {
                                     ]
                                     .into_iter()
                                     .map(|(d, label, col)| {
+                                        let group = group.clone();
                                         div()
                                             .id(label)
                                             .w(px(150.))
@@ -689,13 +722,14 @@ impl Welcome {
                                                         this.sheet = None;
                                                         crate::open_form(
                                                             this.services.clone(),
-                                                            empty_connection(d),
+                                                            new_connection(d, group.clone()),
                                                             String::new(),
                                                             "",
                                                             cx,
                                                         );
                                                     } else {
-                                                        this.sheet = Some(Sheet::Picker(d));
+                                                        this.sheet =
+                                                            Some(Sheet::Picker(d, group.clone()));
                                                     }
                                                     cx.notify();
                                                 },
@@ -723,7 +757,7 @@ impl Welcome {
                                                 this.sheet = None;
                                                 crate::open_form(
                                                     this.services.clone(),
-                                                    empty_connection(driver),
+                                                    new_connection(driver, group.clone()),
                                                     String::new(),
                                                     "",
                                                     cx,
@@ -906,7 +940,7 @@ impl Render for Welcome {
                                     .mt(px(4.))
                                     .text_color(rgb(telecat_theme::TEXT_SECONDARY))
                                     .line_height(px(16.))
-                                    .child("Version 0.1.0"),
+                                    .child(concat!("Version ", env!("CARGO_PKG_VERSION"))),
                             )
                             .child(div().flex_1())
                             .child(
@@ -922,7 +956,8 @@ impl Render for Welcome {
                                             .id("create")
                                             .hover(|s| s.bg(rgba(0xffffff1c)))
                                             .on_click(cx.listener(|this, _, _, cx| {
-                                                this.sheet = Some(Sheet::Picker(Driver::Postgres));
+                                                this.sheet =
+                                                    Some(Sheet::Picker(Driver::Postgres, None));
                                                 cx.notify();
                                             })),
                                     ),
@@ -972,7 +1007,8 @@ impl Render for Welcome {
                                         .justify_center()
                                         .child(icon("Plus.svg", 18., 0xe8e8e8))
                                         .on_click(cx.listener(|this, _, _, cx| {
-                                            this.sheet = Some(Sheet::Picker(Driver::Postgres));
+                                            this.sheet =
+                                                Some(Sheet::Picker(Driver::Postgres, None));
                                             cx.notify();
                                         })),
                                 )

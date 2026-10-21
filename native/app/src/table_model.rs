@@ -2,7 +2,7 @@
 use anyhow::Result;
 use telecat_core::{changes::*, types::*};
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Part {
     #[default]
     Data,
@@ -90,6 +90,14 @@ impl EditBuffer {
         self.apply(|rows| *rows = base);
     }
     pub fn accepted(&mut self) {
+        // The saved rows are still the same rows: they keep their identities, so the grid's
+        // selection stays on them.
+        let keys: Vec<String> = self
+            .rows
+            .iter()
+            .filter(|r| !r.deleted)
+            .map(|r| r.key.clone())
+            .collect();
         let result = QueryResult {
             rows: self
                 .rows
@@ -100,6 +108,10 @@ impl EditBuffer {
             ..self.result.clone()
         };
         self.reset(result, None);
+        for (row, key) in self.rows.iter_mut().zip(keys) {
+            row.key = key;
+        }
+        self.base = self.rows.clone();
         // Server-assigned defaults and physical row IDs must be fetched before another write.
         self.loaded = false;
     }
@@ -311,20 +323,21 @@ impl TableEditor {
         let mut groups = vec![];
         if self.data.dirty() {
             anyhow::ensure!(self.data.loaded, "Reload table data before editing again");
+            let meta = TableMeta {
+                columns: self.data.result.columns.clone(),
+                primary_key: self.primary_key.clone(),
+                binary: self.data.result.binary.clone(),
+            };
             groups.push(CommitGroup {
                 tab_id,
                 part: Part::Data,
                 transaction: true,
-                statements: data_statements(
-                    d,
-                    &self.table,
-                    &TableMeta {
-                        columns: self.data.result.columns.clone(),
-                        primary_key: self.primary_key.clone(),
-                        binary: self.data.result.binary.clone(),
-                    },
-                    &self.data.rows,
-                )?,
+                statements: data_statements(d, &self.table, &meta, &self.data.rows)?,
+                verify: if d == Driver::Mysql {
+                    mysql_verify_checks(&self.table, &meta, &self.data.rows)
+                } else {
+                    vec![]
+                },
             });
         }
         if self.is_new || self.name != self.table.name || self.structure.dirty() {
@@ -352,6 +365,7 @@ impl TableEditor {
                         rows: self.structure.rows.clone(),
                     },
                 )?,
+                verify: vec![],
             });
         }
         if self.index.dirty() {
@@ -368,6 +382,7 @@ impl TableEditor {
                     &self.index.result.columns,
                     &self.index.rows,
                 )?,
+                verify: vec![],
             });
         }
         groups.retain(|g| !g.statements.is_empty());
@@ -398,4 +413,7 @@ pub struct CommitGroup {
     pub part: Part,
     pub transaction: bool,
     pub statements: Vec<Stmt>,
+    /// How to tell afterwards whether each row edit was saved, if the connection drops
+    /// during the save (MySQL row edits only; see `mysql_verify_checks`).
+    pub verify: Vec<RowVerify>,
 }

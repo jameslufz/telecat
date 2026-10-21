@@ -3,6 +3,7 @@ pub mod credentials;
 pub mod form;
 pub mod import;
 pub mod launch;
+pub mod recovery;
 pub mod store;
 pub mod table_model;
 pub mod worker;

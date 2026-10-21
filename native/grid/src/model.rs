@@ -129,9 +129,12 @@ pub enum GridEvent {
         selection: Selection,
         column: Option<usize>,
     },
+    /// `key` is the edited row's identity (see `GridModel::set_row_keys`). Hosts stage by it,
+    /// never by `cell.row` alone, which may already name another row.
     Edit {
         cell: Cell,
         value: String,
+        key: Option<String>,
     },
     Sort(Option<Sort>),
     Resize {
@@ -142,21 +145,33 @@ pub enum GridEvent {
     ContextMenu {
         cell: Cell,
         bounds: Rect,
+        key: Option<String>,
     },
     Menu {
         id: String,
         cell: Cell,
+        key: Option<String>,
     },
     QuickLook(Cell),
     CellPopup {
         cell: Cell,
         bounds: Rect,
+        key: Option<String>,
     },
     ToggleDetail,
     InsertRow,
-    DuplicateRows(Vec<usize>),
-    DeleteRows(Vec<usize>),
+    DuplicateRows(Vec<RowRef>),
+    DeleteRows(Vec<RowRef>),
     Escape,
+    /// The user asked to edit a cell that can't be edited here, so the host can say why.
+    EditRefused(Cell),
+}
+/// A row as the grid showed it when an action began: its index and its identity, if the host
+/// gave one (see `GridModel::set_row_keys`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RowRef {
+    pub row: usize,
+    pub key: Option<String>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CopyKind {
@@ -170,6 +185,9 @@ pub enum CopyKind {
 pub struct Editing {
     pub cell: Cell,
     pub value: String,
+    /// The identity of the edited row (see `GridModel::set_row_keys`), so a reload can't move the
+    /// editor onto another row.
+    pub key: Option<String>,
 }
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Modifiers {
@@ -213,6 +231,7 @@ pub struct GridModel {
     pub scroll_y: f32,
     pub viewport: Rect,
     last_edit_nonce: Option<u64>,
+    row_keys: Vec<String>,
 }
 impl GridModel {
     pub fn new(columns: Vec<Column>, rows: Vec<Vec<Option<String>>>) -> Self {
@@ -231,6 +250,7 @@ impl GridModel {
             scroll_y: 0.,
             viewport: Rect::default(),
             last_edit_nonce: None,
+            row_keys: vec![],
         }
     }
     /// Stream pages without first allocating a 100k-row Vec of Strings.
@@ -275,7 +295,7 @@ impl GridModel {
         if self
             .editing
             .as_ref()
-            .is_some_and(|e| e.cell.row >= self.rows.len() || e.cell.col >= self.columns.len())
+            .is_some_and(|e| e.cell.row >= self.rows.len() || !self.is_visible(e.cell.col))
         {
             self.editing = None;
         }
@@ -356,6 +376,9 @@ impl GridModel {
     }
     pub fn scroll_to_cell(&mut self, cell: Cell) {
         self.scroll_to_row(cell.row);
+        if !self.is_visible(cell.col) {
+            return;
+        }
         let x = self.column_left(cell.col);
         let num = self.number_width();
         let right = x + self.widths.get(cell.col).copied().unwrap_or(0.);
@@ -367,21 +390,75 @@ impl GridModel {
         }
         self.clamp_scroll();
     }
+    /// Where column `col` starts; a hidden column has no width and sits where it would be.
     pub fn column_left(&self, col: usize) -> f32 {
         self.number_width()
             + self
                 .visible_columns()
-                .take_while(|&i| i != col)
+                .filter(|&i| i < col)
                 .map(|i| self.widths[i])
                 .sum::<f32>()
+    }
+    fn is_visible(&self, col: usize) -> bool {
+        self.columns.get(col).is_some_and(|c| !c.hidden)
     }
     pub fn cell_rect(&self, cell: Cell) -> Rect {
         Rect {
             x: self.column_left(cell.col) - self.scroll_x,
             y: HEADER_HEIGHT + cell.row as f32 * ROW_HEIGHT - self.scroll_y,
-            width: self.widths.get(cell.col).copied().unwrap_or(0.),
+            width: if self.is_visible(cell.col) {
+                self.widths.get(cell.col).copied().unwrap_or(0.)
+            } else {
+                0.
+            },
             height: ROW_HEIGHT,
         }
+    }
+    /// Identifies each row for the host (its staged-row key). When the keys change, the open
+    /// editor and the selection follow their rows by identity: a row that is gone takes its
+    /// editor and selection with it, and nothing is ever applied to whichever row now has the
+    /// old index. An empty list means the host gives no identities.
+    /// The identity of the row now at index `row`, if the host gives identities.
+    pub fn row_key(&self, row: usize) -> Option<&str> {
+        self.row_keys.get(row).map(String::as_str)
+    }
+    pub fn row_ref(&self, row: usize) -> RowRef {
+        RowRef {
+            row,
+            key: self.row_key(row).map(str::to_owned),
+        }
+    }
+    pub fn set_row_keys(&mut self, keys: Vec<String>) {
+        let old = std::mem::replace(&mut self.row_keys, keys);
+        if old == self.row_keys || old.is_empty() || self.row_keys.is_empty() {
+            if let Some(e) = self.editing.as_mut().filter(|e| e.key.is_none()) {
+                e.key = self.row_keys.get(e.cell.row).cloned();
+            }
+            return;
+        }
+        let at: std::collections::HashMap<&str, usize> = self
+            .row_keys
+            .iter()
+            .enumerate()
+            .map(|(i, k)| (k.as_str(), i))
+            .collect();
+        let moved = |row: usize| old.get(row).and_then(|k| at.get(k.as_str())).copied();
+        if let Some(e) = self.editing.take() {
+            let key = e.key.clone().or_else(|| old.get(e.cell.row).cloned());
+            let row = key.as_deref().and_then(|k| at.get(k)).copied();
+            self.editing = row.map(|row| Editing {
+                cell: Cell { row, ..e.cell },
+                key,
+                ..e
+            });
+        }
+        self.selection.rows = self
+            .selection
+            .rows
+            .iter()
+            .filter_map(|&r| moved(r))
+            .collect();
+        self.selection.anchor = self.selection.anchor.and_then(moved);
     }
     pub fn cell_value(&self, cell: Cell) -> Option<&str> {
         if self.edits.defaults.contains(&cell) {
@@ -430,7 +507,11 @@ impl GridModel {
         self.selected_column = Some(cell.col);
         vec![
             self.selection_event(),
-            GridEvent::ContextMenu { cell, bounds },
+            GridEvent::ContextMenu {
+                cell,
+                bounds,
+                key: self.row_key(cell.row).map(str::to_owned),
+            },
         ]
     }
     pub fn click_header(&mut self, col: usize) -> Vec<GridEvent> {
@@ -467,7 +548,7 @@ impl GridModel {
         vec![event]
     }
     pub fn begin_edit(&mut self, cell: Cell) -> bool {
-        if !self.can_edit(cell.col) || cell.row >= self.rows.len() {
+        if !self.can_edit(cell.col) || !self.is_visible(cell.col) || cell.row >= self.rows.len() {
             return false;
         }
         self.open_editor(cell);
@@ -475,7 +556,17 @@ impl GridModel {
     }
     fn open_editor(&mut self, cell: Cell) {
         let value = self.cell_value(cell).unwrap_or("").to_owned();
-        self.editing = Some(Editing { cell, value });
+        let key = self.row_keys.get(cell.row).cloned();
+        self.editing = Some(Editing { cell, value, key });
+    }
+    /// A double click on the body below the last row (or in an empty table) asks the host to
+    /// add a row, like TablePlus. The host stages it and opens its editor with `request_edit`.
+    pub fn double_click_empty_area(&self) -> Vec<GridEvent> {
+        if self.options.hooks.insert && self.editing.is_none() {
+            vec![GridEvent::InsertRow]
+        } else {
+            vec![]
+        }
     }
     /// Explicit editRequest bypasses editable like Electron's effect; nonce deduplicates rerenders.
     pub fn request_edit(&mut self, cell: Cell, nonce: u64) -> Vec<GridEvent> {
@@ -483,7 +574,7 @@ impl GridModel {
             return vec![];
         }
         self.last_edit_nonce = Some(nonce);
-        if cell.row >= self.rows.len() || cell.col >= self.columns.len() {
+        if cell.row >= self.rows.len() || !self.is_visible(cell.col) {
             return vec![];
         }
         self.selection = Selection::single(cell.row);
@@ -501,6 +592,7 @@ impl GridModel {
             events.push(GridEvent::Edit {
                 cell: e.cell,
                 value: e.value,
+                key: e.key,
             });
         }
         if movement != 0 {
@@ -541,8 +633,13 @@ impl GridModel {
                 _ => vec![],
             };
         }
+        let selected: Vec<_> = self
+            .selection
+            .rows
+            .iter()
+            .map(|&row| self.row_ref(row))
+            .collect();
         let hooks = &self.options.hooks;
-        let selected: Vec<_> = self.selection.rows.iter().copied().collect();
         match key {
             Key::Space if !m.meta && !m.control && hooks.detail => {
                 return vec![GridEvent::ToggleDetail];
@@ -602,7 +699,10 @@ impl GridModel {
             }
             Key::Enter => {
                 if let Some(col) = self.selected_column {
-                    self.begin_edit(Cell { row: cur, col });
+                    let cell = Cell { row: cur, col };
+                    if !self.begin_edit(cell) && cell.row < self.rows.len() {
+                        return vec![GridEvent::EditRefused(cell)];
+                    }
                 }
                 return vec![];
             }

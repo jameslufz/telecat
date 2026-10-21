@@ -96,6 +96,17 @@ impl Profile {
             if let Some(old) = s.connections.iter_mut().find(|v| v.id == c.id) {
                 *old = c.clone();
             } else {
+                // A new connection created from a group's menu opens that group. If the group
+                // was deleted while the form was open, the connection is saved ungrouped.
+                match s
+                    .groups
+                    .iter_mut()
+                    .find(|g| Some(&g.id) == c.group_id.as_ref())
+                {
+                    Some(g) if g.collapsed == Some(true) => g.collapsed = Some(false),
+                    Some(_) => {}
+                    None => c.group_id = None,
+                }
                 s.connections.push(c.clone());
             }
             Ok(c)
@@ -333,6 +344,10 @@ pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
     Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
 pub fn atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
+    atomic_write(path, &serde_json::to_vec_pretty(value)?)
+}
+/// Owner-only (0600) file in an owner-only directory, replaced atomically.
+pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path.parent().context("Profile path has no parent")?;
     fs::create_dir_all(parent)?;
     #[cfg(unix)]
@@ -348,7 +363,7 @@ pub fn atomic_json(path: &Path, value: &impl Serialize) -> Result<()> {
         #[cfg(unix)]
         opt.mode(0o600);
         let mut file = opt.open(&tmp)?;
-        file.write_all(&serde_json::to_vec_pretty(value)?)?;
+        file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&tmp, path)?;
         Ok::<_, anyhow::Error>(())
@@ -364,6 +379,16 @@ pub fn connection_matches(c: &ConnectionConfig, search: &str) -> bool {
         || [&c.name, &c.host, &c.database, &c.tag, &c.user]
             .iter()
             .any(|s| s.to_lowercase().contains(&q))
+}
+/// The context menu of a connection group in the welcome list.
+pub fn group_menu() -> Value {
+    json!([{"id":"new","label":"New Connection…"},{"type":"separator"},{"id":"rename","label":"Rename…"},{"id":"delete","label":"Delete Group"}])
+}
+/// A blank connection for the new-connection form, placed in `group` when given.
+pub fn new_connection(driver: Driver, group: Option<String>) -> ConnectionConfig {
+    let mut c = empty_connection(driver);
+    c.group_id = group;
+    c
 }
 /// Exact Electron context-menu model; renderer supplies the native presentation.
 pub fn connection_menu(c: &ConnectionConfig, s: &StoreSnapshot) -> Value {

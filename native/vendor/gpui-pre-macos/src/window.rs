@@ -1385,10 +1385,22 @@ impl Drop for MacWindow {
         // hosts alive. Together with the `Arc<Mutex<MacWindowState>>` parked in
         // both views' `windowState` ivar, that forms
         // `MacWindowState -> adapter -> content view -> GPUIView -> MacWindowState`,
-        // a cycle the delegate/`frame_source` teardown below cannot break. Drop
-        // the adapter here so the native view, its `CAMetalLayer` and the
+        // a cycle the delegate/`frame_source` teardown below cannot break. The
+        // adapter is dropped below so the native view, its `CAMetalLayer` and the
         // renderer's command queue are actually released with the window.
-        drop(this.accesskit_adapter.take());
+        let accesskit_adapter = this.accesskit_adapter.take();
+        // Telecat: the adapter swaps the content view's class while it lives and
+        // restores it on drop. AppKit's Touch Bar finder KVO-observes every
+        // responder of the key window, and KVO keys an observation by the
+        // object's class: restoring the class while the finder still observes the
+        // content view makes the finder's later `removeObserver:` raise
+        // NSRangeException ("not registered as an observer"), an uncaught
+        // Objective-C exception that aborts the app (SIGABRT in
+        // `-[_NSTouchBarFinderObservation invalidate]`). So the window leaves
+        // the responder chain and closes first, and the adapter is dropped and the
+        // window released only after AppKit has run display cycles and moved its
+        // observations to the next key window.
+        let executor = this.background_executor.clone();
         this.renderer.destroy();
         let window = this.native_window;
         let sheet_parent = this.sheet_parent.take();
@@ -1406,7 +1418,30 @@ impl Drop for MacWindow {
                     if let Some(parent) = sheet_parent {
                         let _: () = msg_send![parent, endSheet: window];
                     }
+                    let _: BOOL = msg_send![window, makeFirstResponder: nil];
                     window.close();
+                }
+                let content_view: id = unsafe { msg_send![window, contentView] };
+                let observed = || unsafe {
+                    let info: *mut c_void = msg_send![content_view, observationInfo];
+                    !info.is_null()
+                };
+                let mut waited = Duration::ZERO;
+                while waited < Duration::from_secs(5) {
+                    executor.timer(Duration::from_millis(100)).await;
+                    waited += Duration::from_millis(100);
+                    if !observed() {
+                        break;
+                    }
+                }
+                if observed() {
+                    // Still observed: restoring the class would abort the app. Keep the
+                    // adapter (and so the window) alive instead; a small leak, never a crash.
+                    std::mem::forget(accesskit_adapter);
+                } else {
+                    drop(accesskit_adapter);
+                }
+                unsafe {
                     window.autorelease();
                 }
             })

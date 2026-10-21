@@ -45,6 +45,7 @@ pub fn state(name: &str) -> WorkspaceState {
                 text: "UPDATE sa_banks SET is_disabled = false WHERE id = 1".into(),
                 cursor_utf16: 50,
                 selection: None,
+                selection_from: 0,
             };
             s.current_mut().set_results(vec![QueryResult {
                 columns: ["app", "b", "d", "n", "j"].map(str::to_owned).to_vec(),

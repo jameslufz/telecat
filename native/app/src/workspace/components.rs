@@ -7,6 +7,7 @@ use telecat_editor::{EditorEvent, EditorOptions, SqlEditor};
 use telecat_grid::{Cell, Column, DataGrid, Edits, GridEvent, GridModel, Hooks, RowState};
 
 type GridKey = (u64, u8);
+const HINT_FOR: std::time::Duration = std::time::Duration::from_secs(4);
 #[derive(Default)]
 pub(super) struct Components {
     editors: BTreeMap<u64, Entity<SqlEditor>>,
@@ -15,6 +16,41 @@ pub(super) struct Components {
     edit_nonce: u64,
     row_search: BTreeMap<u64, Entity<InputState>>,
     last_active: u64,
+    /// Rows to select again once a reload's rows are shown: (tab, row keys).
+    pending_selection: Option<(u64, Vec<String>)>,
+}
+/// A selected row before a reload: its primary-key values (if the table has a key) and all of
+/// its values.
+pub(super) struct RememberedRow {
+    key_values: Option<Vec<Option<String>>>,
+    values: Vec<Option<String>>,
+}
+fn row_values(row: &EditRow) -> Vec<Option<String>> {
+    row.orig.clone().unwrap_or_else(|| {
+        row.cur
+            .iter()
+            .map(|v| v.value().map(str::to_owned))
+            .collect()
+    })
+}
+fn key_values(
+    t: &telecat_app::table_model::TableEditor,
+    row: &EditRow,
+) -> Option<Vec<Option<String>>> {
+    if t.primary_key.is_empty() {
+        return None;
+    }
+    t.primary_key
+        .iter()
+        .map(|k| {
+            let i = t.data.result.columns.iter().position(|c| c == k)?;
+            match &row.orig {
+                Some(orig) => orig.get(i).cloned(),
+                None => row.cur.get(i).map(|v| v.value().map(str::to_owned)),
+            }
+        })
+        .collect::<Option<Vec<_>>>()
+        .filter(|v| v.iter().all(Option::is_some))
 }
 struct GridBinding {
     view: Entity<DataGrid>,
@@ -81,6 +117,7 @@ impl Workspace {
                                 text: e.text(cx).to_string(),
                                 cursor_utf16: e.cursor(cx),
                                 selection: e.selected_text(cx),
+                                selection_from: e.selection(cx).start,
                             };
                             if let Some(t) = this.state.tabs.iter_mut().find(|t| t.id == id) {
                                 t.editor = doc;
@@ -89,8 +126,8 @@ impl Workspace {
                                 this.queue_drafts(cx);
                             }
                         }
-                        EditorEvent::RunCurrent => this.run(false, cx),
-                        EditorEvent::RunAll => this.run(true, cx),
+                        EditorEvent::RunCurrent => this.run(false, window, cx),
+                        EditorEvent::RunAll => this.run(true, window, cx),
                         EditorEvent::Beautify => this.format_editor(false, window, cx),
                         EditorEvent::Uglify => this.format_editor(true, window, cx),
                         EditorEvent::PreviousTab => this.state.step(-1),
@@ -138,8 +175,15 @@ impl Workspace {
                 search
             )
         } else {
-            format!("{}:{}:{}", tab.grid.revision, tab.shown, search)
+            format!(
+                "{}:{}:{}:{:?}",
+                tab.grid.revision,
+                tab.shown,
+                search,
+                tab.result_edit.as_ref().map(|r| r.data.revision)
+            )
         };
+        let stamp = format!("{stamp}:{:?}", std::mem::discriminant(tab.load(tab.slot())));
         if self
             .components
             .grids
@@ -149,6 +193,21 @@ impl Workspace {
             return;
         }
         let (mut model, rows) = make_grid(tab, self.state.connection.driver, &search);
+        let staged = match (&tab.table, &tab.result_edit) {
+            (Some(t), _) => Some(&t.buffer().rows),
+            (None, Some(r)) => Some(&r.data.rows),
+            (None, None) => None,
+        };
+        let keys: Vec<String> = staged.map_or_else(Vec::new, |staged| {
+            rows.iter().map(|&real| staged[real].key.clone()).collect()
+        });
+        // "No rows" only once a load finished empty; never while loading or after a failure.
+        let placeholder = tab
+            .load(tab.slot())
+            .placeholder(!model.rows.is_empty(), std::time::Instant::now());
+        if !matches!(placeholder, Placeholder::None | Placeholder::Empty) {
+            model.options.empty_text = String::new();
+        }
         let loaded = tab.table.as_ref().is_none_or(|t| t.buffer().loaded);
         let running = tab.kind == TabKind::Running;
         if running {
@@ -181,6 +240,8 @@ impl Workspace {
             binding.view.update(cx, |grid, cx| {
                 grid.update_model(
                     |old| {
+                        // Rebind by identity before the new rows replace the old ones.
+                        old.set_row_keys(keys);
                         old.replace_data(model.columns, model.rows);
                         // Electron mounts its metadata grid only after the first load.
                         // Match that sizing point, then retain widths through edits/refresh.
@@ -198,9 +259,38 @@ impl Workspace {
                 )
             });
             binding.stamp = stamp;
-            binding.rows = rows;
             binding.loaded = loaded;
+            if let Some((_, keys)) = self
+                .components
+                .pending_selection
+                .take_if(|(tab, _)| *tab == k.0 && k.1 == 0)
+            {
+                binding.view.update(cx, |g, cx| {
+                    g.update_model(
+                        |m| {
+                            let at: Vec<usize> = keys
+                                .iter()
+                                .filter_map(|key| {
+                                    (0..m.rows.len()).find(|&r| m.row_key(r) == Some(key.as_str()))
+                                })
+                                .collect();
+                            m.selection.anchor = at.first().copied();
+                            m.selection.rows = at.into_iter().collect();
+                        },
+                        cx,
+                    )
+                });
+            }
+            // The selected row shown in the inspector is the one the grid highlights.
+            let tab = self.state.current();
+            if tab.table.is_some() || tab.result_edit.is_some() {
+                let anchor = binding.view.read(cx).model().selection.anchor;
+                let selected = anchor.and_then(|r| rows.get(r)).copied();
+                self.state.current_mut().grid.selected_row = selected;
+            }
+            binding.rows = rows;
         } else {
+            model.set_row_keys(keys);
             let view = cx.new(|cx| DataGrid::new(model, cx));
             let subscription = cx.subscribe_in(&view, window, move |this, _, event, window, cx| {
                 this.grid_event(k, event.clone(), window, cx)
@@ -216,6 +306,78 @@ impl Workspace {
                 },
             );
         }
+    }
+    /// The Data grid's selected rows of tab `tab_id`, to select again after a reload.
+    pub(super) fn remember_selection(&self, tab_id: u64, cx: &App) -> Vec<RememberedRow> {
+        let (Some(g), Some(t)) = (
+            self.components.grids.get(&(tab_id, 0)),
+            self.state
+                .tabs
+                .iter()
+                .find(|t| t.id == tab_id)
+                .and_then(|t| t.table.as_ref()),
+        ) else {
+            return vec![];
+        };
+        let model = g.view.read(cx).model();
+        model
+            .selection
+            .anchor
+            .into_iter()
+            .chain(model.selection.rows.iter().copied())
+            .filter_map(|r| model.row_key(r))
+            .filter_map(|key| t.data.rows.iter().position(|r| r.key == key))
+            .fold(vec![], |mut out: Vec<usize>, r| {
+                if !out.contains(&r) {
+                    out.push(r);
+                }
+                out
+            })
+            .into_iter()
+            .map(|position| RememberedRow {
+                key_values: key_values(t, &t.data.rows[position]),
+                values: row_values(&t.data.rows[position]),
+            })
+            .collect()
+    }
+    /// After a reload: select the remembered rows again. A row is found by its primary key or,
+    /// without one, by being the only row with exactly its values. Anything else (the row left
+    /// the filter or page, or the server changed it on save) is not selected at all: a position
+    /// could name another row, and the user's next edit would land there. The first one found
+    /// is the inspected row. Selection only: no editor is opened.
+    pub(super) fn restore_selection(&mut self, tab_id: u64, remembered: Vec<RememberedRow>) {
+        let Some(tab) = self.state.tabs.iter_mut().find(|t| t.id == tab_id) else {
+            return;
+        };
+        let Some(t) = &tab.table else {
+            return;
+        };
+        let found: Vec<usize> = remembered
+            .iter()
+            .filter_map(|r| match &r.key_values {
+                Some(values) => t
+                    .data
+                    .rows
+                    .iter()
+                    .position(|row| key_values(t, row).as_ref() == Some(values)),
+                None => {
+                    let mut same = t
+                        .data
+                        .rows
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, row)| row_values(row) == r.values)
+                        .map(|(i, _)| i);
+                    match (same.next(), same.next()) {
+                        (Some(i), None) => Some(i),
+                        _ => None,
+                    }
+                }
+            })
+            .collect();
+        tab.grid.selected_row = found.first().copied();
+        let keys = found.iter().map(|&r| t.data.rows[r].key.clone()).collect();
+        self.components.pending_selection = Some((tab_id, keys));
     }
     pub(super) fn reset_component_focus(&mut self) {
         self.components.last_active = 0;
@@ -249,18 +411,56 @@ impl Workspace {
             .overflow_hidden()
             .children(self.components.editors.get(&self.state.active).cloned())
     }
-    pub(super) fn grid_view(&self) -> Div {
+    pub(super) fn grid_view(&self, cx: &App) -> Div {
+        let grid = self.components.grids.get(&key(self.state.current()));
+        let has_rows = grid.is_some_and(|g| !g.view.read(cx).model().rows.is_empty());
+        let placeholder = self.grid_placeholder(has_rows);
+        let dimmed = matches!(placeholder, Placeholder::Loading { dimmed: true });
         div()
+            .relative()
             .flex_1()
             .min_h_0()
             .min_w_0()
             .overflow_hidden()
-            .children(
-                self.components
-                    .grids
-                    .get(&key(self.state.current()))
-                    .map(|g| g.view.clone()),
+            .flex()
+            .child(
+                div()
+                    .size_full()
+                    .flex()
+                    .when(dimmed, |d| d.opacity(0.35))
+                    .children(grid.map(|g| g.view.clone())),
             )
+            .children(super::panels::load_state_view(&placeholder, "grid-state"))
+            .children(self.hint.as_ref().map(|(text, _)| {
+                div()
+                    .absolute()
+                    .left_0()
+                    .right_0()
+                    .bottom(px(18.))
+                    .flex()
+                    .justify_center()
+                    .child(
+                        div()
+                            .id("grid-hint")
+                            .max_w(px(560.))
+                            .px(px(12.))
+                            .py(px(6.))
+                            .rounded(px(8.))
+                            .border_1()
+                            .border_color(rgb(0x5a4a1a))
+                            .bg(rgba(0x2a2a2af2))
+                            .font(ui_font())
+                            .text_size(px(12.5))
+                            .text_color(rgb(0xf0d27a))
+                            .child(text.clone()),
+                    )
+            }))
+    }
+    /// The current grid's loading state. Electron's "No rows" pill stays the grid's own.
+    pub(super) fn grid_placeholder(&self, has_rows: bool) -> Placeholder {
+        let tab = self.state.current();
+        tab.load(tab.slot())
+            .placeholder(has_rows, std::time::Instant::now())
     }
     pub(super) fn sync_editor_document(&mut self, cx: &App) {
         if let Some(e) = self.components.editors.get(&self.state.active) {
@@ -269,6 +469,7 @@ impl Workspace {
                 text: e.text(cx).to_string(),
                 cursor_utf16: e.cursor(cx),
                 selection: e.selected_text(cx),
+                selection_from: e.selection(cx).start,
             };
         }
     }
@@ -295,6 +496,7 @@ impl Workspace {
         }
     }
     pub(crate) fn flush_grid_edits(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.flush_inspector(window, cx);
         let grids: Vec<_> = self
             .components
             .grids
@@ -306,6 +508,243 @@ impl Workspace {
             for event in events {
                 self.grid_event(k, event, window, cx);
             }
+        }
+    }
+    /// Grid events of a query result mapped onto tables. `false` for events every grid handles
+    /// the same way.
+    fn result_grid_event(
+        &mut self,
+        k: GridKey,
+        event: &GridEvent,
+        grid: &Entity<DataGrid>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(tab) = self.state.tabs.iter_mut().find(|t| t.id == k.0) else {
+            return false;
+        };
+        if tab.table.is_some() {
+            return false;
+        }
+        let Some(re) = tab.result_edit.as_mut() else {
+            return false;
+        };
+        // Rows are found by identity, never by the index the grid showed (see grid_event).
+        let locate = |re: &telecat_app::workspace_model::ResultEditor, key: Option<&str>| {
+            key.and_then(|key| re.data.rows.iter().position(|r| r.key == key))
+        };
+        let model = grid.read(cx).model();
+        let key_at = |r: usize| model.row_key(r).map(str::to_owned);
+        let mut refused = None;
+        match event {
+            GridEvent::Selection { selection, .. } => {
+                let anchor = selection.anchor.or_else(|| selection.rows.first().copied());
+                let key = anchor.and_then(key_at);
+                tab.grid.selected_row = locate(re, key.as_deref());
+            }
+            GridEvent::Edit { cell, value, key } => {
+                if let Some(row) = locate(re, key.as_deref()) {
+                    refused = re.stage(row, cell.col, Value::Text(value.clone())).err();
+                }
+            }
+            GridEvent::DeleteRows(selected) => {
+                let rows: Vec<usize> = selected
+                    .iter()
+                    .filter_map(|r| locate(re, r.key.as_deref()))
+                    .collect();
+                if !rows.is_empty() {
+                    refused = re.delete(&rows).err();
+                }
+            }
+            GridEvent::Menu { id, cell, key } => {
+                let selected: Vec<String> = model
+                    .selection
+                    .rows
+                    .iter()
+                    .filter_map(|&r| key_at(r))
+                    .collect();
+                let Some(row) = locate(re, key.as_deref()) else {
+                    return true;
+                };
+                refused = match id.as_str() {
+                    "null" => re.stage(row, cell.col, Value::Null).err(),
+                    "empty" => re.stage(row, cell.col, Value::Text(String::new())).err(),
+                    "delete" => {
+                        let rows: Vec<usize> = selected
+                            .iter()
+                            .filter_map(|k| locate(re, Some(k)))
+                            .collect();
+                        re.delete(&rows).err()
+                    }
+                    _ => None,
+                };
+            }
+            GridEvent::ContextMenu { cell, bounds, key } => {
+                let mut items = vec![];
+                if re.plan.editable.get(cell.col).copied().unwrap_or(false) {
+                    items.extend([
+                        json!({"id":"null","label":"Set NULL"}),
+                        json!({"id":"empty","label":"Set EMPTY"}),
+                    ]);
+                }
+                if re.plan.delete.is_ok() {
+                    items.push(json!({"id":"delete","label":"Delete Row"}));
+                }
+                if !items.is_empty() {
+                    items.push(json!({"type":"separator"}));
+                }
+                items.extend(telecat_grid::COPY_MENU.iter().map(|item| {
+                    item.map_or(
+                        json!({"type":"separator"}),
+                        |(id, label)| json!({"id":id,"label":label}),
+                    )
+                }));
+                let (cell, key, grid) = (*cell, key.clone(), grid.clone());
+                native_menu::choose(
+                    json!(items),
+                    point(px(bounds.x), px(bounds.y)),
+                    window,
+                    cx,
+                    move |_, id, _, cx| {
+                        grid.update(cx, |g, cx| g.activate_menu(&id, cell, key.as_deref(), cx))
+                    },
+                );
+                return true;
+            }
+            GridEvent::Escape => re.data.discard(),
+            GridEvent::EditRefused(cell) => {
+                let key = key_at(cell.row);
+                refused = Some(
+                    match locate(re, key.as_deref()) {
+                        Some(row) => re.plan.cell_reason(&re.data.rows, row, cell.col),
+                        None => re.plan.column_reason(cell.col),
+                    }
+                    .unwrap_or_else(|| "This cell can't be edited.".into()),
+                );
+            }
+            _ => return false,
+        }
+        if let Some(reason) = refused {
+            self.show_hint(format!("Read-only: {reason}"), cx);
+        }
+        cx.notify();
+        true
+    }
+    /// A short message over the grid, such as why a cell can't be edited. Fades after a while.
+    pub(super) fn show_hint(&mut self, text: impl Into<SharedString>, cx: &mut Context<Self>) {
+        let shown = std::time::Instant::now();
+        self.hint = Some((text.into(), shown));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(HINT_FOR).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.hint.as_ref().is_some_and(|h| h.1 == shown) {
+                    this.hint = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+        cx.notify();
+    }
+    /// Keeps the Messages text of the current query tab in a read-only, selectable text field.
+    pub(super) fn prepare_messages(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let ids: BTreeSet<u64> = self.state.tabs.iter().map(|t| t.id).collect();
+        self.messages.retain(|id, _| ids.contains(id));
+        let tab = self.state.current();
+        if tab.kind != TabKind::Query
+            || self
+                .messages
+                .get(&tab.id)
+                .is_some_and(|m| m.0 == messages_revision(tab))
+        {
+            return;
+        }
+        let (id, revision, text) = (tab.id, messages_revision(tab), tab.messages_text());
+        let state = cx.new(|cx| {
+            let mut s = TextareaState::new(window, cx)
+                .auto_grow(1, 100_000)
+                .soft_wrap(true)
+                .default_value(text);
+            s.set_readonly(true, cx);
+            s.set_editor_style(InputEditorStyle {
+                foreground: rgb(telecat_theme::TEXT_SECONDARY).into(),
+                muted_foreground: rgb(0x666666).into(),
+                background: gpui_kit::transparent_black(),
+                border: gpui_kit::transparent_black(),
+                selection: rgba(0x2f6fed66).into(),
+                caret: rgb(telecat_theme::TEXT).into(),
+                ..Default::default()
+            });
+            s
+        });
+        self.messages.insert(id, (revision, state));
+    }
+    /// Puts the editor's caret on an error's location and selects the character there.
+    pub(super) fn jump_to_location(
+        &mut self,
+        at: Location,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(editor) = self.components.editors.get(&self.state.active).cloned() else {
+            return;
+        };
+        // The location is in the SQL as it ran; after an edit it could name another character.
+        let tab = self.state.current();
+        if tab.run_text != editor.read(cx).text(cx).as_ref() {
+            self.show_hint(
+                "The SQL changed since it ran: run it again to locate the error.",
+                cx,
+            );
+            return;
+        }
+        editor.update(cx, |e, cx| {
+            let text = e.text(cx);
+            let len: usize = text.encode_utf16().count();
+            let start = at.utf16.min(len);
+            let width = text
+                .chars()
+                .scan(0usize, |units, c| {
+                    let here = *units;
+                    *units += c.len_utf16();
+                    Some((here, c))
+                })
+                .find(|(here, _)| *here == start)
+                .map_or(0, |(_, c)| if c == '\n' { 0 } else { c.len_utf16() });
+            e.set_selections(
+                &[telecat_editor::Selection {
+                    anchor: start,
+                    head: start + width,
+                }],
+                cx,
+            );
+            e.focus(window, cx);
+        });
+        self.sync_editor_document(cx);
+        cx.notify();
+    }
+    /// The SQL can't change under staged result edits: they belong to the result it produced.
+    pub(super) fn lock_sql_editor(&self, cx: &mut Context<Self>) {
+        let tab = self.state.current();
+        let locked = tab.result_dirty();
+        if let Some(e) = self.components.editors.get(&tab.id) {
+            let state = e.read(cx).input_state().clone();
+            state.update(cx, |s, cx| {
+                if s.is_editable() == locked {
+                    s.set_readonly(locked, cx);
+                }
+            });
+        }
+    }
+    /// Closes every open cell editor without staging it.
+    pub(super) fn cancel_grid_edits(&mut self, cx: &mut Context<Self>) {
+        for g in self.components.grids.values() {
+            g.view.update(cx, |g, cx| g.cancel_edit(cx));
+        }
+    }
+    pub(super) fn focus_current_grid(&self, window: &mut Window, cx: &mut App) {
+        if let Some(g) = self.components.grids.get(&key(self.state.current())) {
+            window.focus(&g.view.focus_handle(cx), cx);
         }
     }
     pub(super) fn grid_editing(&self, cx: &App) -> bool {
@@ -343,10 +782,9 @@ impl Workspace {
         };
         let grid = binding.view.clone();
         let rows = binding.rows.clone();
-        let real = |cell: Cell| Cell {
-            row: rows.get(cell.row).copied().unwrap_or(cell.row),
-            ..cell
-        };
+        if self.result_grid_event(k, &event, &grid, window, cx) {
+            return;
+        }
         let Some(tab) = self.state.tabs.iter_mut().find(|t| t.id == k.0) else {
             return;
         };
@@ -357,13 +795,23 @@ impl Workspace {
             1 => Part::Structure,
             _ => Part::Index,
         };
+        // A grid event names rows as the grid showed them. Table rows are found again by
+        // identity, because the rows may have been replaced since (a reload landing in the same
+        // frame as a keystroke); a row that is gone takes its action with it.
+        let locate = |t: &mut telecat_app::table_model::TableEditor, key: Option<&str>| {
+            key.and_then(|key| buffer(t, part).rows.iter().position(|r| r.key == key))
+        };
         match event {
             GridEvent::Selection { selection, .. } => {
-                tab.grid.selected_row = selection
-                    .anchor
-                    .or_else(|| selection.rows.first().copied())
-                    .and_then(|r| rows.get(r))
-                    .copied();
+                let anchor = selection.anchor.or_else(|| selection.rows.first().copied());
+                tab.grid.selected_row = match &mut tab.table {
+                    Some(t) => {
+                        let key = anchor
+                            .and_then(|r| grid.read(cx).model().row_key(r).map(str::to_owned));
+                        locate(t, key.as_deref())
+                    }
+                    None => anchor.and_then(|r| rows.get(r)).copied(),
+                };
                 if tab.kind == TabKind::Running {
                     let name = if self.state.connection.driver == Driver::Mysql {
                         "id"
@@ -387,10 +835,11 @@ impl Workspace {
                     }
                 }
             }
-            GridEvent::Edit { cell, value } => {
+            GridEvent::Edit { cell, value, key } => {
                 if let Some(t) = &mut tab.table {
-                    let cell = real(cell);
-                    buffer(t, part).set_cell(cell.row, cell.col, Value::Text(value));
+                    if let Some(row) = locate(t, key.as_deref()) {
+                        stage_cell(t, part, row, cell.col, Value::Text(value));
+                    }
                 }
             }
             GridEvent::DeleteRows(selected) => {
@@ -399,12 +848,11 @@ impl Workspace {
                     return;
                 }
                 if let Some(t) = &mut tab.table {
-                    buffer(t, part).delete(
-                        &selected
-                            .iter()
-                            .filter_map(|r| rows.get(*r).copied())
-                            .collect::<Vec<_>>(),
-                    );
+                    let selected: Vec<_> = selected
+                        .iter()
+                        .filter_map(|r| locate(t, r.key.as_deref()))
+                        .collect();
+                    buffer(t, part).delete(&selected.iter().copied().collect::<Vec<_>>());
                 }
             }
             GridEvent::Escape => {
@@ -426,11 +874,11 @@ impl Workspace {
             }
             GridEvent::DuplicateRows(selected) => {
                 if let Some(t) = &mut tab.table {
-                    let values = selected
+                    let found: Vec<_> = selected
                         .iter()
-                        .filter_map(|r| rows.get(*r).and_then(|r| t.data.rows.get(*r)))
-                        .map(|r| r.cur.clone())
+                        .filter_map(|r| locate(t, r.key.as_deref()))
                         .collect();
+                    let values = found.iter().map(|&r| t.data.rows[r].cur.clone()).collect();
                     inserted = Some(insert_values(t, values));
                 }
             }
@@ -464,19 +912,20 @@ impl Workspace {
                 self.navigate_table(TableNavigation::Sort(sort), window, cx);
                 return;
             }
-            GridEvent::ContextMenu { cell, bounds } => {
+            GridEvent::ContextMenu { cell, bounds, key } => {
+                let real = tab.table.as_mut().and_then(|t| locate(t, key.as_deref()));
+                if tab.table.is_some() && real.is_none() {
+                    return;
+                }
                 let mut items = vec![];
                 if let Some(t) = &tab.table {
+                    let real = real.unwrap_or(cell.row);
                     if part == Part::Data {
                         items.extend([
                             json!({"id":"null","label":"Set NULL"}),
                             json!({"id":"empty","label":"Set EMPTY"}),
                         ]);
-                        if t.data
-                            .rows
-                            .get(real(cell).row)
-                            .is_some_and(|r| r.orig.is_none())
-                        {
+                        if t.data.rows.get(real).is_some_and(|r| r.orig.is_none()) {
                             items.push(json!({"id":"default","label":"Set DEFAULT"}));
                         }
                         items.push(json!({"type":"separator"}));
@@ -485,7 +934,7 @@ impl Workspace {
                     if part != Part::Data
                         || t.data
                             .rows
-                            .get(real(cell).row)
+                            .get(real)
                             .is_some_and(|r| r.deleted || is_modified(r))
                     {
                         items.push(json!({"id":"revert","label":if part==Part::Data {"Revert Row"}else{"Revert"}}));
@@ -503,20 +952,29 @@ impl Workspace {
                     point(px(bounds.x), px(bounds.y)),
                     window,
                     cx,
-                    move |_, id, _, cx| grid.update(cx, |g, cx| g.activate_menu(&id, cell, cx)),
+                    // The menu is modal: the grid acts only if the same row is still at `cell`.
+                    move |_, id, _, cx| {
+                        grid.update(cx, |g, cx| g.activate_menu(&id, cell, key.as_deref(), cx))
+                    },
                 );
             }
-            GridEvent::Menu { id, cell } => {
-                let selected: Vec<_> = grid
-                    .read(cx)
-                    .model()
+            GridEvent::Menu { id, cell, key } => {
+                let model = grid.read(cx).model();
+                let selected_keys: Vec<_> = model
                     .selection
                     .rows
                     .iter()
-                    .filter_map(|r| rows.get(*r).copied())
+                    .filter_map(|&r| model.row_key(r).map(str::to_owned))
                     .collect();
                 if let Some(t) = &mut tab.table {
-                    let cell = real(cell);
+                    let Some(row) = locate(t, key.as_deref()) else {
+                        return;
+                    };
+                    let cell = Cell { row, ..cell };
+                    let selected: Vec<_> = selected_keys
+                        .iter()
+                        .filter_map(|k| locate(t, Some(k)))
+                        .collect();
                     let b = buffer(t, part);
                     match id.as_str() {
                         "null" => b.set_cell(cell.row, cell.col, Value::Null),
@@ -539,11 +997,23 @@ impl Workspace {
                     }
                 }
             }
-            GridEvent::CellPopup { cell, bounds } => {
-                self.metadata_popup(k, real(cell), cell, bounds, window, cx);
+            GridEvent::CellPopup { cell, bounds, key } => {
+                self.metadata_popup(k, key, cell, bounds, window, cx);
                 return;
             }
             GridEvent::Resize { .. } => {}
+            GridEvent::EditRefused(cell) => {
+                let reason = match &tab.table {
+                    Some(_) => "This column can't be edited as text (binary data).".to_owned(),
+                    None if tab.kind == TabKind::Query => {
+                        "Checking whether this result can be edited… Try again in a moment.".into()
+                    }
+                    None => "These results are read-only.".into(),
+                };
+                let _ = cell;
+                self.show_hint(reason, cx);
+                return;
+            }
         }
         if let Some(range) = inserted.filter(|r| !r.is_empty()) {
             tab.grid.selected_row = Some(range.start);
@@ -583,35 +1053,71 @@ impl Workspace {
         if !t.buffer().loaded {
             return;
         }
-        let row = t.buffer().rows.len();
-        let col = match t.part {
-            Part::Data => t
-                .data
-                .result
-                .columns
-                .iter()
-                .position(|c| !t.primary_key.contains(c))
-                .unwrap_or(0),
-            Part::Structure => t
-                .structure
-                .result
-                .columns
-                .iter()
-                .position(|c| c == "column_name")
-                .unwrap_or(0),
-            Part::Index => 0,
+        let real = t.buffer().rows.len();
+        let part = t.part;
+        let preferred = |name: &str| match part {
+            Part::Data => !t.primary_key.iter().any(|k| k == name),
+            Part::Structure => name == "column_name",
+            Part::Index => true,
         };
+        let preferred: Vec<bool> = t
+            .buffer()
+            .result
+            .columns
+            .iter()
+            .map(|c| preferred(c))
+            .collect();
         t.add_row(d);
         self.prepare_components(window, cx);
         self.components.edit_nonce += 1;
-        if let Some(g) = self.components.grids.get(&key(self.state.current())) {
-            let nonce = self.components.edit_nonce;
-            g.view.update(cx, |g, cx| {
-                g.request_edit(Cell { row, col }, nonce, window, cx)
-            });
-        }
+        let Some(g) = self.components.grids.get(&key(self.state.current())) else {
+            cx.notify();
+            return;
+        };
+        let nonce = self.components.edit_nonce;
+        let row = g.rows.iter().position(|&r| r == real);
+        g.view.update(cx, |g, cx| {
+            // Only a column the user can see gets the editor; hidden ones never do.
+            let visible: Vec<usize> = g.model().visible_columns().collect();
+            let col = visible
+                .iter()
+                .copied()
+                .find(|&c| preferred.get(c).copied().unwrap_or(false))
+                .or_else(|| visible.first().copied());
+            match (row, col) {
+                (Some(row), Some(col)) => g.request_edit(Cell { row, col }, nonce, window, cx),
+                (Some(row), None) => g.update_model(
+                    |m| {
+                        m.selection = telecat_grid::Selection::single(row);
+                        m.scroll_to_row(row);
+                    },
+                    cx,
+                ),
+                _ => {}
+            }
+        });
         cx.notify();
     }
+}
+/// Stages one cell edit. The grid and the row inspector both go through here, so every edit
+/// lands in the same undoable buffer and is committed by the same guarded ⌘S path.
+pub(super) fn stage_cell(
+    t: &mut telecat_app::table_model::TableEditor,
+    part: Part,
+    row: usize,
+    col: usize,
+    value: Value,
+) {
+    buffer(t, part).set_cell(row, col, value);
+}
+/// Whether a Data column can be edited as text: binary values never round-trip through text.
+pub(super) fn data_column_editable(result: &QueryResult, col: usize) -> bool {
+    !result
+        .binary
+        .as_ref()
+        .and_then(|b| b.get(col))
+        .copied()
+        .unwrap_or(false)
 }
 fn buffer(
     t: &mut telecat_app::table_model::TableEditor,
@@ -661,11 +1167,46 @@ fn insert_values(
     t.data.apply(|rows| rows.extend(new));
     start..t.data.rows.len()
 }
+/// Grid rows for staged rows, with their colours; `mapping` gets each shown row's index.
+fn buffer_grid_rows(
+    rows: &[EditRow],
+    edits: &mut Edits,
+    mapping: &mut Vec<usize>,
+    keep: impl Fn(&EditRow) -> bool,
+) -> Vec<Vec<Option<String>>> {
+    rows.iter()
+        .enumerate()
+        .filter(|(_, r)| keep(r))
+        .enumerate()
+        .map(|(row, (real, r))| {
+            mapping.push(real);
+            if r.deleted {
+                edits.rows.insert(row, RowState::Deleted);
+            } else if r.orig.is_none() {
+                edits.rows.insert(row, RowState::New);
+            }
+            r.cur
+                .iter()
+                .enumerate()
+                .map(|(col, v)| {
+                    if matches!(v, Value::Unset { .. }) {
+                        edits.defaults.insert(Cell { row, col });
+                    }
+                    if cell_modified(r, col) {
+                        edits.modified.insert(Cell { row, col });
+                    }
+                    v.value().map(str::to_owned)
+                })
+                .collect()
+        })
+        .collect()
+}
 fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>) {
-    let result = tab
-        .table
-        .as_ref()
-        .map_or(&tab.grid.result, |t| &t.buffer().result);
+    let result = match (&tab.table, &tab.result_edit) {
+        (Some(t), _) => &t.buffer().result,
+        (None, Some(r)) => &r.data.result,
+        (None, None) => &tab.grid.result,
+    };
     let part = tab.table.as_ref().map(|t| t.part);
     let columns = result
         .columns
@@ -680,12 +1221,7 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
                 .copied()
                 .unwrap_or(false);
             c.editable = match part {
-                Some(Part::Data) => !result
-                    .binary
-                    .as_ref()
-                    .and_then(|b| b.get(i))
-                    .copied()
-                    .unwrap_or(false),
+                Some(Part::Data) => data_column_editable(result, i),
                 Some(Part::Structure) => {
                     matches!(
                         name.as_str(),
@@ -693,7 +1229,10 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
                     ) || (name == "collation" && driver == Driver::Mysql)
                 }
                 Some(Part::Index) => matches!(name.as_str(), "index_name" | "column_name"),
-                None => false,
+                None => tab
+                    .result_edit
+                    .as_ref()
+                    .is_some_and(|r| r.plan.editable.get(i).copied().unwrap_or(false)),
             };
             c.chevron = match part {
                 Some(Part::Structure) => {
@@ -721,41 +1260,21 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
     let mut edits = Edits::default();
     let mut mapping = vec![];
     let rows = if let Some(t) = &tab.table {
-        t.buffer()
-            .rows
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| {
-                search.is_empty()
-                    || t.part == Part::Data
-                    || r.cur.iter().enumerate().any(|(i, c)| {
-                        (t.part == Part::Index || result.columns[i] == "column_name")
-                            && c.value().unwrap_or("").to_lowercase().contains(search)
-                    })
-            })
-            .enumerate()
-            .map(|(row, (real, r))| {
-                mapping.push(real);
-                if r.deleted {
-                    edits.rows.insert(row, RowState::Deleted);
-                } else if r.orig.is_none() {
-                    edits.rows.insert(row, RowState::New);
-                }
-                r.cur
+        buffer_grid_rows(&t.buffer().rows, &mut edits, &mut mapping, |r| {
+            search.is_empty()
+                || t.part == Part::Data
+                || r.cur.iter().enumerate().any(|(i, c)| {
+                    (t.part == Part::Index || result.columns[i] == "column_name")
+                        && c.value().unwrap_or("").to_lowercase().contains(search)
+                })
+        })
+    } else if let Some(re) = &tab.result_edit {
+        buffer_grid_rows(&re.data.rows, &mut edits, &mut mapping, |r| {
+            search.is_empty()
+                || r.cur
                     .iter()
-                    .enumerate()
-                    .map(|(col, v)| {
-                        if matches!(v, Value::Unset { .. }) {
-                            edits.defaults.insert(Cell { row, col });
-                        }
-                        if cell_modified(r, col) {
-                            edits.modified.insert(Cell { row, col });
-                        }
-                        v.value().map(str::to_owned)
-                    })
-                    .collect()
-            })
-            .collect()
+                    .any(|v| v.value().unwrap_or("").to_lowercase().contains(search))
+        })
     } else {
         result
             .rows
@@ -796,17 +1315,20 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
         "No rows"
     }
     .into();
+    let result_edit = tab.result_edit.as_ref();
     m.options.hooks = Hooks {
         sort: part == Some(Part::Data),
-        edit: part.is_some(),
-        delete: part.is_some() || tab.kind == TabKind::Running,
+        edit: part.is_some() || result_edit.is_some(),
+        delete: part.is_some()
+            || tab.kind == TabKind::Running
+            || result_edit.is_some_and(|r| r.plan.delete.is_ok()),
         insert: part == Some(Part::Data),
         duplicate: part == Some(Part::Data),
         paste: part == Some(Part::Data),
         detail: part.is_none() || part == Some(Part::Data),
         quick_look: true,
         popup: part.is_some(),
-        escape: tab.table.as_ref().is_some_and(|t| t.buffer().dirty()),
+        escape: tab.table.as_ref().is_some_and(|t| t.buffer().dirty()) || tab.result_dirty(),
     };
     m.sort = tab
         .table
@@ -856,7 +1378,7 @@ impl Workspace {
     fn metadata_popup(
         &mut self,
         k: GridKey,
-        cell: Cell,
+        row_key: Option<String>,
         visible: Cell,
         bounds: telecat_grid::Rect,
         window: &mut Window,
@@ -881,6 +1403,10 @@ impl Workspace {
         } else {
             &t.index
         };
+        let Some(row) = b.rows.iter().position(|r| Some(&r.key) == row_key.as_ref()) else {
+            return;
+        };
+        let cell = Cell { row, ..visible };
         let Some(name) = b.result.columns.get(cell.col).cloned() else {
             return;
         };
@@ -992,6 +1518,13 @@ impl Workspace {
                 let Some(value) = id.parse::<usize>().ok().and_then(|i| options.get(i)) else {
                     return;
                 };
+                // The menu is modal; a reload may have replaced the row meanwhile.
+                let Some(g) = this.components.grids.get(&k).map(|g| g.view.clone()) else {
+                    return;
+                };
+                if g.read(cx).model().row_key(visible.row) != row_key.as_deref() {
+                    return;
+                }
                 if value == "\0manual" {
                     this.components.edit_nonce += 1;
                     if let Some(g) = this.components.grids.get(&k) {
@@ -1032,7 +1565,11 @@ impl Workspace {
                             value.clone()
                         })
                     };
-                    buffer(t, part).set_cell(cell.row, cell.col, v);
+                    let b = buffer(t, part);
+                    if let Some(row) = b.rows.iter().position(|r| Some(&r.key) == row_key.as_ref())
+                    {
+                        b.set_cell(row, cell.col, v);
+                    }
                 }
                 cx.notify();
             },
@@ -1120,7 +1657,7 @@ impl Workspace {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok(Ok(())) => this.refresh_tab(cx),
-                    Ok(Err(e)) => this.error(e, cx),
+                    Ok(Err(e)) => this.failed(e, cx),
                     Err(e) => this.error(e, cx),
                 };
                 cx.notify();
@@ -1140,6 +1677,11 @@ impl Workspace {
         .iter()
         .any(|i| i.focus_handle(cx).contains_focused(window, cx))
             || self.table_input_focused(window, cx)
+            || self.inspector_focused(window, cx)
+            || self
+                .messages
+                .values()
+                .any(|m| m.1.focus_handle(cx).contains_focused(window, cx))
             || self
                 .components
                 .row_search
@@ -1158,13 +1700,13 @@ impl Workspace {
             return;
         }
         if matches!(name, "undo" | "redo") {
-            let changed = self.state.current_mut().table.as_mut().is_some_and(|t| {
-                if name == "undo" {
-                    t.buffer_mut().undo()
-                } else {
-                    t.buffer_mut().redo()
-                }
-            });
+            let tab = self.state.current_mut();
+            let buffer = match (&mut tab.table, &mut tab.result_edit) {
+                (Some(t), _) => Some(t.buffer_mut()),
+                (None, Some(r)) => Some(&mut r.data),
+                (None, None) => None,
+            };
+            let changed = buffer.is_some_and(|b| if name == "undo" { b.undo() } else { b.redo() });
             if name == "undo" && !changed {
                 self.state.operations.pop();
             }
@@ -1191,7 +1733,13 @@ impl Workspace {
                     });
                 }),
                 "delete" => {
-                    let rows = g.read(cx).model().selection.rows.iter().copied().collect();
+                    let model = g.read(cx).model();
+                    let rows = model
+                        .selection
+                        .rows
+                        .iter()
+                        .map(|&r| model.row_ref(r))
+                        .collect();
                     self.grid_event(
                         key(self.state.current()),
                         GridEvent::DeleteRows(rows),
@@ -1374,4 +1922,11 @@ fn export_text(
                 + "\r\n"
         }
     }
+}
+
+/// Changes whenever the Messages text does: new results or a new note.
+fn messages_revision(tab: &Tab) -> u64 {
+    tab.grid
+        .revision
+        .wrapping_add((tab.notes.len() as u64) << 40)
 }

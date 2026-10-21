@@ -28,8 +28,9 @@ pub const NEW: u32 = 0x2f5a2a;
 pub const ROW_HEIGHT: f32 = 26.;
 pub const HEADER_HEIGHT: f32 = 30.;
 pub const SCROLLBAR: f32 = 10.;
-pub const EDITOR_FONT_SIZE: f32 = 13.;
-pub const EDITOR_LINE_HEIGHT: f32 = 20.8;
+pub const EDITOR_FONT_SIZE: f32 = 12.;
+/// 1.6 × the font size, so line spacing, the gutter and the caret scale together.
+pub const EDITOR_LINE_HEIGHT: f32 = EDITOR_FONT_SIZE * 1.6;
 pub const EDITOR_FOREGROUND: u32 = 0xe6e6e6;
 pub const EDITOR_PLACEHOLDER: &str = "-- Write your SQL here. ⌘↵ runs the current statement.";
 pub const BLINK_MS: u64 = 600;
@@ -72,6 +73,11 @@ pub fn ui() -> Font {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn sql_editor_text_is_12pt_with_proportional_line_height() {
+        assert_eq!(super::EDITOR_FONT_SIZE, 12.);
+        assert!((super::EDITOR_LINE_HEIGHT / super::EDITOR_FONT_SIZE - 1.6).abs() < 1e-6);
+    }
     #[test]
     fn css_family_resolution_skips_missing_sf_mono() {
         let names = |names: &[&str]| names.iter().map(|s| s.to_string()).collect::<Vec<_>>();

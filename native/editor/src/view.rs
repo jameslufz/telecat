@@ -949,7 +949,8 @@ impl SqlEditor {
             .map(|i| i.label.chars().count())
             .max()
             .unwrap_or(0) as f32
-            * 7.8
+            * theme::FONT_SIZE
+            * 0.6
             + 30.;
         let width = content_width
             .clamp(250., 700.)
@@ -1024,8 +1025,8 @@ impl SqlEditor {
                     .overflow_hidden()
                     .bg(rgb(0x2b2b2b))
                     .font_family(theme::mono().family)
-                    .text_size(px(13.))
-                    .line_height(px(15.6))
+                    .text_size(px(theme::FONT_SIZE))
+                    .line_height(px(theme::FONT_SIZE * 1.2))
                     .text_color(rgb(0xffffff))
                     .children(items),
             )

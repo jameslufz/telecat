@@ -117,6 +117,10 @@ impl DataGrid {
             frame_stats: FrameStats::default(),
         }
     }
+    /// Where the grid was last painted, in window coordinates.
+    pub fn bounds(&self) -> Bounds<Pixels> {
+        self.bounds
+    }
     pub fn model(&self) -> &GridModel {
         &self.model
     }
@@ -131,14 +135,21 @@ impl DataGrid {
         cx.notify();
         events
     }
+    /// Closes the cell editor without staging anything.
+    pub fn cancel_edit(&mut self, cx: &mut Context<Self>) {
+        self.model.editing = None;
+        self.editor = None;
+        cx.notify();
+    }
     pub fn editor_state(&self) -> Option<Entity<TextareaState>> {
         self.editor.as_ref().map(|e| e.state.clone())
     }
     pub fn update_model(&mut self, f: impl FnOnce(&mut GridModel), cx: &mut Context<Self>) {
         f(&mut self.model);
         self.model.reconcile();
-        if self.model.editing.is_none() {
-            self.editor = None;
+        match (&mut self.editor, &self.model.editing) {
+            (Some(editor), Some(edit)) => editor.cell = edit.cell,
+            _ => self.editor = None,
         }
         cx.notify();
     }
@@ -166,8 +177,18 @@ impl DataGrid {
             self.emit(events, cx);
         }
     }
-    /// Standard Electron context menu actions. Unknown IDs go back to the caller.
-    pub fn activate_menu(&mut self, id: &str, cell: Cell, cx: &mut Context<Self>) {
+    /// Standard Electron context menu actions. Unknown IDs go back to the caller. `key` is the
+    /// row's identity when the menu opened; if another row is at `cell` by now, nothing happens.
+    pub fn activate_menu(
+        &mut self,
+        id: &str,
+        cell: Cell,
+        key: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.model.row_key(cell.row) != key {
+            return;
+        }
         let kind = match id {
             "cell" => Some(CopyKind::Cell),
             "row-tsv" => Some(CopyKind::RowTsv),
@@ -182,6 +203,7 @@ impl DataGrid {
             cx.emit(GridEvent::Menu {
                 id: id.into(),
                 cell,
+                key: key.map(str::to_owned),
             });
         }
     }
@@ -227,9 +249,17 @@ impl DataGrid {
             input.focus(window, cx);
             input
         });
+        // The editor's row can move (see GridModel::set_row_keys), so it is recognised by its
+        // text state rather than by the cell it opened on.
+        let id = state.entity_id();
         let subscription =
             cx.subscribe_in(&state, window, move |this, state, event, window, cx| {
-                if this.model.editing.as_ref().is_none_or(|e| e.cell != cell) {
+                if this.model.editing.is_none()
+                    || this
+                        .editor
+                        .as_ref()
+                        .is_none_or(|e| e.state.entity_id() != id)
+                {
                     return;
                 }
                 match event {
@@ -245,7 +275,7 @@ impl DataGrid {
                         window.defer(cx, move |window, cx| {
                             let _ = weak.update(cx, |this, cx| {
                                 if this.editor.as_ref().is_some_and(|e| {
-                                    e.cell == cell
+                                    e.state.entity_id() == id
                                         && !e.state.read(cx).focus_handle(cx).is_focused(window)
                                 }) {
                                     this.finish_editor(true, 0, false, window, cx);
@@ -455,6 +485,12 @@ impl DataGrid {
             .floor()
             .max(0.) as usize;
         if row >= self.model.rows.len() {
+            // Below the last row, or anywhere in an empty table's body.
+            if event.button == MouseButton::Left && event.click_count == 2 {
+                let events = self.model.double_click_empty_area();
+                self.emit(events, cx);
+                cx.notify();
+            }
             return;
         }
         let col = self.hit_column(x);
@@ -481,15 +517,22 @@ impl DataGrid {
                     self.model.selection = Selection::single(row);
                     let events = self.model.click(row, Some(col), GridModifiers::default());
                     self.emit(events, cx);
-                    cx.emit(GridEvent::CellPopup { cell, bounds: rect });
+                    cx.emit(GridEvent::CellPopup {
+                        cell,
+                        bounds: rect,
+                        key: self.model.row_key(row).map(str::to_owned),
+                    });
                 } else {
                     let events = self
                         .model
                         .click(row, Some(col), model_mods(event.modifiers));
                     self.emit(events, cx);
                     if event.click_count == 2 {
-                        self.model.begin_edit(cell);
-                        self.sync_editor(window, cx);
+                        if self.model.begin_edit(cell) {
+                            self.sync_editor(window, cx);
+                        } else {
+                            cx.emit(GridEvent::EditRefused(cell));
+                        }
                     }
                 }
             }

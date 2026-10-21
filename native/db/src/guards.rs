@@ -239,6 +239,18 @@ pub(crate) async fn locked_count(conn: &mut Wire, sql: &str, params: &[Value]) -
         .and_then(|v| v.parse().ok())
         .context("Guard did not return a count")
 }
+/// Plain count, for checks that run outside a transaction (before MySQL DDL).
+pub(crate) async fn count(conn: &mut Wire, sql: &str, params: &[Value]) -> Result<u64> {
+    conn.run(sql, params)
+        .await?
+        .0
+        .rows
+        .first()
+        .and_then(|r| r.first())
+        .and_then(|v| v.as_ref())
+        .and_then(|v| v.parse().ok())
+        .context("Guard did not return a count")
+}
 pub(crate) async fn precheck_write(conn: &mut Wire, database: &str, st: &Stmt) -> Result<()> {
     let Some(expect) = st.expect else {
         return Ok(());

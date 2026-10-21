@@ -4,7 +4,7 @@ exclude = ["vendor/mysql_async", "vendor/tokio-postgres", "vendor/gpui-base", "v
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.4.0"
 edition = "2024"
 license = "MIT"
 
