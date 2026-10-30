@@ -17,6 +17,8 @@ pub struct ConnectionForm {
     static_focus: bool,
     static_test_hover: bool,
     color_editor: Option<Entity<InputState>>,
+    /// Why the typed custom colour can't be used.
+    color_error: Option<String>,
     password: String,
 }
 impl ConnectionForm {
@@ -105,6 +107,7 @@ impl ConnectionForm {
             static_focus: scenario == "30-form-pg",
             static_test_hover: scenario == "03-form-mysql",
             color_editor: None,
+            color_error: None,
             password,
         }
     }
@@ -516,6 +519,7 @@ impl Render for ConnectionForm {
                     .bg(color(&self.c.color))
                     .on_click(cx.listener(|this, _, window, cx| {
                         if !this.status.busy() {
+                            this.color_error = None;
                             this.color_editor = Some(text_input(
                                 this.c.color.clone(),
                                 "#rrggbb",
@@ -738,7 +742,21 @@ impl Render for ConnectionForm {
             root = root.child(
                 backdrop().child(
                     sheet(340., "Custom color")
-                        .child(input_box(&input, false, false))
+                        .child(
+                            input_box(&input, false, false).when(self.color_error.is_some(), |d| {
+                                d.border_color(rgb(0xff8a80))
+                            }),
+                        )
+                        .when_some(self.color_error.clone(), |d, e| {
+                            d.child(
+                                div()
+                                    .id("color-error")
+                                    .mt(px(6.))
+                                    .text_size(px(11.5))
+                                    .text_color(rgb(0xff8a80))
+                                    .child(e),
+                            )
+                        })
                         .child(
                             div()
                                 .mt(px(16.))
@@ -754,14 +772,15 @@ impl Render for ConnectionForm {
                                 .child(button("color-save", "Save", true, false).on_click(
                                     cx.listener(move |this, _, _, cx| {
                                         let value = input.read(cx).value().to_string();
-                                        if regex::Regex::new("^#[0-9a-fA-F]{6}$")
-                                            .unwrap()
-                                            .is_match(&value)
-                                        {
-                                            this.c.color = value;
-                                            this.color_editor = None;
-                                            cx.notify();
+                                        match telecat_app::form::parse_hex_color(&value) {
+                                            Ok(color) => {
+                                                this.c.color = color;
+                                                this.color_editor = None;
+                                                this.color_error = None;
+                                            }
+                                            Err(e) => this.color_error = Some(e.to_string()),
                                         }
+                                        cx.notify();
                                     }),
                                 )),
                         ),

@@ -105,6 +105,7 @@ fn filters_keep_drafts_separate_and_order_new_tables_before_operations() -> Resu
     let object = DbObject {
         table: t.table,
         kind: ObjectKind::Table,
+        signature: None,
     };
     state.operations = vec![
         StagedOperation {
@@ -246,6 +247,7 @@ async fn live(d: Driver) -> Result<()> {
         object: DbObject {
             table: table.clone(),
             kind: ObjectKind::Table,
+            signature: None,
         },
         truncate: true,
     });
@@ -255,6 +257,7 @@ async fn live(d: Driver) -> Result<()> {
         object: DbObject {
             table: table.clone(),
             kind: ObjectKind::Table,
+            signature: None,
         },
         truncate: false,
     });
@@ -352,7 +355,13 @@ fn only_new_columns_move_and_postgres_only_in_new_tables() {
     assert!(pg.column_movable(Driver::Postgres, 1));
     pg.move_column(Driver::Postgres, 1, None);
     let name = |t: &TableEditor, i: usize| {
-        let col = t.structure.result.columns.iter().position(|c| c == "column_name").unwrap();
+        let col = t
+            .structure
+            .result
+            .columns
+            .iter()
+            .position(|c| c == "column_name")
+            .unwrap();
         t.structure.rows[i].cur[col].value().unwrap().to_owned()
     };
     assert_eq!(name(&pg, 0), "column_2");
@@ -374,7 +383,10 @@ fn only_new_columns_move_and_postgres_only_in_new_tables() {
     );
     my.part = Part::Structure;
     my.add_row(Driver::Mysql);
-    assert!(!my.column_movable(Driver::Mysql, 0), "a saved column stays put");
+    assert!(
+        !my.column_movable(Driver::Mysql, 0),
+        "a saved column stays put"
+    );
     my.move_column(Driver::Mysql, 0, Some(1));
     assert_eq!(name(&my, 0), "id");
     my.move_column(Driver::Mysql, 1, None);
@@ -394,12 +406,21 @@ async fn mysql_new_columns_are_added_where_they_were_moved() -> Result<()> {
     };
     let q = qualified(d, &table);
     s.query(&format!("DROP TABLE IF EXISTS {q}")).await?;
-    s.query(&format!("CREATE TABLE {q} (id int PRIMARY KEY, a int, b int)")).await?;
+    s.query(&format!(
+        "CREATE TABLE {q} (id int PRIMARY KEY, a int, b int)"
+    ))
+    .await?;
     let mut state = WorkspaceState::new(config(d));
     state.open_table(table.clone());
     let mut t = TableEditor::new(table.clone(), d, false);
     t.structure.reset(s.structure(&table).await?, None);
-    let col = t.structure.result.columns.iter().position(|c| c == "column_name").unwrap();
+    let col = t
+        .structure
+        .result
+        .columns
+        .iter()
+        .position(|c| c == "column_name")
+        .unwrap();
     t.structure.set_cell(2, col, Cell::Text("b2".into()));
     t.part = Part::Structure;
     for name in ["first_one", "after_a", "after_b2"] {
@@ -414,7 +435,10 @@ async fn mysql_new_columns_are_added_where_they_were_moved() -> Result<()> {
     let units = state.collect_changes()?;
     let sql = &units[0].statements[0].sql;
     assert!(sql.contains("`first_one` varchar(255) NULL FIRST"), "{sql}");
-    assert!(sql.contains("AFTER `a`") && sql.contains("AFTER `b2`"), "{sql}");
+    assert!(
+        sql.contains("AFTER `a`") && sql.contains("AFTER `b2`"),
+        "{sql}"
+    );
     commit(&mut state, &s).await?;
     let names: Vec<_> = s
         .structure(&table)

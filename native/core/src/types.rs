@@ -15,7 +15,29 @@ string_enum!(SafeMode { Silent=>"silent", Alert1=>"alert1", Alert2=>"alert2", Sa
 string_enum!(PasswordMode { Keychain=>"keychain", Ask=>"ask", Command=>"command", None=>"none" });
 string_enum!(SslMode { Preferred=>"PREFERRED", Disabled=>"DISABLED", Required=>"REQUIRED", Allow=>"ALLOW", VerifyCa=>"VERIFY-CA", VerifyFull=>"VERIFY-FULL" });
 string_enum!(Negotiation { Postgres=>"POSTGRES", Direct=>"DIRECT" });
-string_enum!(ObjectKind { Table=>"table", View=>"view", Function=>"function", Procedure=>"procedure" });
+string_enum!(ObjectKind { Table=>"table", View=>"view", MaterializedView=>"materialized view", Function=>"function", Procedure=>"procedure" });
+impl ObjectKind {
+    /// Tables and views of any kind: objects with rows that open in a table tab.
+    pub fn is_relation(self) -> bool {
+        matches!(self, Self::Table | Self::View | Self::MaterializedView)
+    }
+    pub fn is_view(self) -> bool {
+        matches!(self, Self::View | Self::MaterializedView)
+    }
+    pub fn is_routine(self) -> bool {
+        matches!(self, Self::Function | Self::Procedure)
+    }
+    /// The word used in SQL and in messages: "table", "view", "materialized view"…
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Table => "table",
+            Self::View => "view",
+            Self::MaterializedView => "materialized view",
+            Self::Function => "function",
+            Self::Procedure => "procedure",
+        }
+    }
+}
 string_enum!(Combine { And=>"AND", Or=>"OR" });
 impl Default for Combine {
     fn default() -> Self {
@@ -117,11 +139,24 @@ pub struct TableRef {
     pub schema: String,
     pub name: String,
 }
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DbObject {
     #[serde(flatten)]
     pub table: TableRef,
     pub kind: ObjectKind,
+    /// PostgreSQL routines: the identity arguments (`pg_get_function_identity_arguments`), which
+    /// tell overloads apart and are needed to drop one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
+}
+impl DbObject {
+    pub fn new(table: TableRef, kind: ObjectKind) -> Self {
+        Self {
+            table,
+            kind,
+            signature: None,
+        }
+    }
 }
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -153,6 +188,10 @@ pub struct QueryResult {
     pub error_context: Option<String>,
     #[serde(skip)]
     pub error_internal: Option<(usize, String)>,
+    /// MySQL JSON columns: (column, each row's value as the server's JSON text). The rows hold
+    /// the grid's display form, which doesn't load back as the same JSON; exports use these.
+    #[serde(skip)]
+    pub json_text: Option<Vec<(usize, Vec<Option<String>>)>>,
 }
 /// The source of a result column according to the wire protocol's column metadata, never the
 /// SQL text. A computed column has no origin.

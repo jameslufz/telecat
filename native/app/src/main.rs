@@ -2,6 +2,7 @@ mod assets;
 mod export_dialog;
 mod form_view;
 mod native_menu;
+mod shortcuts;
 mod ui;
 mod welcome;
 mod window_frame;

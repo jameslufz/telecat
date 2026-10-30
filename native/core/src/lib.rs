@@ -1,7 +1,9 @@
 pub mod changes;
 pub mod dump;
+pub mod export;
 pub mod filters;
 pub mod guard;
+pub mod objects;
 pub mod position;
 pub mod result_edit;
 pub mod sql;

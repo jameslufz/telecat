@@ -290,6 +290,7 @@ fn change_type(d: Driver, table: &str, old: &str, new: &str) -> Vec<Stmt> {
     structure_statements(
         d,
         &StructureChange {
+            relation: telecat_core::types::ObjectKind::Table,
             table: tref(d, table),
             new_name: table.into(),
             is_new: false,

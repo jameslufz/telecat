@@ -16,6 +16,24 @@ pub use view::{EditorEvent, EditorOptions, Selection, SelectionInfo, SqlEditor};
 #[derive(Default)]
 struct Installed;
 impl Global for Installed {}
+/// The editor's own shortcuts, bound in its key context.
+pub const SHORTCUTS: &[&str] = &[
+    "cmd-enter",
+    "shift-cmd-enter",
+    "cmd-i",
+    "shift-cmd-i",
+    "cmd-[",
+    "cmd-]",
+    "shift-cmd-k",
+    "cmd-/",
+    "cmd-d",
+    "ctrl-cmd-g",
+    "cmd-g",
+    "shift-cmd-g",
+    "cmd-f",
+    "alt-cmd-f",
+    "ctrl-space",
+];
 pub fn init(cx: &mut App) {
     telecat_theme::init(cx);
     if cx.has_global::<Installed>() {
@@ -23,23 +41,7 @@ pub fn init(cx: &mut App) {
     }
     cx.set_global(Installed);
     telecat_editor_engine::init(cx);
-    for key in [
-        "cmd-enter",
-        "shift-cmd-enter",
-        "cmd-i",
-        "shift-cmd-i",
-        "cmd-[",
-        "cmd-]",
-        "shift-cmd-k",
-        "cmd-/",
-        "cmd-d",
-        "ctrl-cmd-g",
-        "cmd-g",
-        "shift-cmd-g",
-        "cmd-f",
-        "alt-cmd-f",
-        "ctrl-space",
-    ] {
+    for &key in SHORTCUTS {
         cx.bind_keys([KeyBinding::new(
             key,
             Shortcut { key: key.into() },

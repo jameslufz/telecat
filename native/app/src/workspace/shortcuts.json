@@ -12,7 +12,23 @@
       ],
       [
         "⌃1 … ⌃9",
-        "Go to open connection 1–9"
+        "Go to open connection 1–9 (several in one window)"
+      ],
+      [
+        "⇧⌘W",
+        "Close window"
+      ],
+      [
+        "⌘H  /  ⌥⌘H",
+        "Hide Telecat / hide others"
+      ],
+      [
+        "⌘M",
+        "Minimize"
+      ],
+      [
+        "⌃⌘F",
+        "Full screen"
       ],
       [
         "⌘Q",
@@ -25,7 +41,11 @@
     "keys": [
       [
         "⌘T",
-        "New tab"
+        "New SQL Query tab"
+      ],
+      [
+        "⇧⌘T",
+        "New table"
       ],
       [
         "⌘W",
@@ -52,8 +72,16 @@
         "Switch database"
       ],
       [
+        "⌘O",
+        "Open SQL file in a new tab"
+      ],
+      [
+        "⇧⌘S",
+        "Save the SQL Query tab as a file"
+      ],
+      [
         "⌘S",
-        "Commit changes (or save query)"
+        "Commit changes (or save the query)"
       ],
       [
         "⇧⌘P",
@@ -66,6 +94,18 @@
       [
         "⌘Z  /  ⇧⌘Z",
         "Undo / redo"
+      ],
+      [
+        "⌘X  /  ⌘C",
+        "Cut / copy"
+      ],
+      [
+        "⌘V  /  ⌘A",
+        "Paste / select all"
+      ],
+      [
+        "⌥⇧⌘V",
+        "Paste and match style"
       ],
       [
         "⌘R",
@@ -89,7 +129,11 @@
       ],
       [
         "⌫  /  ⌥⌫",
-        "Sidebar: delete / truncate table"
+        "Sidebar: delete / truncate the selected item"
+      ],
+      [
+        "Esc",
+        "Sidebar: cancel its pending delete or truncate"
       ]
     ]
   },
@@ -105,20 +149,8 @@
         "Run all"
       ],
       [
-        "⌘I",
-        "Beautify"
-      ],
-      [
-        "⇧⌘I",
-        "Uglify"
-      ],
-      [
-        "⌘O",
-        "Open SQL file"
-      ],
-      [
-        "⇧⌘S",
-        "Save SQL as file"
+        "⌘I  /  ⇧⌘I",
+        "Beautify / uglify"
       ],
       [
         "⌘/",
@@ -131,6 +163,22 @@
       [
         "⌃⌘G",
         "Select all occurrences"
+      ],
+      [
+        "⌘F",
+        "Find"
+      ],
+      [
+        "⌥⌘F",
+        "Find and replace"
+      ],
+      [
+        "⌘G  /  ⇧⌘G",
+        "Find next / previous"
+      ],
+      [
+        "⌃Space",
+        "Show completions"
       ],
       [
         "⌘ click",
@@ -163,7 +211,7 @@
       ],
       [
         "⌘I",
-        "Insert a new row"
+        "Insert a row"
       ],
       [
         "⌫",
@@ -171,7 +219,7 @@
       ],
       [
         "⌘F",
-        "Row filter"
+        "Filters"
       ],
       [
         "⌥⌘F",
@@ -188,6 +236,31 @@
       [
         "Esc",
         "Discard staged edits in the tab"
+      ]
+    ]
+  },
+  {
+    "title": "Filters and triggers",
+    "keys": [
+      [
+        "↵",
+        "Apply this filter"
+      ],
+      [
+        "⌘↵  /  ⇧⌘↵",
+        "Apply all checked filters with AND / OR"
+      ],
+      [
+        "⌘I  /  ⇧⌘I",
+        "Insert / remove a filter rule"
+      ],
+      [
+        "⌘↑  /  ⌘↓",
+        "Previous / next filter rule"
+      ],
+      [
+        "⌘I",
+        "Triggers sheet: add a trigger"
       ]
     ]
   }

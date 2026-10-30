@@ -45,6 +45,29 @@ fn apply_format(panel: &NSSavePanel, extension: &str) {
         extension,
     )));
 }
+static LAST_DIRECTORY: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+/// Where Export and Save SQL As open: the folder last saved to, else ~/Downloads, else home.
+pub fn default_directory() -> PathBuf {
+    if let Some(dir) = LAST_DIRECTORY
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+        .filter(|d| d.is_dir())
+    {
+        return dir;
+    }
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    let downloads = home.join("Downloads");
+    if downloads.is_dir() { downloads } else { home }
+}
+/// Remembers the folder of a file the user just saved, for the next save dialog.
+pub fn remember_directory(file: &Path) {
+    if let Some(dir) = file.parent().filter(|d| d.is_dir()) {
+        *LAST_DIRECTORY.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir.to_path_buf());
+    }
+}
 pub async fn choose_path(directory: &Path, name: &str) -> Result<Option<PathBuf>> {
     let mtm = MainThreadMarker::new().context("Export dialog must run on the main thread")?;
     let panel = NSSavePanel::savePanel(mtm);
@@ -105,6 +128,20 @@ pub async fn choose_path(directory: &Path, name: &str) -> Result<Option<PathBuf>
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn save_dialogs_open_in_downloads_then_the_last_folder() {
+        let first = super::default_directory();
+        assert!(
+            first.ends_with("Downloads") || first.as_os_str() == std::env::var_os("HOME").unwrap()
+        );
+        let dir = std::env::temp_dir().join(format!("telecat-export-dir-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        super::remember_directory(&dir.join("x.csv"));
+        assert_eq!(super::default_directory(), dir);
+        // A folder that is gone falls back again.
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(super::default_directory(), first);
+    }
     #[test]
     fn format_changes_preserve_names_and_select_the_matching_writer_extension() {
         for (label, ext) in super::FORMATS {

@@ -16,7 +16,7 @@ use telecat_db::test_proxy::TestProxy;
 fn upstream(d: Driver) -> u16 {
     if d == Driver::Mysql { 3307 } else { 5434 }
 }
-fn config(d: Driver, port: u16) -> ConnectionConfig {
+pub(in crate::workspace) fn config(d: Driver, port: u16) -> ConnectionConfig {
     let mut c = empty_connection(d);
     c.id = "telecat-link-test".into();
     c.name = "Link test".into();
@@ -28,7 +28,7 @@ fn config(d: Driver, port: u16) -> ConnectionConfig {
     c.password_mode = PasswordMode::Keychain;
     c
 }
-fn schema(d: Driver) -> &'static str {
+pub(in crate::workspace) fn schema(d: Driver) -> &'static str {
     if d == Driver::Mysql {
         "zixma"
     } else {
@@ -36,7 +36,7 @@ fn schema(d: Driver) -> &'static str {
     }
 }
 /// Runs `sql` on the test server directly, not through any proxy.
-fn db(d: Driver, sql: &str) -> Vec<Vec<Option<String>>> {
+pub(in crate::workspace) fn db(d: Driver, sql: &str) -> Vec<Vec<Option<String>>> {
     tokio::runtime::Runtime::new().unwrap().block_on(async {
         telecat_db::Session::connect_test(&config(d, upstream(d)), "secret")
             .await
@@ -47,10 +47,10 @@ fn db(d: Driver, sql: &str) -> Vec<Vec<Option<String>>> {
             .rows
     })
 }
-struct Live {
-    w: AnyWindowHandle,
-    s: Entity<Workspace>,
-    proxy: TestProxy,
+pub(in crate::workspace) struct Live {
+    pub(in crate::workspace) w: AnyWindowHandle,
+    pub(in crate::workspace) s: Entity<Workspace>,
+    pub(in crate::workspace) proxy: TestProxy,
     profile: std::path::PathBuf,
 }
 impl Drop for Live {
@@ -60,7 +60,12 @@ impl Drop for Live {
 }
 /// A workspace connected through a fresh proxy. `plain` turns TLS off so the proxy can see a
 /// COMMIT go by; `ask` sets the connection to ask for its password.
-fn live(cx: &mut TestAppContext, d: Driver, plain: bool, ask: bool) -> Live {
+pub(in crate::workspace) fn live(
+    cx: &mut TestAppContext,
+    d: Driver,
+    plain: bool,
+    ask: bool,
+) -> Live {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -140,7 +145,7 @@ fn live(cx: &mut TestAppContext, d: Driver, plain: bool, ask: bool) -> Live {
         profile,
     }
 }
-fn settle(cx: &mut TestAppContext, w: AnyWindowHandle) {
+pub(in crate::workspace) fn settle(cx: &mut TestAppContext, w: AnyWindowHandle) {
     for _ in 0..4 {
         cx.executor().allow_parking();
         cx.run_until_parked();
@@ -148,7 +153,7 @@ fn settle(cx: &mut TestAppContext, w: AnyWindowHandle) {
         std::thread::sleep(Duration::from_millis(30));
     }
 }
-fn paint(cx: &mut TestAppContext, w: AnyWindowHandle) {
+pub(in crate::workspace) fn paint(cx: &mut TestAppContext, w: AnyWindowHandle) {
     cx.update_window(w, |_, w, cx| {
         w.draw(cx).clear(cx);
     })
@@ -156,7 +161,7 @@ fn paint(cx: &mut TestAppContext, w: AnyWindowHandle) {
 }
 /// Runs both clocks until `done` holds: GPUI's timers advance `step` per round, the worker
 /// runtime runs in real time.
-fn wait(
+pub(in crate::workspace) fn wait(
     cx: &mut TestAppContext,
     l: &Live,
     what: &str,
@@ -184,7 +189,7 @@ fn wait(
         std::thread::sleep(Duration::from_millis(40));
     }
 }
-fn open_table(cx: &mut TestAppContext, l: &Live, d: Driver, name: &str) {
+pub(in crate::workspace) fn open_table(cx: &mut TestAppContext, l: &Live, d: Driver, name: &str) {
     let table = TableRef {
         schema: schema(d).into(),
         name: name.into(),

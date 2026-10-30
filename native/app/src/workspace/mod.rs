@@ -2,19 +2,24 @@
 pub mod commands;
 mod components;
 mod execution;
+mod export;
 pub mod fixtures;
 pub mod host;
 mod import;
 mod inspector;
 mod layout;
 mod link;
+#[cfg(test)]
+mod objects_tests;
 mod panels;
 use layout::{Layout, Splitter};
+mod routines;
 mod running;
 mod sheets;
 mod sidebar;
 mod table;
 mod table_fixtures;
+mod triggers;
 mod workflows;
 use crate::ui::InputEvent;
 use crate::{Services, native_menu, ui::*};
@@ -93,6 +98,8 @@ enum Sheet {
     ReconnectPassword,
     /// A save the connection dropped during: what is known, and what the user can do.
     CommitUnknown,
+    /// The current table's triggers (see `triggers.rs`).
+    Triggers,
 }
 pub struct Workspace {
     services: Services,
@@ -151,6 +158,8 @@ pub struct Workspace {
     detail_scroll: ScrollHandle,
     ddl_scroll: ScrollHandle,
     databases_loading: bool,
+    /// Why the database list couldn't be read, shown in Switch Database.
+    databases_error: Option<String>,
     link: link::LinkState,
     /// Counts saves, so a save's late result can be matched to it.
     commit_run: u64,
@@ -164,6 +173,8 @@ pub struct Workspace {
     import_in_flight: Option<link::InFlightImport>,
     /// An import cut off by a lost connection, to check after reconnecting: (session, file).
     import_check: Option<(Arc<telecat_db::Session>, String)>,
+    triggers_ui: Option<triggers::TriggersUi>,
+    export_job: Option<export::ExportJob>,
 }
 impl Workspace {
     fn new(
@@ -263,6 +274,7 @@ impl Workspace {
             detail_scroll: ScrollHandle::new(),
             ddl_scroll: ScrollHandle::new(),
             databases_loading: false,
+            databases_error: None,
             link: Default::default(),
             commit_run: 0,
             commit_in_flight: None,
@@ -272,6 +284,8 @@ impl Workspace {
             query_tab: None,
             import_in_flight: None,
             import_check: None,
+            triggers_ui: None,
+            export_job: None,
             host: None,
             host_active: true,
             rail_visible: false,
@@ -416,12 +430,14 @@ impl Workspace {
                                 objects.push(DbObject {
                                     table: t.table.clone(),
                                     kind: ObjectKind::Table,
+                                    signature: None,
                                 });
                             }
                         }
                         objects.sort_by_key(|o| o.table.name.to_lowercase());
                         this.state.objects = objects;
                         this.update_completion_schema(cx);
+                        this.reset_completion_columns(cx);
                     }
                     Ok(Err(e)) => this.failed(e, cx),
                     Err(e) => this.error(e, cx),
@@ -438,6 +454,7 @@ impl Workspace {
         let backend = session.backend_id.clone();
         let tab = self.state.current().clone();
         let id = tab.id;
+        let routine_dirty = tab.routine_dirty();
         match tab.kind {
             TabKind::Table(table) => {
                 let Some(editor) = tab.table else {
@@ -462,7 +479,8 @@ impl Workspace {
                         })
                         .await?;
                     let info = session.table_info(&table).await?;
-                    Ok::<_, anyhow::Error>((data, info))
+                    let kind = session.relation_kind(&table).await.ok();
+                    Ok::<_, anyhow::Error>((data, info, kind))
                 });
                 cx.spawn(async move |this, cx| {
                     let r = task.await;
@@ -479,9 +497,12 @@ impl Workspace {
                             &flatten(&r),
                         );
                         match r {
-                            Ok(Ok((data, info))) => {
+                            Ok(Ok((data, info, kind))) => {
                                 let remembered = this.remember_selection(id, cx);
                                 if let Some(t) = this.state.tabs.iter_mut().find(|t| t.id == id) {
+                                    if let (Some(editor), Some(kind)) = (&mut t.table, kind) {
+                                        editor.kind = kind;
+                                    }
                                     if t.table.as_ref().is_some_and(|e| e.data.dirty()) {
                                         return;
                                     }
@@ -574,7 +595,83 @@ impl Workspace {
                 })
                 .detach();
             }
+            TabKind::Routine(object) => {
+                if routine_dirty {
+                    return;
+                }
+                self.begin_load(Some((id, LoadSlot::Results)), cx);
+                let task = self
+                    .services
+                    .runtime
+                    .spawn(async move { session.routine_definition(&object).await });
+                cx.spawn(async move |this, cx| {
+                    let r = task.await;
+                    let _ = this.update(cx, |this, cx| {
+                        if this
+                            .session
+                            .as_ref()
+                            .is_none_or(|s| s.backend_id != backend)
+                        {
+                            return;
+                        }
+                        this.end_load(Some((id, LoadSlot::Results)), &flatten(&r));
+                        match r {
+                            Ok(Ok(definition)) => {
+                                if let Some(t) = this
+                                    .state
+                                    .tabs
+                                    .iter_mut()
+                                    .find(|t| t.id == id && !t.routine_dirty())
+                                {
+                                    t.editor = EditorDocument {
+                                        text: definition.text.clone(),
+                                        ..Default::default()
+                                    };
+                                    t.routine = Some(RoutineEditor {
+                                        original: Some(definition.text),
+                                        settings: definition.settings,
+                                    });
+                                    // Made again from the loaded text on the next frame.
+                                    this.drop_editor(id);
+                                }
+                            }
+                            Ok(Err(e)) if telecat_db::is_connection_lost(&e) => this.failed(e, cx),
+                            // Shown in the tab, where the definition would be.
+                            Ok(Err(_)) => {}
+                            Err(e) => this.error(e, cx),
+                        }
+                        cx.notify();
+                    });
+                })
+                .detach();
+            }
             TabKind::Query => {}
+        }
+    }
+    /// Opens a function or procedure in a tab showing its definition (the open tab when it is
+    /// already open).
+    fn open_routine(&mut self, object: DbObject, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        let open = self
+            .state
+            .tabs
+            .iter()
+            .any(|t| t.kind == TabKind::Routine(object.clone()));
+        self.state.open_routine(object);
+        if !open {
+            self.refresh_tab(cx);
+        }
+        cx.notify();
+    }
+    /// Opens a sidebar object the way its kind opens: tables and views in a table tab,
+    /// functions and procedures in a definition tab.
+    fn open_object(&mut self, object: DbObject, cx: &mut Context<Self>) {
+        if object.kind.is_routine() {
+            self.open_routine(object, cx);
+        } else {
+            self.open_table(object.table, cx);
         }
     }
     fn open_table(&mut self, table: TableRef, cx: &mut Context<Self>) {
@@ -630,6 +727,13 @@ impl Workspace {
         self.run_now(all, cx);
     }
     fn run_now(&mut self, all: bool, cx: &mut Context<Self>) {
+        if matches!(self.state.current().kind, TabKind::Routine(_)) {
+            self.show_hint(
+                "This tab edits a definition: ⌘S saves it. Run statements in a SQL Query tab (⌘T).",
+                cx,
+            );
+            return;
+        }
         self.sync_editor_document(cx);
         if self.busy || self.saving || self.state.current().kind != TabKind::Query {
             return;
@@ -875,6 +979,11 @@ impl Workspace {
             cx.notify();
             return;
         }
+        if matches!(self.sheet, Some(Sheet::Triggers)) && key == "i" && mods.platform {
+            self.add_trigger(window, cx);
+            cx.stop_propagation();
+            return;
+        }
         if self.sheet.is_some() {
             if key == "enter" && matches!(self.sheet, Some(Sheet::Gate { .. })) {
                 if matches!(
@@ -937,8 +1046,10 @@ impl Workspace {
         {
             return;
         }
-        if self.state.current().kind == TabKind::Query
-            && matches!(key.as_str(), "z" | "f" | "i")
+        if matches!(
+            self.state.current().kind,
+            TabKind::Query | TabKind::Routine(_)
+        ) && matches!(key.as_str(), "z" | "f" | "i")
             && mods.platform
         {
             return;
@@ -1160,7 +1271,15 @@ impl Workspace {
             })
     }
     fn has_rail(&self) -> bool {
-        self.rail_visible || matches!(self.scenario.as_str(), "95-rail" | "a2-switched")
+        self.rail_visible || self.fixture_rail_visible()
+    }
+    /// The reference screenshots' two-connection rail. Only scenario windows (fixtures, no
+    /// database) ever draw it; a real window's rail belongs to its `WorkspaceHost`.
+    fn fixture_rail_visible(&self) -> bool {
+        self.services.scenario
+            && self.host.is_none()
+            && self.session.is_none()
+            && matches!(self.scenario.as_str(), "95-rail" | "a2-switched")
     }
 }
 impl Render for Workspace {
@@ -1173,6 +1292,7 @@ impl Render for Workspace {
         self.lock_sql_editor(cx);
         self.prepare_messages(window, cx);
         self.prepare_running_timer(cx);
+        self.prepare_triggers(window, cx);
         if !self.services.scenario
             && !self.gate_focused
             && matches!(
@@ -1196,8 +1316,8 @@ impl Render for Workspace {
             .line_height(px(14.5))
             .text_color(rgb(telecat_theme::TEXT))
             .bg(rgb(telecat_theme::BG))
-            .when(self.has_rail() && self.host.is_none(), |d| {
-                d.child(self.rail(cx))
+            .when(self.fixture_rail_visible(), |d| {
+                d.child(self.fixture_rail(cx))
             })
             .child(
                 div()
@@ -1247,18 +1367,31 @@ impl Workspace {
     /// Keeps the staged-but-unsaved changes where the panic hook can write them out
     /// (see `telecat_app::recovery`). Only recomputed when the staged state changed.
     fn update_recovery_record(&mut self) {
+        use std::hash::{Hash, Hasher};
         let revision = self
             .state
             .tabs
             .iter()
-            .filter_map(|t| t.table.as_ref().map(|e| (t.id, e)))
-            .fold(self.state.operations.len() as u64, |acc, (id, e)| {
-                acc.wrapping_mul(31)
-                    .wrapping_add(id)
-                    .wrapping_add(e.data.revision)
-                    .wrapping_add(e.structure.revision << 20)
-                    .wrapping_add(e.index.revision << 40)
-                    .wrapping_add(u64::from(e.is_new || e.name != e.table.name))
+            .fold(self.state.operations.len() as u64, |acc, t| {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                if t.routine_dirty() {
+                    t.editor.text.hash(&mut h);
+                }
+                let acc = acc
+                    .wrapping_mul(31)
+                    .wrapping_add(t.id)
+                    .wrapping_add(h.finish());
+                match &t.table {
+                    Some(e) => {
+                        e.triggers.edits.hash(&mut h);
+                        acc.wrapping_add(e.data.revision)
+                            .wrapping_add(e.structure.revision << 20)
+                            .wrapping_add(e.index.revision << 40)
+                            .wrapping_add(u64::from(e.is_new || e.name != e.table.name))
+                            .wrapping_add(h.finish())
+                    }
+                    None => acc,
+                }
             });
         if revision == self.recovery.1 {
             return;

@@ -574,6 +574,7 @@ async fn qa3_mysql_type_change_roundtrip() -> Result<()> {
         let mut cur: Vec<Cell> = orig.iter().cloned().map(Cell::from).collect();
         cur[2] = Cell::Text(new_ty.into());
         let change = StructureChange {
+            relation: telecat_core::types::ObjectKind::Table,
             table: t.clone(),
             new_name: "qads3_alt".into(),
             is_new: false,

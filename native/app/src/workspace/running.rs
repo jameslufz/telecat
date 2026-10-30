@@ -104,7 +104,16 @@ impl Workspace {
                     return;
                 }
                 this.databases_loading = false;
-                this.databases = result.ok().and_then(Result::ok).unwrap_or_default();
+                match result.map_err(anyhow::Error::from).and_then(|r| r) {
+                    Ok(databases) => {
+                        this.databases = databases;
+                        this.databases_error = None;
+                    }
+                    Err(e) => {
+                        this.databases.clear();
+                        this.databases_error = Some(format!("{e:#}"));
+                    }
+                }
                 this.reset_picker_selection(cx);
                 cx.notify();
             });

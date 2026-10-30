@@ -73,7 +73,11 @@ pub struct SqlEditor {
     completion_task: Task<()>,
     completion_generation: u64,
     suppress_completion: bool,
+    /// The schema changed under an open completion list: query it again on the next frame.
+    refresh_completion: bool,
     search_open: bool,
+    /// The find panel shows its Replace row (⌥⌘F), not only Find (⌘F).
+    replace_open: bool,
     find: Entity<InputState>,
     replace: Entity<InputState>,
     search: SearchQuery,
@@ -150,7 +154,9 @@ impl SqlEditor {
             completion_task: Task::ready(()),
             completion_generation: 0,
             suppress_completion: false,
+            refresh_completion: false,
             search_open: false,
+            replace_open: false,
             find: find.clone(),
             replace: replace.clone(),
             search: SearchQuery::default(),
@@ -355,9 +361,14 @@ impl SqlEditor {
         self.dismiss_completion(cx);
         self.decorate(cx);
     }
+    /// New names to complete. An open completion list is filled again with them (columns
+    /// arrive while the user types), never closed.
     pub fn set_schema(&mut self, schema: &Schema, cx: &mut Context<Self>) {
         self.index = CompletionIndex::new(self.driver, schema);
-        self.dismiss_completion(cx);
+        if self.popup.is_some() {
+            self.refresh_completion = true;
+            cx.notify();
+        }
     }
     pub fn current_statement_range(&self, cx: &App) -> Option<Range<usize>> {
         telecat_core::sql::statement_at(&self.text(cx), self.cursor(cx), self.driver)
@@ -603,9 +614,11 @@ impl SqlEditor {
         self.state
             .update(cx, |s, cx| s.edit_batch(&edits, window, cx));
     }
-    pub fn open_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// ⌘F: Find. ⌥⌘F (`replace`): Find and Replace.
+    pub fn open_find(&mut self, replace: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.dismiss_completion(cx);
         self.search_open = true;
+        self.replace_open = replace;
         if let Some(selected) = self.selected_text(cx) {
             self.search.query = selected.clone();
             self.find
@@ -626,6 +639,7 @@ impl SqlEditor {
     }
     pub fn set_search(&mut self, query: SearchQuery, window: &mut Window, cx: &mut Context<Self>) {
         self.search_open = true;
+        self.replace_open = !query.replacement.is_empty();
         self.find
             .update(cx, |s, cx| s.set_value(query.query.clone(), window, cx));
         self.replace.update(cx, |s, cx| {
@@ -745,7 +759,7 @@ impl SqlEditor {
         let editing = self.state.read(cx).focus_handle(cx).is_focused(window);
         let mut handled = true;
         if m.platform && key == "f" {
-            self.open_find(window, cx);
+            self.open_find(m.alt, window, cx);
         } else if m.platform && key == "g" && m.control && editing {
             self.select_next_occurrence(true, cx);
         } else if m.platform && key == "g" {
@@ -807,104 +821,98 @@ impl SqlEditor {
             cx.stop_propagation();
         }
     }
+    pub fn replace_open(&self) -> bool {
+        self.search_open && self.replace_open
+    }
     fn search_panel(&self, cx: &Context<Self>) -> Div {
         let field = |id: &'static str, state: &Entity<InputState>| {
             div()
                 .id(id)
-                .w(px(160.))
+                .w(px(220.))
                 .h(px(24.))
-                .px(px(4.))
+                .px(px(6.))
+                .flex()
+                .items_center()
+                .rounded(px(5.))
                 .border_1()
-                .border_color(rgb(0x555555))
+                .border_color(rgb(0x444444))
                 .bg(rgb(0x1a1a1a))
                 .child(Input::new(state))
         };
-        let button = |id: &'static str, label: &'static str| {
+        // An icon or short-text button, with its name as a tooltip.
+        let tool = |id: &'static str, tip: &'static str| {
             div()
                 .id(id)
-                .px(px(6.))
-                .py(px(2.))
-                .border_1()
-                .border_color(rgb(0x555555))
-                .rounded(px(3.))
-                .bg(rgb(0x363636))
+                .h(px(22.))
+                .min_w(px(22.))
+                .px(px(4.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(5.))
                 .cursor_pointer()
+                .hover(|d| d.bg(rgba(0xffffff14)))
+                .tooltip(move |_, cx| cx.new(|_| Tip(tip.into())).into())
+        };
+        let glyph = |path: &'static str| {
+            svg()
+                .path(path)
+                .size(px(13.))
+                .text_color(rgb(0xd0d0d0))
+                .flex_shrink_0()
+        };
+        // A toggle chip: highlighted while on.
+        let toggle = |id: &'static str, tip: &'static str, label: &'static str, on: bool| {
+            tool(id, tip)
+                .font_family(theme::mono().family)
+                .text_size(px(11.))
+                .text_color(rgb(if on { 0xffffff } else { 0xb8b8b8 }))
+                .border_1()
+                .border_color(if on { rgb(0x2f6fed) } else { rgba(0x00000000) })
+                .when(on, |d| d.bg(rgba(0x2f6fed55)))
                 .child(label)
         };
+        let count = self.search_error.as_ref().map_or_else(
+            || match self.search_matches.len() {
+                0 if self.search.query.is_empty() => String::new(),
+                0 => "No results".into(),
+                1 => "1 match".into(),
+                n => format!("{n} matches"),
+            },
+            |_| "Invalid regular expression".into(),
+        );
         div()
             .flex()
             .flex_col()
-            .gap(px(4.))
-            .p(px(6.))
-            .bg(rgb(0x2d2d2d))
-            .text_color(rgb(0xeeeeee))
+            .gap(px(5.))
+            .px(px(8.))
+            .py(px(6.))
+            .bg(rgb(0x2b2b2b))
+            .border_t_1()
+            .border_color(rgb(0x111111))
+            .text_color(rgb(0xe8e8e8))
             .text_size(px(12.))
-            .line_height(px(18.))
+            .line_height(px(16.))
             .font_family(theme::ui().family)
             .child(
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(5.))
+                    .gap(px(4.))
                     .child(field("find", &self.find))
-                    .child(button("previous", "previous").on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, cx| this.find_next(true, cx)),
-                    ))
-                    .child(button("next", "next").on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, cx| this.find_next(false, cx)),
-                    ))
-                    .child(button("select-matches", "all").on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, cx| this.select_search_matches(cx)),
-                    ))
                     .child(
-                        button(
-                            "case",
-                            if self.search.case_sensitive {
-                                "[x] match case"
-                            } else {
-                                "[ ] match case"
-                            },
-                        )
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|this, _, _, cx| {
-                                this.search.case_sensitive = !this.search.case_sensitive;
-                                this.decorate(cx);
-                                cx.notify();
-                            }),
-                        ),
+                        toggle("case", "Match case", "Aa", self.search.case_sensitive)
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, _, cx| {
+                                    this.search.case_sensitive = !this.search.case_sensitive;
+                                    this.decorate(cx);
+                                    cx.notify();
+                                }),
+                            ),
                     )
                     .child(
-                        button(
-                            "regex",
-                            if self.search.regex {
-                                "[x] regexp"
-                            } else {
-                                "[ ] regexp"
-                            },
-                        )
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|this, _, _, cx| {
-                                this.search.regex = !this.search.regex;
-                                this.decorate(cx);
-                                cx.notify();
-                            }),
-                        ),
-                    )
-                    .child(
-                        button(
-                            "word",
-                            if self.search.whole_word {
-                                "[x] by word"
-                            } else {
-                                "[ ] by word"
-                            },
-                        )
-                        .on_mouse_down(
+                        toggle("word", "Whole word", "ab", self.search.whole_word).on_mouse_down(
                             MouseButton::Left,
                             cx.listener(|this, _, _, cx| {
                                 this.search.whole_word = !this.search.whole_word;
@@ -913,30 +921,119 @@ impl SqlEditor {
                             }),
                         ),
                     )
-                    .child(button("close-search", "x").on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _, w, cx| this.close_find(w, cx)),
-                    )),
+                    .child(
+                        toggle("regex", "Regular expression", ".*", self.search.regex)
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, _, cx| {
+                                    this.search.regex = !this.search.regex;
+                                    this.decorate(cx);
+                                    cx.notify();
+                                }),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .min_w(px(110.))
+                            .px(px(4.))
+                            .text_size(px(11.))
+                            .text_color(rgb(if self.search_error.is_some() {
+                                0xff8a80
+                            } else {
+                                0x8a8a8a
+                            }))
+                            .child(count),
+                    )
+                    .child(
+                        tool("previous", "Previous match (⇧⌘G)")
+                            .child(glyph("ChevronUp.svg"))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, _, cx| this.find_next(true, cx)),
+                            ),
+                    )
+                    .child(
+                        tool("next", "Next match (⌘G)")
+                            .child(glyph("ChevronDown.svg"))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, _, cx| this.find_next(false, cx)),
+                            ),
+                    )
+                    .child(
+                        tool("select-matches", "Select all matches")
+                            .text_size(px(11.))
+                            .child("All")
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, _, cx| this.select_search_matches(cx)),
+                            ),
+                    )
+                    .child(
+                        tool(
+                            "toggle-replace",
+                            if self.replace_open {
+                                "Hide Replace"
+                            } else {
+                                "Replace (⌥⌘F)"
+                            },
+                        )
+                        .text_size(px(11.))
+                        .when(self.replace_open, |d| d.bg(rgba(0xffffff14)))
+                        .child("Replace")
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, _, cx| {
+                                this.replace_open = !this.replace_open;
+                                cx.notify();
+                            }),
+                        ),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        tool("close-search", "Close (Esc)")
+                            .child(glyph("X.svg"))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _, w, cx| this.close_find(w, cx)),
+                            ),
+                    ),
             )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(5.))
-                    .child(field("replace", &self.replace))
-                    .child(button("replace-one", "replace").on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _, w, cx| this.replace_matches(false, w, cx)),
-                    ))
-                    .child(button("replace-all", "replace all").on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _, w, cx| this.replace_matches(true, w, cx)),
-                    ))
-                    .child(self.search_error.as_ref().map_or_else(
-                        || format!("{} matches", self.search_matches.len()),
-                        |_| "Invalid regular expression".into(),
-                    )),
-            )
+            .when(self.replace_open, |d| {
+                d.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.))
+                        .child(field("replace", &self.replace))
+                        .child(
+                            tool("replace-one", "Replace this match (↵)")
+                                .px(px(8.))
+                                .border_1()
+                                .border_color(rgb(0x444444))
+                                .text_size(px(11.))
+                                .child("Replace")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _, w, cx| {
+                                        this.replace_matches(false, w, cx)
+                                    }),
+                                ),
+                        )
+                        .child(
+                            tool("replace-all", "Replace every match (⌘↵)")
+                                .px(px(8.))
+                                .border_1()
+                                .border_color(rgb(0x444444))
+                                .text_size(px(11.))
+                                .child("Replace All")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _, w, cx| this.replace_matches(true, w, cx)),
+                                ),
+                        ),
+                )
+            })
     }
     fn completion_popup(&self, window: &Window, cx: &Context<Self>) -> Option<AnyElement> {
         let popup = self.popup.as_ref()?;
@@ -1035,8 +1132,29 @@ impl SqlEditor {
         )
     }
 }
+/// A button's name, shown on hover.
+struct Tip(SharedString);
+impl Render for Tip {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px(px(8.))
+            .py(px(4.))
+            .rounded(px(6.))
+            .border_1()
+            .border_color(rgb(0x3a3a3a))
+            .bg(rgb(0x2b2b2b))
+            .text_color(rgb(0xe8e8e8))
+            .text_size(px(11.))
+            .font_family(theme::ui().family)
+            .child(self.0.clone())
+    }
+}
 impl Render for SqlEditor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if std::mem::take(&mut self.refresh_completion) && self.popup.is_some() {
+            // Open means it was asked for (or had a prefix): ask again the same way.
+            self.request_completion(true, window, cx);
+        }
         let mono = theme::mono();
         let mut root = div()
             .id("telecat-sql-editor")

@@ -315,6 +315,7 @@ impl Workspace {
         self.state.objects.push(DbObject {
             table,
             kind: ObjectKind::Table,
+            signature: None,
         });
         self.state
             .objects
@@ -503,8 +504,7 @@ impl Workspace {
             rows = rows.child(row);
         }
         rows.child(div().flex().items_center().gap(px(8.))
-            .child(icon("Sliders.svg",16.,0x8a8a8a))
-            .child(small_button("filter-export","Export").on_click(cx.listener(|this,_,_,cx|this.export_result(cx))))
+            .child(small_button("filter-export",if self.export_job.is_some(){"Stop Export"}else{"Export"}).tooltip(text_tooltip("Export every row these filters select")).on_click(cx.listener(|this,_,_,cx|this.export_result(cx))))
             .child(small_button("filter-sql","SQL").on_click(cx.listener(|this,_,_,cx|this.filter_sql(cx))))
             .child(div().flex_1().min_w_0().truncate().text_size(px(11.)).text_color(rgb(telecat_theme::MUTED)).child("Show: ⌘F  Insert: ⌘I  Remove: ⇧⌘I  Apply All: ⌘Return  Up: ⌘↑  Down: ⌘↓"))
             .child(div().flex_1())
@@ -565,7 +565,7 @@ impl Workspace {
                     .border_b_1()
                     .border_color(rgb(0x111111))
                     .child(div().text_size(px(12.5)).ml(px(6.)).child("Name"))
-                    .child(if structure {
+                    .child(if structure && !t.read_only() {
                         input_box(&inputs.name, self.saving, false)
                             .flex_none()
                             .w(px(280.))
@@ -586,7 +586,18 @@ impl Workspace {
                             .text_size(px(12.5))
                             .child(t.name.clone())
                     })
-                    .when(structure, |d| {
+                    .when(structure && t.read_only(), |d| {
+                        d.child(
+                            div()
+                                .text_size(px(11.5))
+                                .text_color(rgb(telecat_theme::MUTED))
+                                .child(format!(
+                                    "{}: read-only. Change it through its definition (DDL).",
+                                    t.kind.label()
+                                )),
+                        )
+                    })
+                    .when(structure && !t.read_only(), |d| {
                         d.child(div().text_size(px(12.5)).ml(px(6.)).child("Primary"))
                             .child(if t.is_new {
                                 input_box(&inputs.primary, self.saving, false)
@@ -708,6 +719,7 @@ impl Workspace {
                     }),
                 ),
         );
+        let read_only = t.read_only();
         bottom = bottom.child(
             small_button("table-add", "")
                 .gap(px(6.))
@@ -716,6 +728,12 @@ impl Workspace {
                     Part::Data => "Row",
                     Part::Structure => "Column",
                     Part::Index => "Index",
+                })
+                .when(read_only, |d| {
+                    d.opacity(0.4).tooltip(text_tooltip(format!(
+                        "A {} can't be edited here",
+                        t.kind.label()
+                    )))
                 })
                 .on_click(cx.listener(|this, _, window, cx| this.add_grid_row(window, cx))),
         );
@@ -750,15 +768,32 @@ impl Workspace {
                 .child(nav("page-next","ChevronRight.svg",tab.offset+tab.limit>=tab.total).on_click(cx.listener(|this,_,window,cx|{let t=this.state.current();if t.offset+t.limit<t.total{this.navigate_table(TableNavigation::Page(t.offset+t.limit,t.limit),window,cx);}})));
         } else {
             if t.part == Part::Structure {
-                bottom = bottom
-                    .child(small_button("triggers", "Triggers").opacity(0.4))
-                    .child(
-                        small_button("ddl-toggle", "DDL")
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_ddl(cx))),
-                    );
+                let unavailable = super::triggers::triggers_unavailable(t);
+                let staged = t.triggers.dirty();
+                bottom =
+                    bottom
+                        .child(
+                            small_button("triggers", "Triggers")
+                                .when(staged, |d| d.border_color(rgb(0xe0b84a)))
+                                .when_some(unavailable, |d, why| {
+                                    d.opacity(0.4).tooltip(text_tooltip(why))
+                                })
+                                .when(unavailable.is_none(), |d| {
+                                    d.on_click(cx.listener(|this, _, window, cx| {
+                                        this.open_triggers(window, cx)
+                                    }))
+                                }),
+                        )
+                        .child(
+                            small_button("ddl-toggle", "DDL")
+                                .on_click(cx.listener(|this, _, _, cx| this.toggle_ddl(cx))),
+                        );
             }
             bottom = bottom.child(div().flex_1().text_center().text_color(rgb(0xe0b84a)).when(
-                t.buffer().dirty() || t.is_new || t.name != t.table.name,
+                t.buffer().dirty()
+                    || t.is_new
+                    || t.name != t.table.name
+                    || (t.part == Part::Structure && t.triggers.dirty()),
                 |d| d.child("unsaved changes — ⌘S to save"),
             ));
         }

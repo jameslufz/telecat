@@ -212,6 +212,7 @@ pub fn state(name: &str) -> WorkspaceState {
                     name: name.into(),
                 },
                 kind: ObjectKind::Table,
+                signature: None,
             }
         })
         .collect();
@@ -222,6 +223,7 @@ pub fn state(name: &str) -> WorkspaceState {
                 name: "qa_fn".into(),
             },
             kind: ObjectKind::Function,
+            signature: None,
         });
     }
     s.logs = if pg {
@@ -295,6 +297,7 @@ pub fn state(name: &str) -> WorkspaceState {
         s.objects.push(DbObject {
             table: table.clone(),
             kind: ObjectKind::Table,
+            signature: None,
         });
         s.open_table(table.clone());
         let result = QueryResult {
@@ -451,6 +454,7 @@ pub fn state(name: &str) -> WorkspaceState {
                     name: long.into(),
                 },
                 kind: ObjectKind::Table,
+                signature: None,
             });
         }
         s.objects.sort_by(|a, b| a.table.name.cmp(&b.table.name));
@@ -516,6 +520,7 @@ pub fn state(name: &str) -> WorkspaceState {
                 name: "untitled_table_337".into(),
             },
             kind: ObjectKind::Table,
+            signature: None,
         });
         for table in ["sa_banks", "untitled_table_337", "nopk"] {
             s.open_table(TableRef {

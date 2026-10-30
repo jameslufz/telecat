@@ -618,3 +618,83 @@ fn clicks_land_on_the_caret_position_under_the_pointer(cx: &mut TestAppContext) 
         }
     }
 }
+#[gpui::test]
+fn cmd_f_finds_and_alt_cmd_f_also_replaces(cx: &mut TestAppContext) {
+    let (w, v) = setup(cx, "SELECT a FROM t;");
+    paint(cx, w);
+    cx.simulate_keystrokes(w.into(), "cmd-f");
+    paint(cx, w);
+    assert!(
+        !v.read_with(cx, |v, _| v.replace_open()),
+        "⌘F shows Find only"
+    );
+    cx.simulate_keystrokes(w.into(), "escape");
+    paint(cx, w);
+    cx.simulate_keystrokes(w.into(), "alt-cmd-f");
+    paint(cx, w);
+    assert!(
+        v.read_with(cx, |v, _| v.replace_open()),
+        "⌥⌘F shows Replace too"
+    );
+}
+#[test]
+fn columns_of_the_statements_tables_come_first_and_aliases_resolve() {
+    let schema = Schema::from([
+        (
+            "users".into(),
+            vec!["id".into(), "name".into(), "nickname".into()],
+        ),
+        (
+            "sales.orders".into(),
+            vec!["id".into(), "note".into(), "user_id".into()],
+        ),
+        ("audit".into(), vec!["name_old".into(), "noise".into()]),
+    ]);
+    let index = telecat_editor::completion::CompletionIndex::new(Driver::Postgres, &schema);
+    let labels = |text: &str, at: &str| -> Vec<String> {
+        let cursor = text.find(at).unwrap() + at.len();
+        index
+            .query(text, cursor, false)
+            .items
+            .iter()
+            .map(|i| i.label.to_string())
+            .collect()
+    };
+    // Unqualified: users' and orders' columns before the other tables' and keywords.
+    let got = labels(
+        "SELECT n FROM users u JOIN sales.orders o ON o.user_id = u.id; SELECT noise FROM audit",
+        "SELECT n",
+    );
+    let first: Vec<&str> = got.iter().take(3).map(String::as_str).collect();
+    assert_eq!(first, ["name", "nickname", "note"], "{got:?}");
+    assert!(got.iter().position(|l| l == "noise") > got.iter().position(|l| l == "note"));
+    // Aliases, schema-qualified tables and comma lists.
+    assert_eq!(labels("SELECT o.n FROM sales.orders o", "o.n"), ["note"]);
+    assert_eq!(
+        labels("SELECT x.ni FROM audit a, users AS x", "x.ni"),
+        ["nickname"]
+    );
+    assert_eq!(
+        labels("SELECT orders.us FROM sales.orders", "orders.us"),
+        ["user_id"]
+    );
+    assert_eq!(
+        telecat_editor::completion::referenced_tables(
+            "UPDATE `users` SET a = 1 WHERE id IN (SELECT user_id FROM sales.orders o, audit)",
+            Driver::Mysql
+        ),
+        ["users", "orders", "audit"]
+    );
+}
+#[test]
+fn many_similar_names_never_push_the_statements_columns_out() {
+    let mut schema: Schema = (0..1000)
+        .map(|i| (format!("s_table_{i:04}"), vec!["sid".into()]))
+        .collect();
+    schema.insert("users".into(), vec!["status".into(), "id".into()]);
+    let index = telecat_editor::completion::CompletionIndex::new(Driver::Mysql, &schema);
+    let text = "SELECT s FROM users";
+    let items = index.query(text, "SELECT s".len(), false).items;
+    assert_eq!(&*items[0].label, "status", "{:?}", &items[..3]);
+    assert!(items.len() <= 101);
+}

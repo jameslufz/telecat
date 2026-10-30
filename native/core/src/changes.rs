@@ -6,6 +6,9 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
+/// A count checked before its statement runs: `sql` must return `expect`, else the statement
+/// is refused with `message`. The first line of `message` is the general reason; a line
+/// `when <n>: …` gives the reason for a result of exactly n instead.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Check {
     pub sql: String,
@@ -856,8 +859,26 @@ pub struct StructureChange {
     pub primary_key: Vec<String>,
     pub columns: Vec<String>,
     pub rows: Vec<EditRow>,
+    /// What the object is. Only a table's structure can be changed here; views are read-only.
+    #[serde(default = "table_kind")]
+    pub relation: ObjectKind,
+}
+fn table_kind() -> ObjectKind {
+    ObjectKind::Table
+}
+/// Structure and index edits are generated for tables only: a view's columns and indexes come
+/// from its query, and ALTER TABLE / CREATE INDEX on it would fail or change the wrong thing.
+fn ensure_table(relation: ObjectKind, what: &str) -> Result<()> {
+    if relation != ObjectKind::Table {
+        bail!(
+            "This is a {}: its {what} can't be edited here. Change its definition instead.",
+            relation.label()
+        );
+    }
+    Ok(())
 }
 pub fn structure_statements(d: Driver, c: &StructureChange) -> Result<Vec<Stmt>> {
+    ensure_table(c.relation, "structure")?;
     let mut out = vec![];
     let live = c.rows.iter().filter(|r| !r.deleted).collect::<Vec<_>>();
     let target = TableRef {
@@ -1001,7 +1022,9 @@ pub fn structure_statements(d: Driver, c: &StructureChange) -> Result<Vec<Stmt>>
             let name = f("column_name").unwrap_or("");
             let col = quote_ident(d, name);
             if r.orig.is_some() && f("column_name").is_none() {
-                bail!("Cannot read properties of null (reading 'replace')");
+                bail!(
+                    "Column {on} has no name. Type a name in column_name, or delete the column instead."
+                );
             }
             if r.orig.is_none() {
                 out.push(Stmt::new(format!(
@@ -1292,9 +1315,13 @@ fn mysql_value_changes(col: &str, old: &str, new: &str) -> Option<String> {
 pub fn index_statements(
     d: Driver,
     table: &TableRef,
+    relation: ObjectKind,
     columns: &[String],
     rows: &[EditRow],
 ) -> Result<Vec<Stmt>> {
+    if has_changes(rows) {
+        ensure_table(relation, "indexes")?;
+    }
     let mut out = vec![];
     let t = qualified(d, table);
     for r in rows {
@@ -1393,18 +1420,42 @@ pub fn index_statements(
     }
     Ok(out)
 }
-pub fn table_op_statement(d: Driver, t: &TableRef, truncate: bool, view: bool) -> Stmt {
-    Stmt::new(format!(
-        "{} {};",
-        if truncate {
-            "TRUNCATE TABLE"
-        } else if view {
-            "DROP VIEW"
-        } else {
-            "DROP TABLE"
-        },
-        qualified(d, t)
-    ))
+/// The staged Delete or Truncate of a sidebar object. Only tables can be truncated. PostgreSQL
+/// routines are dropped by their identity arguments, so only the chosen overload goes.
+pub fn table_op_statement(d: Driver, object: &DbObject, truncate: bool) -> Result<Stmt> {
+    let name = qualified(d, &object.table);
+    if truncate {
+        if object.kind != ObjectKind::Table {
+            bail!(
+                "Only a table can be truncated, not a {}",
+                object.kind.label()
+            );
+        }
+        return Ok(Stmt::new(format!("TRUNCATE TABLE {name};")));
+    }
+    Ok(Stmt::new(match object.kind {
+        ObjectKind::Table => format!("DROP TABLE {name};"),
+        ObjectKind::View => format!("DROP VIEW {name};"),
+        ObjectKind::MaterializedView => format!("DROP MATERIALIZED VIEW {name};"),
+        ObjectKind::Function | ObjectKind::Procedure => {
+            let kind = if object.kind == ObjectKind::Function {
+                "FUNCTION"
+            } else {
+                "PROCEDURE"
+            };
+            if d == Driver::Postgres {
+                let Some(args) = &object.signature else {
+                    bail!(
+                        "Reload the sidebar: the {} arguments aren't known",
+                        object.kind.label()
+                    );
+                };
+                format!("DROP {kind} {name}({args});")
+            } else {
+                format!("DROP {kind} {name};")
+            }
+        }
+    }))
 }
 pub fn js_string(v: &Value) -> String {
     match v {

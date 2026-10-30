@@ -15,6 +15,9 @@ use tokio_postgres::{
     Client, Config,
     types::{Format, FromSql, IsNull, ToSql, Type},
 };
+/// Receives a streamed result in chunks: column names, which columns are binary, and rows.
+pub type RowSink<'a> =
+    dyn FnMut(&[String], &[bool], Vec<Vec<Option<String>>>) -> Result<()> + Send + 'a;
 pub enum Wire {
     Mysql(Conn),
     Postgres {
@@ -243,25 +246,7 @@ impl Wire {
         let t = Instant::now();
         match self {
             Self::Mysql(conn) => {
-                let p = Params::Positional(
-                    params
-                        .iter()
-                        .map(|v| match v {
-                            Value::Null => MyValue::NULL,
-                            Value::Bool(b) => MyValue::Int(i64::from(*b)),
-                            Value::Number(n) => {
-                                if let Some(i) = n.as_i64() {
-                                    MyValue::Int(i)
-                                } else if let Some(u) = n.as_u64() {
-                                    MyValue::UInt(u)
-                                } else {
-                                    MyValue::Double(n.as_f64().unwrap_or(0.0))
-                                }
-                            }
-                            _ => MyValue::Bytes(js_string(v).into_bytes()),
-                        })
-                        .collect(),
-                );
+                let p = mysql_params(params);
                 // Text protocol preserves date precision. Bound executions use the binary protocol, never SQL interpolation.
                 let (fields, rows, affected, info) = if params.is_empty() {
                     let mut q = conn.query_iter(sql).await?;
@@ -329,16 +314,31 @@ impl Wire {
                             })
                             .collect(),
                     );
+                    let json: Vec<usize> = (0..fields.len())
+                        .filter(|&i| fields[i].column_type() as u8 == 245)
+                        .collect();
+                    let mut json_text: Vec<(usize, Vec<Option<String>>)> =
+                        json.iter().map(|&i| (i, vec![])).collect();
                     result.rows = rows
                         .into_iter()
                         .map(|r| {
-                            r.unwrap()
+                            let values = r.unwrap();
+                            for (slot, &i) in json_text.iter_mut().zip(&json) {
+                                slot.1.push(match &values[i] {
+                                    MyValue::Bytes(b) => {
+                                        Some(String::from_utf8_lossy(b).into_owned())
+                                    }
+                                    _ => None,
+                                });
+                            }
+                            values
                                 .into_iter()
                                 .enumerate()
                                 .map(|(i, v)| mysql_cell(v, &fields[i]))
                                 .collect()
                         })
                         .collect();
+                    result.json_text = (!json_text.is_empty()).then_some(json_text);
                 }
                 Ok((result, affected))
             }
@@ -372,16 +372,7 @@ impl Wire {
                     );
                     result.binary = Some(columns.iter().map(|f| f.type_().oid() == 17).collect());
                 }
-                let params = params
-                    .iter()
-                    .map(|v| {
-                        PgParam(if v.is_null() {
-                            None
-                        } else {
-                            Some(js_string(v))
-                        })
-                    })
-                    .collect::<Vec<_>>();
+                let params = pg_params(params);
                 let bound: Vec<&(dyn ToSql + Sync)> =
                     params.iter().map(|p| p as &(dyn ToSql + Sync)).collect();
                 let stream = client.query_raw_text(&stmt, bound).await?;
@@ -403,6 +394,80 @@ impl Wire {
                 }
                 result.duration_ms = (t.elapsed().as_secs_f64() * 1000.0).round() as u64;
                 Ok((result, affected))
+            }
+        }
+    }
+    /// Runs one SELECT and hands its rows to `on_rows` in chunks of `chunk` as they arrive, so a
+    /// result of any size is never held in memory. `on_rows` gets the column names and which
+    /// columns are binary with every chunk. Returns how many rows were read.
+    pub async fn stream(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+        chunk: usize,
+        on_rows: &mut RowSink<'_>,
+    ) -> Result<u64> {
+        self.stream_inner(sql, params, chunk.max(1), on_rows)
+            .await
+            .map_err(server_error)
+    }
+    async fn stream_inner(
+        &mut self,
+        sql: &str,
+        params: &[Value],
+        chunk: usize,
+        on_rows: &mut RowSink<'_>,
+    ) -> Result<u64> {
+        let d = match self {
+            Self::Mysql(_) => Driver::Mysql,
+            Self::Postgres { .. } => Driver::Postgres,
+        };
+        if split_statements(sql, d).len() > 1 {
+            bail!("Only one SQL statement is allowed per call");
+        }
+        match self {
+            Self::Mysql(conn) => {
+                if params.is_empty() {
+                    let mut q = conn.query_iter(sql).await?;
+                    let n = mysql_drain(&mut q, chunk, on_rows).await?;
+                    q.drop_result().await?;
+                    Ok(n)
+                } else {
+                    let mut q = conn.exec_iter(sql, mysql_params(params)).await?;
+                    let n = mysql_drain(&mut q, chunk, on_rows).await?;
+                    q.drop_result().await?;
+                    Ok(n)
+                }
+            }
+            Self::Postgres { client, .. } => {
+                let stmt = client.prepare(sql).await?;
+                let columns: Vec<String> =
+                    stmt.columns().iter().map(|c| c.name().to_owned()).collect();
+                let binary: Vec<bool> = stmt
+                    .columns()
+                    .iter()
+                    .map(|c| c.type_().oid() == 17)
+                    .collect();
+                let params = pg_params(params);
+                let bound: Vec<&(dyn ToSql + Sync)> =
+                    params.iter().map(|p| p as &(dyn ToSql + Sync)).collect();
+                let stream = client.query_raw_text(&stmt, bound).await?;
+                pin_mut!(stream);
+                let mut rows = Vec::with_capacity(chunk);
+                let mut n = 0u64;
+                while let Some(row) = stream.try_next().await? {
+                    let mut values = Vec::with_capacity(columns.len());
+                    for i in 0..columns.len() {
+                        values.push(row.try_get::<_, Option<PgText>>(i)?.map(|s| s.0));
+                    }
+                    rows.push(values);
+                    n += 1;
+                    if rows.len() == chunk {
+                        on_rows(&columns, &binary, std::mem::take(&mut rows))?;
+                    }
+                }
+                on_rows(&columns, &binary, rows)?;
+                Ok(n)
             }
         }
     }
@@ -461,6 +526,74 @@ impl Wire {
         }
     }
 }
+fn mysql_params(params: &[Value]) -> Params {
+    Params::Positional(
+        params
+            .iter()
+            .map(|v| match v {
+                Value::Null => MyValue::NULL,
+                Value::Bool(b) => MyValue::Int(i64::from(*b)),
+                Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        MyValue::Int(i)
+                    } else if let Some(u) = n.as_u64() {
+                        MyValue::UInt(u)
+                    } else {
+                        MyValue::Double(n.as_f64().unwrap_or(0.0))
+                    }
+                }
+                _ => MyValue::Bytes(js_string(v).into_bytes()),
+            })
+            .collect(),
+    )
+}
+fn pg_params(params: &[Value]) -> Vec<PgParam> {
+    params
+        .iter()
+        .map(|v| {
+            PgParam(if v.is_null() {
+                None
+            } else {
+                Some(js_string(v))
+            })
+        })
+        .collect()
+}
+async fn mysql_drain<P: mysql_async::prelude::Protocol>(
+    q: &mut mysql_async::QueryResult<'_, '_, P>,
+    chunk: usize,
+    on_rows: &mut RowSink<'_>,
+) -> Result<u64> {
+    let fields = q.columns_ref().to_vec();
+    let columns: Vec<String> = fields.iter().map(|f| f.name_str().into_owned()).collect();
+    let binary: Vec<bool> = fields
+        .iter()
+        .map(|f| {
+            f.character_set() == 63
+                && matches!(
+                    f.column_type() as u8,
+                    15 | 16 | 249 | 250 | 251 | 252 | 253 | 254 | 255
+                )
+        })
+        .collect();
+    let mut rows = Vec::with_capacity(chunk);
+    let mut n = 0u64;
+    while let Some(row) = q.next().await? {
+        rows.push(
+            row.unwrap()
+                .into_iter()
+                .enumerate()
+                .map(|(i, v)| export_cell(v, &fields[i]))
+                .collect(),
+        );
+        n += 1;
+        if rows.len() == chunk {
+            on_rows(&columns, &binary, std::mem::take(&mut rows))?;
+        }
+    }
+    on_rows(&columns, &binary, rows)?;
+    Ok(n)
+}
 pub fn buffer_cell(bytes: &[u8]) -> String {
     if telecat_core::changes::binary_shown_as_text(bytes) {
         String::from_utf8_lossy(bytes).into_owned()
@@ -469,6 +602,17 @@ pub fn buffer_cell(bytes: &[u8]) -> String {
             "0x{}",
             bytes.iter().map(|b| format!("{b:02X}")).collect::<String>()
         )
+    }
+}
+/// An exported MySQL value: JSON as the server's own text (the grid's display form turns big
+/// integers into strings and unwraps top-level strings, which wouldn't load back), the rest as
+/// the grid shows it.
+fn export_cell(v: MyValue, f: &mysql_async::Column) -> Option<String> {
+    match v {
+        MyValue::Bytes(b) if f.column_type() as u8 == 245 => {
+            Some(String::from_utf8_lossy(&b).into_owned())
+        }
+        v => mysql_cell(v, f),
     }
 }
 fn mysql_cell(v: MyValue, f: &mysql_async::Column) -> Option<String> {

@@ -7,12 +7,19 @@ use telecat_editor::{EditorEvent, EditorOptions, SqlEditor};
 use telecat_grid::{Cell, Column, DataGrid, Edits, GridEvent, GridModel, Hooks, RowState};
 
 type GridKey = (u64, u8);
+pub(super) type Rows = Vec<Vec<Option<String>>>;
 const HINT_FOR: std::time::Duration = std::time::Duration::from_secs(4);
 #[derive(Default)]
 pub(super) struct Components {
     editors: BTreeMap<u64, Entity<SqlEditor>>,
     grids: BTreeMap<GridKey, GridBinding>,
     schema: telecat_editor::Schema,
+    /// Autocomplete column names per table (by display name), read as SQL names the table.
+    columns: BTreeMap<String, Vec<String>>,
+    /// Tables whose columns are being read.
+    columns_pending: BTreeSet<String>,
+    /// Waits for typing to pause before reading columns.
+    columns_task: Option<Task<()>>,
     edit_nonce: u64,
     row_search: BTreeMap<u64, Entity<InputState>>,
     last_active: u64,
@@ -87,7 +94,12 @@ impl Workspace {
                 }
             }
         }
-        if tab.kind == TabKind::Query && !self.components.editors.contains_key(&id) {
+        let editable_text = match &tab.kind {
+            TabKind::Query => true,
+            TabKind::Routine(_) => tab.routine.as_ref().is_some_and(|r| r.original.is_some()),
+            _ => false,
+        };
+        if editable_text && !self.components.editors.contains_key(&id) {
             let options = EditorOptions {
                 driver: self.state.connection.driver,
                 text: tab.editor.text.clone(),
@@ -124,6 +136,7 @@ impl Workspace {
                             }
                             if matches!(event, EditorEvent::Change(_)) {
                                 this.queue_drafts(cx);
+                                this.queue_completion_columns(id, cx);
                             }
                         }
                         EditorEvent::RunCurrent => this.run(false, window, cx),
@@ -379,6 +392,18 @@ impl Workspace {
         let keys = found.iter().map(|&r| t.data.rows[r].key.clone()).collect();
         self.components.pending_selection = Some((tab_id, keys));
     }
+    #[cfg(test)]
+    pub(super) fn editor_of(&self, id: u64) -> Option<Entity<SqlEditor>> {
+        self.components.editors.get(&id).cloned()
+    }
+    pub(super) fn completion_schema(&self) -> telecat_editor::Schema {
+        self.components.schema.clone()
+    }
+    /// Forgets a tab's SQL editor; the next frame makes it again from the tab's text.
+    pub(super) fn drop_editor(&mut self, id: u64) {
+        self.components.editors.remove(&id);
+        self.components.last_active = 0;
+    }
     pub(super) fn reset_component_focus(&mut self) {
         self.components.last_active = 0;
     }
@@ -431,30 +456,37 @@ impl Workspace {
                     .children(grid.map(|g| g.view.clone())),
             )
             .children(super::panels::load_state_view(&placeholder, "grid-state"))
-            .children(self.hint.as_ref().map(|(text, _)| {
-                div()
-                    .absolute()
-                    .left_0()
-                    .right_0()
-                    .bottom(px(18.))
-                    .flex()
-                    .justify_center()
-                    .child(
-                        div()
-                            .id("grid-hint")
-                            .max_w(px(560.))
-                            .px(px(12.))
-                            .py(px(6.))
-                            .rounded(px(8.))
-                            .border_1()
-                            .border_color(rgb(0x5a4a1a))
-                            .bg(rgba(0x2a2a2af2))
-                            .font(ui_font())
-                            .text_size(px(11.5))
-                            .text_color(rgb(0xf0d27a))
-                            .child(text.clone()),
-                    )
-            }))
+            .children(self.hint_view())
+    }
+    /// The short message shown over the content (why a cell can't be edited, export progress).
+    pub(super) fn hint_view(&self) -> Option<Div> {
+        let text = self
+            .export_progress()
+            .or_else(|| self.hint.as_ref().map(|h| h.0.clone()));
+        text.map(|text| {
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .bottom(px(18.))
+                .flex()
+                .justify_center()
+                .child(
+                    div()
+                        .id("grid-hint")
+                        .max_w(px(560.))
+                        .px(px(12.))
+                        .py(px(6.))
+                        .rounded(px(8.))
+                        .border_1()
+                        .border_color(rgb(0x5a4a1a))
+                        .bg(rgba(0x2a2a2af2))
+                        .font(ui_font())
+                        .text_size(px(11.5))
+                        .text_color(rgb(0xf0d27a))
+                        .child(text),
+                )
+        })
     }
     /// The current grid's loading state. Electron's "No rows" pill stays the grid's own.
     pub(super) fn grid_placeholder(&self, has_rows: bool) -> Placeholder {
@@ -756,16 +788,116 @@ impl Workspace {
     pub(super) fn update_completion_schema(&mut self, cx: &mut Context<Self>) {
         let mut schema = telecat_editor::Schema::new();
         for o in &self.state.objects {
-            if matches!(o.kind, ObjectKind::Table | ObjectKind::View) {
-                schema.insert(display_name(&o.table, self.state.connection.driver), vec![]);
+            if o.kind.is_relation() {
+                let name = display_name(&o.table, self.state.connection.driver);
+                let columns = self
+                    .components
+                    .columns
+                    .get(&name)
+                    .cloned()
+                    .unwrap_or_default();
+                schema.insert(name, columns);
             }
         }
-        // Workspace.tsx supplies table/view names with empty column lists. Do
-        // not crawl structure metadata or make completion depend on open tabs.
         self.components.schema = schema;
         for e in self.components.editors.values() {
             e.update(cx, |e, cx| e.set_schema(&self.components.schema, cx));
         }
+    }
+    /// Forgets the autocomplete columns (the objects were reloaded) and reads them again for
+    /// the current tab.
+    pub(super) fn reset_completion_columns(&mut self, cx: &mut Context<Self>) {
+        self.components.columns.clear();
+        self.components.columns_pending.clear();
+        let id = self.state.active;
+        self.queue_completion_columns(id, cx);
+    }
+    /// After an edit in a SQL editor: once typing pauses, reads the columns of the tables its
+    /// text names that aren't known yet. The text is scanned off the UI thread; typing never
+    /// waits for any of it.
+    fn queue_completion_columns(&mut self, id: u64, cx: &mut Context<Self>) {
+        let driver = self.state.connection.driver;
+        self.components.columns_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(300))
+                .await;
+            let Ok(Some(text)) = this.update(cx, |this, _| {
+                this.state
+                    .tabs
+                    .iter()
+                    .find(|t| t.id == id && t.kind == TabKind::Query)
+                    .map(|t| t.editor.text.clone())
+            }) else {
+                return;
+            };
+            let wanted = cx
+                .background_executor()
+                .spawn(async move { completion_tables(&text, driver) })
+                .await;
+            let _ = this.update(cx, |this, cx| this.load_completion_columns(wanted, cx));
+        }));
+    }
+    fn load_completion_columns(&mut self, wanted: Vec<String>, cx: &mut Context<Self>) {
+        let Some(session) = self.session.clone() else {
+            return;
+        };
+        let driver = self.state.connection.driver;
+        let tables: Vec<TableRef> = self
+            .state
+            .objects
+            .iter()
+            .filter(|o| o.kind.is_relation())
+            .filter(|o| wanted.iter().any(|w| w.eq_ignore_ascii_case(&o.table.name)))
+            .map(|o| o.table.clone())
+            .filter(|t| {
+                let name = display_name(t, driver);
+                !self.components.columns.contains_key(&name)
+                    && !self.components.columns_pending.contains(&name)
+            })
+            .take(50)
+            .collect();
+        if tables.is_empty() {
+            return;
+        }
+        let names: Vec<String> = tables.iter().map(|t| display_name(t, driver)).collect();
+        self.components
+            .columns_pending
+            .extend(names.iter().cloned());
+        let backend = session.backend_id.clone();
+        let task = self
+            .services
+            .runtime
+            .spawn(async move { session.column_names(&tables).await });
+        cx.spawn(async move |this, cx| {
+            let r = task.await;
+            let _ = this.update(cx, |this, cx| {
+                for n in &names {
+                    this.components.columns_pending.remove(n);
+                }
+                if this
+                    .session
+                    .as_ref()
+                    .is_none_or(|s| s.backend_id != backend)
+                {
+                    return;
+                }
+                // A failed read is retried on the next edit; autocomplete never shows errors.
+                if let Ok(Ok(found)) = r {
+                    for ((schema, name), columns) in found {
+                        let table = TableRef { schema, name };
+                        this.components
+                            .columns
+                            .insert(display_name(&table, driver), columns);
+                    }
+                    // Missing tables are remembered as empty so they aren't asked for again.
+                    for n in names {
+                        this.components.columns.entry(n).or_default();
+                    }
+                    this.update_completion_schema(cx);
+                }
+            });
+        })
+        .detach();
     }
     fn grid_event(
         &mut self,
@@ -944,7 +1076,9 @@ impl Workspace {
                     {
                         items.push(json!({"id":"revert","label":if part==Part::Data {"Revert Row"}else{"Revert"}}));
                     }
-                    if part == Part::Structure && t.column_movable(self.state.connection.driver, real) {
+                    if part == Part::Structure
+                        && t.column_movable(self.state.connection.driver, real)
+                    {
                         items.push(json!({"type":"separator"}));
                         items.extend(column_moves(t, real));
                     }
@@ -984,7 +1118,9 @@ impl Workspace {
                         .iter()
                         .filter_map(|k| locate(t, Some(k)))
                         .collect();
-                    if let Some(after) = column_move(t, row, &id).filter(|_| part == Part::Structure) {
+                    if let Some(after) =
+                        column_move(t, row, &id).filter(|_| part == Part::Structure)
+                    {
                         let moved = t.structure.rows[row].key.clone();
                         t.move_column(self.state.connection.driver, row, after);
                         // The selection follows the column, so a Delete next acts on it.
@@ -995,26 +1131,26 @@ impl Workspace {
                             .position(|r| r.key == moved)
                             .map(|i| i..i + 1);
                     } else {
-                    let b = buffer(t, part);
-                    match id.as_str() {
-                        "null" => b.set_cell(cell.row, cell.col, Value::Null),
-                        "empty" => b.set_cell(cell.row, cell.col, Value::Text(String::new())),
-                        "default" => b.set_cell(cell.row, cell.col, Value::unset()),
-                        "delete" => b.delete(&selected),
-                        "revert" => b.apply(|rows| {
-                            if rows.get(cell.row).is_some_and(|r| r.orig.is_none()) {
-                                rows.remove(cell.row);
-                                return;
-                            }
-                            if let Some(r) = rows.get_mut(cell.row) {
-                                if let Some(orig) = &r.orig {
-                                    r.cur = orig.iter().cloned().map(Value::from).collect();
-                                    r.deleted = false;
+                        let b = buffer(t, part);
+                        match id.as_str() {
+                            "null" => b.set_cell(cell.row, cell.col, Value::Null),
+                            "empty" => b.set_cell(cell.row, cell.col, Value::Text(String::new())),
+                            "default" => b.set_cell(cell.row, cell.col, Value::unset()),
+                            "delete" => b.delete(&selected),
+                            "revert" => b.apply(|rows| {
+                                if rows.get(cell.row).is_some_and(|r| r.orig.is_none()) {
+                                    rows.remove(cell.row);
+                                    return;
                                 }
-                            }
-                        }),
-                        _ => {}
-                    }
+                                if let Some(r) = rows.get_mut(cell.row) {
+                                    if let Some(orig) = &r.orig {
+                                        r.cur = orig.iter().cloned().map(Value::from).collect();
+                                        r.deleted = false;
+                                    }
+                                }
+                            }),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -1071,6 +1207,11 @@ impl Workspace {
         let Some(t) = &mut tab.table else {
             return;
         };
+        if t.read_only() {
+            let what = t.kind.label();
+            self.show_hint(format!("This is a {what}: it can't be edited here."), cx);
+            return;
+        }
         if !t.buffer().loaded {
             return;
         }
@@ -1144,8 +1285,18 @@ pub(super) fn data_column_editable(result: &QueryResult, col: usize) -> bool {
 /// above it, so its row position is its position in the table.
 fn column_moves(t: &telecat_app::table_model::TableEditor, row: usize) -> Vec<serde_json::Value> {
     let rows = &t.structure.rows;
-    let col = t.structure.result.columns.iter().position(|c| c == "column_name");
-    let name = |r: &EditRow| col.and_then(|c| r.cur.get(c)).and_then(|v| v.value()).unwrap_or("").to_owned();
+    let col = t
+        .structure
+        .result
+        .columns
+        .iter()
+        .position(|c| c == "column_name");
+    let name = |r: &EditRow| {
+        col.and_then(|c| r.cur.get(c))
+            .and_then(|v| v.value())
+            .unwrap_or("")
+            .to_owned()
+    };
     let above = rows[..row].iter().rposition(|r| !r.deleted);
     let after: Vec<_> = rows
         .iter()
@@ -1162,7 +1313,11 @@ fn column_moves(t: &telecat_app::table_model::TableEditor, row: usize) -> Vec<se
 }
 /// Where a column-move menu item puts the column at `row`: `Some(after)`, with `after` `None`
 /// for the top. `None` when `id` is not a move.
-fn column_move(t: &telecat_app::table_model::TableEditor, row: usize, id: &str) -> Option<Option<usize>> {
+fn column_move(
+    t: &telecat_app::table_model::TableEditor,
+    row: usize,
+    id: &str,
+) -> Option<Option<usize>> {
     let rows = &t.structure.rows;
     match id {
         "move-first" => Some(None),
@@ -1263,6 +1418,8 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
         (None, None) => &tab.grid.result,
     };
     let part = tab.table.as_ref().map(|t| t.part);
+    // A view's rows, columns and indexes are shown, never edited.
+    let read_only = tab.table.as_ref().is_some_and(|t| t.read_only());
     let columns = result
         .columns
         .iter()
@@ -1276,6 +1433,7 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
                 .copied()
                 .unwrap_or(false);
             c.editable = match part {
+                _ if read_only => false,
                 Some(Part::Data) => data_column_editable(result, i),
                 Some(Part::Structure) => {
                     matches!(
@@ -1290,6 +1448,7 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
                     .is_some_and(|r| r.plan.editable.get(i).copied().unwrap_or(false)),
             };
             c.chevron = match part {
+                _ if read_only => false,
                 Some(Part::Structure) => {
                     matches!(
                         name.as_str(),
@@ -1371,18 +1530,19 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
     }
     .into();
     let result_edit = tab.result_edit.as_ref();
+    let writable = part.is_some() && !read_only;
     m.options.hooks = Hooks {
         sort: part == Some(Part::Data),
-        edit: part.is_some() || result_edit.is_some(),
-        delete: part.is_some()
+        edit: writable || result_edit.is_some(),
+        delete: writable
             || tab.kind == TabKind::Running
             || result_edit.is_some_and(|r| r.plan.delete.is_ok()),
-        insert: part == Some(Part::Data),
-        duplicate: part == Some(Part::Data),
-        paste: part == Some(Part::Data),
+        insert: writable && part == Some(Part::Data),
+        duplicate: writable && part == Some(Part::Data),
+        paste: writable && part == Some(Part::Data),
         detail: part.is_none() || part == Some(Part::Data),
         quick_look: true,
-        popup: part.is_some(),
+        popup: writable,
         escape: tab.table.as_ref().is_some_and(|t| t.buffer().dirty()) || tab.result_dirty(),
     };
     m.sort = tab
@@ -1853,132 +2013,28 @@ impl Workspace {
             .get(&key(self.state.current()))
             .map_or(0, |g| g.view.read(cx).model().rows.len())
     }
-    pub(super) fn export_result(&mut self, cx: &mut Context<Self>) {
-        let tab = self.state.current();
-        let (name, columns, rows) = if let Some(t) = &tab.table {
-            (
-                t.table.name.clone(),
-                t.data.result.columns.clone(),
-                t.data.result.rows.clone(),
-            )
-        } else {
-            let Some(g) = self.components.grids.get(&key(tab)) else {
-                return;
-            };
-            let m = g.view.read(cx).model();
-            (
-                "query_result".into(),
-                m.columns.iter().map(|c| c.name.clone()).collect(),
-                m.rows.iter().map(|r| r.to_owned()).collect(),
-            )
-        };
-        if columns.is_empty() {
-            return;
-        }
-        let directory = self.services.profile.root.clone();
-        cx.spawn(async move |this, cx| {
-            let path = match crate::export_dialog::choose_path(&directory, &name).await {
-                Ok(Some(path)) => path,
-                Ok(None) => return,
-                Err(e) => {
-                    let _ = this.update(cx, |this, cx| this.error(e, cx));
-                    return;
-                }
-            };
-            let output = export_text(
-                &name,
-                &columns,
-                &rows,
-                path.extension().and_then(|s| s.to_str()).unwrap_or("csv"),
-            );
-            let show = path.clone();
-            let result = cx
-                .background_executor()
-                .spawn(async move { std::fs::write(path, output) })
-                .await;
-            let _ = this.update(cx, |this, cx| match result {
-                Ok(()) => cx.reveal_path(&show),
-                Err(e) => this.error(e, cx),
-            });
-        })
-        .detach();
+    /// The grid's visible column names and rows (a query result after its row filter).
+    /// Also each shown row's index in the result (or its staged edits).
+    pub(super) fn visible_result(&self, cx: &App) -> Option<(Vec<String>, Rows, Vec<usize>)> {
+        let g = self.components.grids.get(&key(self.state.current()))?;
+        let m = g.view.read(cx).model();
+        Some((
+            m.columns.iter().map(|c| c.name.clone()).collect(),
+            m.rows.iter().map(|r| r.to_owned()).collect(),
+            g.rows.clone(),
+        ))
     }
 }
-fn export_text(
-    name: &str,
-    columns: &[String],
-    rows: &[Vec<Option<String>>],
-    extension: &str,
-) -> String {
-    match extension {
-        "json" => serde_json::to_string_pretty(
-            &rows
-                .iter()
-                .map(|r| {
-                    columns
-                        .iter()
-                        .enumerate()
-                        .map(|(i, c)| {
-                            (
-                                c.clone(),
-                                r.get(i)
-                                    .cloned()
-                                    .flatten()
-                                    .map_or(serde_json::Value::Null, serde_json::Value::String),
-                            )
-                        })
-                        .collect::<serde_json::Map<_, _>>()
-                })
-                .collect::<Vec<_>>(),
-        )
-        .unwrap_or_default(),
-        "sql" => {
-            let value = |v: &Option<String>| {
-                v.as_ref().map_or("NULL".into(), |s| {
-                    format!("'{}'", s.replace('\\', "\\\\").replace('\'', "''"))
-                })
-            };
-            rows.iter()
-                .map(|r| {
-                    format!(
-                        "INSERT INTO {name} ({}) VALUES ({});",
-                        columns.join(", "),
-                        r.iter().map(value).collect::<Vec<_>>().join(", ")
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
-                + "\n"
-        }
-        _ => {
-            let escape = |s: &str| {
-                if s.contains([',', '"', '\r', '\n']) {
-                    format!("\"{}\"", s.replace('"', "\"\""))
-                } else {
-                    s.to_owned()
-                }
-            };
-            "\u{feff}".to_owned()
-                + &std::iter::once(
-                    columns
-                        .iter()
-                        .map(|c| escape(c))
-                        .collect::<Vec<_>>()
-                        .join(","),
-                )
-                .chain(rows.iter().map(|r| {
-                    r.iter()
-                        .map(|v| escape(v.as_deref().unwrap_or("")))
-                        .collect::<Vec<_>>()
-                        .join(",")
-                }))
-                .collect::<Vec<_>>()
-                .join("\r\n")
-                + "\r\n"
-        }
-    }
+/// Table names SQL text may need columns of: the tables it reads or writes and every `name.`
+/// qualifier (an alias resolves to a table already listed).
+fn completion_tables(text: &str, driver: Driver) -> Vec<String> {
+    static QUALIFIER: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r#"[`"]?([\p{L}_][\p{L}\p{N}_$]*)[`"]?\s*\."#).unwrap()
+    });
+    let mut out = telecat_editor::completion::referenced_tables(text, driver);
+    out.extend(QUALIFIER.captures_iter(text).map(|m| m[1].to_owned()));
+    out
 }
-
 /// Changes whenever the Messages text does: new results or a new note.
 fn messages_revision(tab: &Tab) -> u64 {
     tab.grid

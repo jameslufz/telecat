@@ -270,6 +270,7 @@ pub fn state(name: &str) -> WorkspaceState {
                 s.objects.push(DbObject {
                     table,
                     kind: ObjectKind::Table,
+                    signature: None,
                 });
                 s.objects.sort_by_key(|o| o.table.name.to_lowercase());
             }
@@ -300,6 +301,7 @@ pub fn state(name: &str) -> WorkspaceState {
                     object: DbObject {
                         table,
                         kind: ObjectKind::Table,
+                        signature: None,
                     },
                     truncate: true,
                 });

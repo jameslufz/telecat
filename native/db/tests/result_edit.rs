@@ -431,7 +431,8 @@ async fn mysql_double_auto_increment_key_results_are_editable() -> Result<()> {
     assert_eq!(p.editable, [false, true, true]);
     p.stage(&mut rows, 0, 1, Cell::Text("ธนาคาร".into()))
         .unwrap();
-    p.stage(&mut rows, 1, 2, Cell::Text("99.25".into())).unwrap();
+    p.stage(&mut rows, 1, 2, Cell::Text("99.25".into()))
+        .unwrap();
     assert!(p.stage(&mut rows, 2, 1, Cell::Null).is_err());
     s.execute_after_review(&p.statements(&rows)?, true, false)
         .await?;

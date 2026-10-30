@@ -13,7 +13,11 @@ use telecat_core::{
 
 impl Session {
     /// Catalog reads on the control connection, away from the editor's session and transaction.
-    async fn catalog(&self, sql: &str, params: &[Value]) -> Result<Vec<Vec<Option<String>>>> {
+    pub(crate) async fn catalog(
+        &self,
+        sql: &str,
+        params: &[Value],
+    ) -> Result<Vec<Vec<Option<String>>>> {
         Ok(self
             .control
             .lock()

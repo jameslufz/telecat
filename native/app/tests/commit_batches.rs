@@ -9,13 +9,7 @@ use telecat_app::{
 use telecat_core::{changes::Stmt, types::*};
 
 fn unit(target: CommitTarget, sql: &str, transaction: bool) -> CommitUnit {
-    CommitUnit {
-        target,
-        statements: vec![Stmt::new(sql)],
-        transaction,
-        session: vec![],
-        verify: vec![],
-    }
+    CommitUnit::new(target, vec![Stmt::new(sql)], transaction)
 }
 fn op() -> CommitTarget {
     CommitTarget::Operation(StagedOperation {
@@ -25,6 +19,7 @@ fn op() -> CommitTarget {
                 name: "old".into(),
             },
             kind: ObjectKind::Table,
+            signature: None,
         },
         truncate: false,
     })
@@ -132,4 +127,47 @@ fn result_edits_with_session_settings_get_their_own_batch() {
         );
         assert!(batches[1].transaction);
     }
+}
+
+#[test]
+fn mysql_routine_and_trigger_replaces_ask_first_and_keep_their_restore() {
+    let mut replace = unit(CommitTarget::Routine(7), "DROP FUNCTION IF EXISTS f", false);
+    replace
+        .statements
+        .push(Stmt::new("CREATE FUNCTION f() RETURNS INT RETURN 2"));
+    replace.restore = vec![Stmt::new("CREATE FUNCTION f() RETURNS INT RETURN 1")];
+    let batches = commit_batches(vec![replace.clone()], Driver::Mysql);
+    assert_eq!(batches.len(), 1);
+    assert!(!batches[0].transaction);
+    assert_eq!(batches[0].restore, replace.restore);
+    // Even alone, a replace is announced: it isn't atomic on MySQL.
+    let notice = partial_commit_notice(&batches).expect("notice");
+    assert!(notice.contains("drops it and creates it again"), "{notice}");
+    assert!(notice.contains("puts the original back"), "{notice}");
+    let mixed = commit_batches(
+        vec![
+            replace,
+            unit(
+                CommitTarget::Trigger(3, "k".into()),
+                "DROP TRIGGER t",
+                false,
+            ),
+        ],
+        Driver::Mysql,
+    );
+    assert!(
+        partial_commit_notice(&mixed)
+            .unwrap()
+            .contains("one at a time")
+    );
+    // PostgreSQL replaces in place inside its single transaction: nothing to announce.
+    let pg = commit_batches(
+        vec![unit(
+            CommitTarget::Routine(7),
+            "CREATE OR REPLACE FUNCTION f()",
+            true,
+        )],
+        Driver::Postgres,
+    );
+    assert_eq!(partial_commit_notice(&pg), None);
 }

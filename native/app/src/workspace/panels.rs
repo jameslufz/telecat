@@ -27,11 +27,20 @@ impl Workspace {
                     ("Tables", ObjectKind::Table, "Table.svg"),
                     ("Views", ObjectKind::View, "View.svg"),
                 ] {
+                    let in_section = |o: &DbObject| {
+                        if kind == ObjectKind::View {
+                            o.kind.is_view()
+                        } else {
+                            o.kind == kind
+                        }
+                    };
                     let objects = fuzzy_filter(
                         &query,
-                        self.state.objects.iter().filter(|o| o.kind == kind).map(|o| {
-                            (display_name(&o.table, self.state.connection.driver), o)
-                        }),
+                        self.state
+                            .objects
+                            .iter()
+                            .filter(|o| in_section(o))
+                            .map(|o| (display_name(&o.table, self.state.connection.driver), o)),
                     );
                     if objects.is_empty() {
                         continue;
@@ -74,9 +83,21 @@ impl Workspace {
                             let expand_table = table.clone();
                             let expanded_columns =
                                 self.tree_state.columns.get(&sidebar::table_key(&table));
-                            let status = self.table_status(&table);
-                            let selected =
-                                self.state.current().kind == TabKind::Table(table.clone());
+                            let status = self.object_status(object);
+                            let selected = self.state.current().kind
+                                == if object.kind.is_routine() {
+                                    TabKind::Routine(object.clone())
+                                } else {
+                                    TabKind::Table(table.clone())
+                                };
+                            let routine = object.kind.is_routine();
+                            let tooltip = match &object.signature {
+                                Some(args) => format!(
+                                    "{}({args})",
+                                    display_name(&table, self.state.connection.driver)
+                                ),
+                                None => display_name(&table, self.state.connection.driver),
+                            };
                             let staged = status.is_some();
                             tree = tree.child(
                                 div()
@@ -91,10 +112,7 @@ impl Workspace {
                                     .pl(px(6.))
                                     .pr(px(4.))
                                     .rounded(px(5.))
-                                    .tooltip(text_tooltip(display_name(
-                                        &table,
-                                        self.state.connection.driver,
-                                    )))
+                                    .tooltip(text_tooltip(tooltip))
                                     .flex()
                                     .items_center()
                                     .gap(px(5.))
@@ -117,30 +135,36 @@ impl Workspace {
                                             spread_radius: px(2.),
                                         }])
                                     })
-                                    .child(
-                                        div()
-                                            .id(SharedString::from(format!(
-                                                "expand-{}",
-                                                sidebar::table_key(&table)
-                                            )))
-                                            .child(icon(
-                                                if expanded_columns.is_some() {
-                                                    "ChevronDown.svg"
-                                                } else {
-                                                    "ChevronRight.svg"
-                                                },
-                                                13.,
-                                                if selected {
-                                                    0xffffff
-                                                } else {
-                                                    telecat_theme::MUTED
-                                                },
-                                            ))
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                cx.stop_propagation();
-                                                this.toggle_tree_columns(expand_table.clone(), cx);
-                                            })),
-                                    )
+                                    .when(routine, |d| d.child(div().w(px(13.)).flex_shrink_0()))
+                                    .when(!routine, |d| {
+                                        d.child(
+                                            div()
+                                                .id(SharedString::from(format!(
+                                                    "expand-{}",
+                                                    sidebar::table_key(&table)
+                                                )))
+                                                .child(icon(
+                                                    if expanded_columns.is_some() {
+                                                        "ChevronDown.svg"
+                                                    } else {
+                                                        "ChevronRight.svg"
+                                                    },
+                                                    13.,
+                                                    if selected {
+                                                        0xffffff
+                                                    } else {
+                                                        telecat_theme::MUTED
+                                                    },
+                                                ))
+                                                .on_click(cx.listener(move |this, _, _, cx| {
+                                                    cx.stop_propagation();
+                                                    this.toggle_tree_columns(
+                                                        expand_table.clone(),
+                                                        cx,
+                                                    );
+                                                })),
+                                        )
+                                    })
                                     .child(icon(
                                         path,
                                         14.,
@@ -176,12 +200,7 @@ impl Workspace {
                                     .on_click(cx.listener(move |this, _, window, cx| {
                                         this.tree_state.focused = Some(focus_object.clone());
                                         window.focus(&this.tree_focus, cx);
-                                        if matches!(
-                                            focus_object.kind,
-                                            ObjectKind::Table | ObjectKind::View
-                                        ) {
-                                            this.open_table(table.clone(), cx);
-                                        }
+                                        this.open_object(focus_object.clone(), cx);
                                     })),
                             );
                             if let Some(columns) = expanded_columns {
@@ -406,7 +425,7 @@ impl Workspace {
             .child(search_box(&self.search,28.).mx(px(8.)).mt(px(4.)).mb(px(8.)))
             .child(div().id("items-area").flex_1().min_h_0().min_w_0().relative().flex().child(tree.when(tree_dimmed, |d| d.opacity(0.35))).child(scrollbar(&self.tree_scroll, cx)).children(tree_state)
                 .when(self.segment == Segment::Items, |d| d.on_mouse_down(MouseButton::Right, cx.listener(|this, e: &MouseDownEvent, window, cx| this.items_menu(e.position, window, cx)))))
-            .child(div().h(px(34.)).flex_shrink_0().border_t_1().border_color(rgb(0x111111)).px(px(8.)).flex().items_center().gap(px(4.)).child(nav("side-add","Plus.svg",false).on_click(cx.listener(|this,_,_,cx|this.new_table(cx)))).child(nav("side-menu","ChevronDown.svg",false).on_mouse_down(MouseButton::Left,cx.listener(|_this,e:&MouseDownEvent,window,cx|{native_menu::choose(json!([{"id":"table","label":"New Table"},{"id":"query","label":"New SQL Query"},{"type":"separator"},{"id":"import","label":"Import SQL Dump…"}]),e.position,window,cx,|this,id,_,cx|{if id=="query"{this.new_query("",cx);}else if id=="table"{this.new_table(cx);}else if id=="import"{this.import_dump_file(cx);}else{this.sheet=Some(Sheet::Shortcuts);cx.notify();}});}))))
+            .child(div().h(px(34.)).flex_shrink_0().border_t_1().border_color(rgb(0x111111)).px(px(8.)).flex().items_center().gap(px(4.)).child(nav("side-add","Plus.svg",false).on_click(cx.listener(|this,_,_,cx|this.new_table(cx)))).child(nav("side-menu","ChevronDown.svg",false).on_mouse_down(MouseButton::Left,cx.listener(|_this,e:&MouseDownEvent,window,cx|{native_menu::choose(json!([{"id":"table","label":"New Table"},{"id":"query","label":"New SQL Query"},{"type":"separator"},{"id":"import","label":"Import SQL Dump…"}]),e.position,window,cx,|this,id,_,cx|{match id.as_str(){"query"=>this.new_query("",cx),"table"=>this.new_table(cx),_=>this.import_dump_file(cx)}});}))))
     }
     pub(super) fn right_panel(&self, cx: &mut Context<Self>) -> Div {
         let tab = self.state.current();
@@ -469,8 +488,7 @@ impl Workspace {
                             .ml(px(10.))
                             .flex_1()
                             .min_w_0(),
-                    )
-                    .child(icon("Sliders.svg", 16., 0x8a8a8a)),
+                    ),
             )
             .when(empty, |d| {
                 d.child(
@@ -571,7 +589,9 @@ impl Workspace {
                 )
             })
     }
-    pub(super) fn rail(&self, cx: &mut Context<Self>) -> Div {
+    /// Fixture-only (see `fixture_rail_visible`): hard-coded connections from the reference
+    /// screenshots.
+    pub(super) fn fixture_rail(&self, cx: &mut Context<Self>) -> Div {
         div()
             .w(px(84.))
             .flex_shrink_0()
@@ -726,6 +746,9 @@ impl Workspace {
         if self.state.current().table.is_some() {
             return self.table_content(cx);
         }
+        if matches!(self.state.current().kind, TabKind::Routine(_)) {
+            return self.routine_content(cx);
+        }
         let tab = self.state.current();
         let query = tab.kind == TabKind::Query;
         let running = tab.kind == TabKind::Running;
@@ -733,7 +756,7 @@ impl Workspace {
         if query {
             content=content.child(div().h(relative(self.layout.query_split(tab.id))).flex_shrink_0().flex().flex_col()
                 .child(self.editor_view())
-                .child(div().h(px(40.)).flex_shrink_0().flex().items_center().gap(px(8.)).px(px(10.)).font(mono()).text_size(px(11.5)).text_color(rgb(telecat_theme::MUTED)).child(icon("Sliders.svg",15.,0x8a8a8a)).child(format!("{} lines, {} characters",tab.editor.text.split('\n').count(),if self.scenario=="c1-lock"{50}else{tab.editor.text.encode_utf16().count()})).child(div().flex_1())
+                .child(div().h(px(40.)).flex_shrink_0().flex().items_center().gap(px(8.)).px(px(10.)).font(mono()).text_size(px(11.5)).text_color(rgb(telecat_theme::MUTED)).child(format!("{} lines, {} characters",tab.editor.text.split('\n').count(),if self.scenario=="c1-lock"{50}else{tab.editor.text.encode_utf16().count()})).child(div().flex_1())
                 .child(small_button("query-limit",format!("Limit {}",tab.limit)).h(px(28.)).font(ui_font()).gap(px(6.)).child(icon("UpDown.svg",12.,0xb8b8b8)).on_mouse_down(MouseButton::Left,cx.listener(|this,e:&MouseDownEvent,window,cx|{let items:Vec<_>=[0,100,300,500,1000,5000].iter().map(|n|json!({"id":n.to_string(),"label":if *n==0{"No limit".into()}else{format!("Limit {n}")},"checked":*n==this.state.current().limit})).collect();native_menu::choose(json!(items),e.position,window,cx,|this,id,_,cx|{if let Ok(n)=id.parse(){this.state.current_mut().limit=n;cx.notify();}});})))
                 .child(small_button("beautify","Beautify ⌘I").font(ui_font()).on_click(cx.listener(|this,_,window,cx|this.format_editor(false,window,cx))))
                 .child(div().h(px(28.)).flex_shrink_0().rounded(px(7.)).border_1().border_color(rgb(0x3c3c3c)).bg(rgb(telecat_theme::INPUT_2)).flex().items_center().font(ui_font()).text_size(px(12.)).text_color(rgb(telecat_theme::TEXT))
@@ -895,12 +918,7 @@ impl Workspace {
         }
         let mut bottom = subbar();
         if query {
-            bottom = bottom.child(segments(
-                &["Data", "Message", "Chart"],
-                if tab.message { 1 } else { 0 },
-                true,
-                cx,
-            ));
+            bottom = bottom.child(segments(&["Data", "Message"], usize::from(tab.message), cx));
             let count = tab
                 .results
                 .iter()
@@ -1001,60 +1019,6 @@ impl Workspace {
                         .text_color(rgb(telecat_theme::MUTED))
                         .child("Select rows and press ⌫ to kill the query"),
                 );
-        } else {
-            bottom = bottom
-                .child(segments(&["Data", "Structure", "Index"], 0, false, cx))
-                .child(small_button("add-row", "+ Row"))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .text_center()
-                        .text_color(rgb(telecat_theme::MUTED))
-                        .child(format!(
-                            "{}-{} of {} rows",
-                            if tab.total == 0 { 0 } else { tab.offset + 1 },
-                            (tab.offset + tab.limit).min(tab.total),
-                            grouped(tab.total)
-                        )),
-                )
-                .child(
-                    small_button("filters", "")
-                        .gap(px(6.))
-                        .child(icon("Search.svg", 13., 0xe8e8e8))
-                        .child("Filters"),
-                )
-                .child(small_button("columns", "Columns"))
-                .child(
-                    nav("page-prev", "ChevronLeft.svg", tab.offset == 0).on_click(cx.listener(
-                        |this, _, _, cx| {
-                            let t = this.state.current_mut();
-                            t.offset = t.offset.saturating_sub(t.limit);
-                            this.refresh_tab(cx);
-                        },
-                    )),
-                )
-                .child(
-                    small_button("page-limit", tab.limit.to_string())
-                        .w(px(90.))
-                        .justify_between()
-                        .child(icon("UpDown.svg", 12., 0xb8b8b8)),
-                )
-                .child(
-                    nav(
-                        "page-next",
-                        "ChevronRight.svg",
-                        tab.offset + tab.limit >= tab.total,
-                    )
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        let t = this.state.current_mut();
-                        if t.offset + t.limit < t.total {
-                            t.offset += t.limit;
-                            this.refresh_tab(cx);
-                        }
-                    })),
-                );
         }
         content.child(bottom)
     }
@@ -1083,12 +1047,8 @@ fn search_box(input: &Entity<InputState>, height: f32) -> Div {
         .child(icon("Search.svg", 14., 0x8a8a8a))
         .child(div().flex_1().min_w_0().child(Input::new(input)))
 }
-fn segments(
-    labels: &[&'static str],
-    selected: usize,
-    query: bool,
-    cx: &mut Context<Workspace>,
-) -> Div {
+/// The Data / Message switch under a query's results.
+fn segments(labels: &[&'static str], selected: usize, cx: &mut Context<Workspace>) -> Div {
     div()
         .flex_shrink_0()
         .h(px(28.))
@@ -1110,13 +1070,10 @@ fn segments(
                 .when(i == selected, |d| {
                     d.bg(rgb(telecat_theme::ACCENT)).text_color(rgb(0xffffff))
                 })
-                .when(query && i == 2, |d| d.opacity(0.4))
                 .child(*label)
                 .on_click(cx.listener(move |this, _, _, cx| {
-                    if query && i < 2 {
-                        this.state.current_mut().message = i == 1;
-                        cx.notify();
-                    }
+                    this.state.current_mut().message = i == 1;
+                    cx.notify();
                 }))
         }))
 }

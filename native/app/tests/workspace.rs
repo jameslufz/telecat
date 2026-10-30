@@ -102,7 +102,12 @@ fn closed_query_tabs_reopen_their_sql_in_order() {
     s.reopen_query();
     assert_eq!(s.current().editor.text, "");
     // Closing again remembers it again, once.
-    let a = s.tabs.iter().find(|t| t.editor.text == "SELECT 'A'").unwrap().id;
+    let a = s
+        .tabs
+        .iter()
+        .find(|t| t.editor.text == "SELECT 'A'")
+        .unwrap()
+        .id;
     s.close_tab(a);
     let b = s.open_query("SQL Query", "SELECT 'A'");
     s.close_tab(b);
@@ -112,8 +117,7 @@ fn closed_query_tabs_reopen_their_sql_in_order() {
     r.restore_drafts(&saved);
     assert_eq!(r.tabs.len(), 1);
     assert_eq!(r.closed_queries.len(), 2);
-    let old: Vec<SqlDraft> =
-        serde_json::from_str(r#"[{"title":"Old","sql":"SELECT 1"}]"#).unwrap();
+    let old: Vec<SqlDraft> = serde_json::from_str(r#"[{"title":"Old","sql":"SELECT 1"}]"#).unwrap();
     r.restore_drafts(&old);
     assert_eq!(r.current().title, "Old");
     assert!(r.closed_queries.is_empty());
@@ -426,5 +430,8 @@ fn sidebar_search_matches_letters_in_order_like_tableplus() {
     assert_eq!(m.ranges, vec![4..6]);
     assert!(fuzzy_match("tz", "team").is_none());
     let all = fuzzy_filter("", ["b", "a"].map(|n| (n.to_string(), ())));
-    assert_eq!(all.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(), ["b", "a"]);
+    assert_eq!(
+        all.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(),
+        ["b", "a"]
+    );
 }

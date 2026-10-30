@@ -2,6 +2,12 @@ use super::*;
 use telecat_core::changes::inline_params;
 use telecat_db::CommitVerdict;
 
+/// The object a failed MySQL replace was about.
+#[derive(Clone)]
+enum Replaced {
+    Routine(DbObject),
+    Trigger { schema: String, name: String },
+}
 pub(super) enum PendingAction {
     Query { id: u64, plan: QueryPlan },
     Commit(Vec<CommitUnit>),
@@ -153,6 +159,7 @@ impl Workspace {
         }
         self.pending = None;
         self.sheet = None;
+        self.triggers_ui = None;
         self.saving = false;
         self.approval = QueryApproval::default();
         cx.notify();
@@ -350,6 +357,9 @@ impl Workspace {
                             Ok(Err(_)) if !in_flight => {
                                 this.resolve_commit(run, CommitVerdict::NotApplied, cx)
                             }
+                            Ok(Err(e)) if !batch.restore.is_empty() => {
+                                this.restore_original(&session, &batch, e, cx)
+                            }
                             Ok(Err(e)) => this.error(
                                 format!(
                                     "{e}\n\n{}",
@@ -390,6 +400,101 @@ impl Workspace {
         })
         .detach();
     }
+    /// MySQL replaced a routine or trigger by dropping it and the new version failed: create
+    /// the original again and say which state the database is in.
+    fn restore_original(
+        &mut self,
+        session: &Arc<telecat_db::Session>,
+        batch: &CommitBatch,
+        error: anyhow::Error,
+        cx: &mut Context<Self>,
+    ) {
+        let driver = self.state.connection.driver;
+        let original = batch
+            .restore
+            .iter()
+            .map(|s| inline_params(driver, s))
+            .collect::<Vec<_>>()
+            .join("\n");
+        // What was being replaced: the answer comes from the server, never from the error text.
+        let target = batch.targets.iter().find_map(|t| match t {
+            CommitTarget::Routine(id) => {
+                self.state
+                    .tabs
+                    .iter()
+                    .find(|t| t.id == *id)
+                    .and_then(|t| match &t.kind {
+                        TabKind::Routine(o) => Some(Replaced::Routine(o.clone())),
+                        _ => None,
+                    })
+            }
+            CommitTarget::Trigger(id, key) => self
+                .state
+                .tabs
+                .iter()
+                .find(|t| t.id == *id)
+                .and_then(|t| t.table.as_ref())
+                .and_then(|e| {
+                    let edit = e.triggers.edits.as_ref()?.iter().find(|x| &x.key == key)?;
+                    Some(Replaced::Trigger {
+                        schema: e.table.schema.clone(),
+                        name: edit.orig.as_ref()?.name.clone(),
+                    })
+                }),
+            _ => None,
+        });
+        let restore = batch.restore.clone();
+        let settings = batch.session.clone();
+        let s = session.clone();
+        let task = self.services.runtime.spawn(async move {
+            let Some(target) = target else {
+                return format!(
+                    "Telecat couldn't tell what to check, so it didn't create anything again. Check the server; the original definition was:\n\n{original}"
+                );
+            };
+            let exists = |s: Arc<telecat_db::Session>, target: Replaced| async move {
+                match target {
+                    Replaced::Routine(o) => s.routine_exists(&o).await,
+                    Replaced::Trigger { schema, name } => s.trigger_exists(&schema, &name).await,
+                }
+            };
+            match exists(s.clone(), target.clone()).await {
+                Ok(true) => {
+                    return "MySQL refused it before the original was dropped: the original is unchanged.".to_owned();
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    return format!(
+                        "Telecat couldn't check whether the original is still there ({e:#}). Its definition was:\n\n{original}"
+                    );
+                }
+            }
+            let put_back = s
+                .execute_after_review_with(&restore, false, false, &settings)
+                .await;
+            match (put_back, exists(s, target).await) {
+                (_, Ok(true)) => {
+                    "The original had been dropped; Telecat created it again as it was, so nothing changed.".to_owned()
+                }
+                (Err(e), _) => format!(
+                    "The original had been dropped, and creating it again failed too ({e:#}). It no longer exists; its definition was:\n\n{original}"
+                ),
+                (Ok(_), _) => format!(
+                    "The original had been dropped. Telecat ran its definition again but can't find it now; check the server. Its definition was:\n\n{original}"
+                ),
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let outcome = task
+                .await
+                .unwrap_or_else(|e| format!("Checking the original failed ({e})."));
+            let _ = this.update(cx, |this, cx| {
+                this.error(format!("{error:#}\n\n{outcome}"), cx);
+                this.refresh_objects(cx);
+            });
+        })
+        .detach();
+    }
     pub(super) fn preview_text(&self) -> anyhow::Result<String> {
         if self.scenario == "a1-preview" {
             return Ok(fixtures::PREVIEW.into());
@@ -416,29 +521,32 @@ impl Workspace {
         if self.saving {
             return;
         }
+        // Only a table can be truncated.
+        if truncate && object.kind != ObjectKind::Table {
+            return;
+        }
         // A table that was never saved has nothing to drop or truncate on the server.
-        if self.table_status(&object.table) == Some("new") {
+        if self.object_status(&object) == Some("new") {
             if !truncate {
                 self.discard_new_table(&object.table, window, cx);
             }
             return;
         }
         let name = display_name(&object.table, self.state.connection.driver);
-        let kind = if object.kind == ObjectKind::View {
-            "view"
-        } else {
-            "table"
-        };
+        let kind = object.kind.label();
         let prompt = window.prompt(
             PromptLevel::Warning,
             &format!(
                 "Do you want to {} {kind} {name}?",
                 if truncate { "truncate" } else { "delete" }
             ),
-            Some(if truncate {
-                "All rows will be removed when you press ⌘S to save changes."
-            } else {
+            Some(&if truncate {
+                "All rows will be removed when you press ⌘S to save changes.".to_owned()
+            } else if object.kind == ObjectKind::Table {
                 "The table and all its data will be removed when you press ⌘S to save changes."
+                    .to_owned()
+            } else {
+                format!("The {kind} will be removed when you press ⌘S to save changes.")
             }),
             &[if truncate { "Truncate" } else { "Delete" }, "Cancel"],
             cx,
@@ -449,9 +557,7 @@ impl Workspace {
             let _ = this.update(cx, |this, cx| {
                 this.saving = false;
                 if ok {
-                    this.state
-                        .operations
-                        .retain(|o| o.object.table != object.table);
+                    this.state.operations.retain(|o| o.object != object);
                     this.state
                         .operations
                         .push(StagedOperation { object, truncate });
@@ -485,6 +591,7 @@ impl Workspace {
                         }
                         this.state.close_tab(id);
                     }
+                    let mut reverted = vec![];
                     for t in &mut this.state.tabs {
                         if let Some(e) = &mut t.table {
                             e.discard();
@@ -492,6 +599,17 @@ impl Workspace {
                         if let Some(r) = &mut t.result_edit {
                             r.data.discard();
                         }
+                        if t.routine_dirty() {
+                            let original = t.routine.as_ref().and_then(|r| r.original.clone());
+                            t.editor = EditorDocument {
+                                text: original.unwrap_or_default(),
+                                ..Default::default()
+                            };
+                            reverted.push(t.id);
+                        }
+                    }
+                    for id in reverted {
+                        this.drop_editor(id);
                     }
                     this.state.operations.clear();
                     // Nothing typed but not yet staged may come back after a discard.
@@ -554,6 +672,21 @@ impl Workspace {
         })
         .detach();
     }
+    /// How a sidebar object is staged: "new", "modified", "drop" or "truncate".
+    pub(super) fn object_status(&self, object: &DbObject) -> Option<&'static str> {
+        if let Some(op) = self.state.operations.iter().find(|o| o.object == *object) {
+            return Some(if op.truncate { "truncate" } else { "drop" });
+        }
+        if object.kind.is_routine() {
+            return self
+                .state
+                .tabs
+                .iter()
+                .any(|t| t.kind == TabKind::Routine(object.clone()) && t.routine_dirty())
+                .then_some("modified");
+        }
+        self.table_status(&object.table)
+    }
     pub(super) fn table_status(&self, table: &TableRef) -> Option<&'static str> {
         if self.scenario == "55-new-table" && table.name == "sa_banks" {
             return None;
@@ -563,7 +696,7 @@ impl Workspace {
             .state
             .operations
             .iter()
-            .find(|o| o.object.table == *table)
+            .find(|o| o.object.table == *table && o.object.kind.is_relation())
         {
             return Some(if op.truncate { "truncate" } else { "drop" });
         }
@@ -601,8 +734,8 @@ impl Workspace {
         if self.saving {
             return;
         }
-        let relational = matches!(object.kind, ObjectKind::Table | ObjectKind::View);
-        let status = self.table_status(&object.table);
+        let relational = object.kind.is_relation();
+        let status = self.object_status(&object);
         let mut items = vec![];
         if relational {
             items.extend([
@@ -610,9 +743,11 @@ impl Workspace {
                 json!({"id":"select","label":"SELECT * … LIMIT 100 in SQL Query"}),
                 json!({"type":"separator"}),
             ]);
+        } else {
+            items.push(json!({"id":"open","label":"Open"}));
         }
         items.push(json!({"id":"copy","label":"Copy Name"}));
-        if relational && status != Some("new") {
+        if status != Some("new") {
             items.push(json!({"type":"separator"}));
             if object.kind == ObjectKind::Table {
                 items.push(json!({"id":"truncate","label":"Truncate…  ⌥⌫"}));
@@ -629,7 +764,7 @@ impl Workspace {
             cx,
             move |this, id, window, cx| {
                 match id.as_str() {
-                    "open" => this.open_table(object.table.clone(), cx),
+                    "open" => this.open_object(object.clone(), cx),
                     "select" => {
                         let q = telecat_core::changes::qualified(
                             this.state.connection.driver,
@@ -643,10 +778,7 @@ impl Workspace {
                     "truncate" | "drop" => {
                         this.stage_operation(object.clone(), id == "truncate", window, cx)
                     }
-                    "cancel" => this
-                        .state
-                        .operations
-                        .retain(|o| o.object.table != object.table),
+                    "cancel" => this.state.operations.retain(|o| o.object != object),
                     _ => {}
                 }
                 cx.notify();
@@ -671,10 +803,14 @@ impl Workspace {
         let Some(tab) = self.state.tabs.iter().find(|t| t.id == id) else {
             return;
         };
-        let new_table = tab.table.as_ref().filter(|e| e.is_new).map(|e| e.table.clone());
+        let new_table = tab
+            .table
+            .as_ref()
+            .filter(|e| e.is_new)
+            .map(|e| e.table.clone());
         // A query tab's SQL is remembered when it closes (the next SQL Query tab reopens it),
         // so only staged edits need asking about.
-        let dirty = tab.table.as_ref().is_some_and(|t| t.dirty()) || tab.result_dirty();
+        let dirty = tab.dirty();
         if !dirty {
             self.state.close_tab(id);
             if let Some(t) = &new_table {
@@ -685,7 +821,13 @@ impl Workspace {
             cx.notify();
             return;
         }
-        let prompt=window.prompt(PromptLevel::Warning,&format!("Discard unsaved changes to {}?",tab.title),Some("Closing the tab throws away its staged edits."),&["Discard","Cancel"],cx);
+        let prompt = window.prompt(
+            PromptLevel::Warning,
+            &format!("Discard unsaved changes to {}?", tab.title),
+            Some("Closing the tab throws away its staged edits."),
+            &["Discard", "Cancel"],
+            cx,
+        );
         self.saving = true;
         cx.spawn(async move |this, cx| {
             let ok = prompt.await == Ok(0);

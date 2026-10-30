@@ -94,7 +94,9 @@ fn edit_rows(tab: &Tab) -> Option<&telecat_app::table_model::EditBuffer> {
 }
 fn column_editable(tab: &Tab, col: usize) -> bool {
     match (&tab.table, &tab.result_edit) {
-        (Some(t), _) => t.part == Part::Data && data_column_editable(&t.data.result, col),
+        (Some(t), _) => {
+            t.part == Part::Data && !t.read_only() && data_column_editable(&t.data.result, col)
+        }
         (None, Some(r)) => r.plan.editable.get(col).copied().unwrap_or(false),
         (None, None) => false,
     }

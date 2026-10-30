@@ -69,36 +69,49 @@ impl Session {
                 return Ok(out);
             }
             let db = literal(self.driver, &self.database);
-            for r in self.query(&format!("SELECT table_name, table_type FROM information_schema.tables WHERE table_schema={db} ORDER BY table_name")).await?.rows{out.push(DbObject{table:TableRef{schema:self.database.clone(),name:r[0].clone().unwrap_or_default()},kind:if r[1].as_deref()==Some("VIEW"){ObjectKind::View}else{ObjectKind::Table}});}
-            for r in self.query(&format!("SELECT routine_name, routine_type FROM information_schema.routines WHERE routine_schema={db} ORDER BY routine_name")).await?.rows{out.push(DbObject{table:TableRef{schema:self.database.clone(),name:r[0].clone().unwrap_or_default()},kind:if r[1].as_deref()==Some("PROCEDURE"){ObjectKind::Procedure}else{ObjectKind::Function}});}
+            let named = |r: &[Option<String>]| TableRef {
+                schema: self.database.clone(),
+                name: r[0].clone().unwrap_or_default(),
+            };
+            for r in self.query(&format!("SELECT table_name, table_type FROM information_schema.tables WHERE table_schema={db} ORDER BY table_name")).await?.rows {
+                let kind = if r[1].as_deref() == Some("VIEW") { ObjectKind::View } else { ObjectKind::Table };
+                out.push(DbObject::new(named(&r), kind));
+            }
+            for r in self.query(&format!("SELECT routine_name, routine_type FROM information_schema.routines WHERE routine_schema={db} ORDER BY routine_name")).await?.rows {
+                let kind = if r[1].as_deref() == Some("PROCEDURE") { ObjectKind::Procedure } else { ObjectKind::Function };
+                out.push(DbObject::new(named(&r), kind));
+            }
         } else {
             let sql = "SELECT n.nspname, c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r','p','v','m','f') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND NOT c.relispartition ORDER BY n.nspname <> 'public', n.nspname, c.relname";
             for r in self.query(sql).await?.rows {
-                out.push(DbObject {
-                    table: TableRef {
-                        schema: r[0].clone().unwrap_or_default(),
-                        name: r[1].clone().unwrap_or_default(),
-                    },
-                    kind: if matches!(r[2].as_deref(), Some("v" | "m")) {
-                        ObjectKind::View
-                    } else {
-                        ObjectKind::Table
-                    },
-                });
+                let table = TableRef {
+                    schema: r[0].clone().unwrap_or_default(),
+                    name: r[1].clone().unwrap_or_default(),
+                };
+                let kind = match r[2].as_deref() {
+                    Some("v") => ObjectKind::View,
+                    Some("m") => ObjectKind::MaterializedView,
+                    _ => ObjectKind::Table,
+                };
+                out.push(DbObject::new(table, kind));
             }
-            let sql = "SELECT n.nspname, p.proname, p.prokind FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e') ORDER BY n.nspname, p.proname";
+            // Aggregates and window functions have no editable definition; only plain functions
+            // and procedures are listed, each overload with its identity arguments.
+            let sql = "SELECT n.nspname, p.proname, p.prokind, pg_get_function_identity_arguments(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE p.prokind IN ('f','p') AND n.nspname NOT IN ('pg_catalog','information_schema') AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e') ORDER BY n.nspname, p.proname, 4";
             for r in self.query(sql).await?.rows {
-                out.push(DbObject {
-                    table: TableRef {
+                let mut object = DbObject::new(
+                    TableRef {
                         schema: r[0].clone().unwrap_or_default(),
                         name: r[1].clone().unwrap_or_default(),
                     },
-                    kind: if r[2].as_deref() == Some("p") {
+                    if r[2].as_deref() == Some("p") {
                         ObjectKind::Procedure
                     } else {
                         ObjectKind::Function
                     },
-                });
+                );
+                object.signature = Some(r[3].clone().unwrap_or_default());
+                out.push(object);
             }
         }
         Ok(out)
@@ -134,10 +147,11 @@ impl Session {
         }
         Ok((visible.0, visible.1, all))
     }
-    async fn select(
+    /// The relation, WHERE, primary key and ORDER BY that a table page and an export share.
+    async fn filtered(
         &self,
         req: &TableDataRequest,
-    ) -> Result<(String, Where, Vec<String>, String, Identity)> {
+    ) -> Result<(TableRef, String, Where, Vec<String>, String)> {
         let d = self.driver;
         let t = self.table(&req.table);
         let rel = qualified(d, &t);
@@ -157,6 +171,22 @@ impl Session {
         } else {
             String::new()
         };
+        Ok((t, rel, w, pk, order))
+    }
+    /// Every row the table tab's filters and sort select, without paging: the export query.
+    pub(crate) async fn export_select(
+        &self,
+        req: &TableDataRequest,
+    ) -> Result<(String, Vec<serde_json::Value>)> {
+        let (_, rel, w, _, order) = self.filtered(req).await?;
+        Ok((format!("SELECT * FROM {rel}{}{order}", w.sql), w.params))
+    }
+    async fn select(
+        &self,
+        req: &TableDataRequest,
+    ) -> Result<(String, Where, Vec<String>, String, Identity)> {
+        let d = self.driver;
+        let (t, rel, w, pk, order) = self.filtered(req).await?;
         let identity = if d == Driver::Postgres {
             let physical = self
                 .strings(&format!(
@@ -464,14 +494,50 @@ impl Session {
             }
         })
     }
+    /// Whether `t` is a table, a view or a materialized view, as the catalog says now.
+    pub async fn relation_kind(&self, t: &TableRef) -> Result<ObjectKind> {
+        let t = self.table(t);
+        let d = self.driver;
+        let kind = if d == Driver::Mysql {
+            self.strings(&format!(
+                "SELECT table_type FROM information_schema.tables WHERE table_schema={} AND table_name={}",
+                literal(d, &t.schema),
+                literal(d, &t.name)
+            ))
+            .await?
+        } else {
+            self.strings(&format!(
+                "SELECT relkind::text FROM pg_class WHERE oid = to_regclass({})",
+                literal(d, &qualified(d, &t))
+            ))
+            .await?
+        };
+        let kind = kind
+            .first()
+            .with_context(|| format!("{} no longer exists", t.name))?;
+        Ok(match kind.as_str() {
+            "VIEW" | "SYSTEM VIEW" | "v" => ObjectKind::View,
+            "m" => ObjectKind::MaterializedView,
+            _ => ObjectKind::Table,
+        })
+    }
+    /// The statement that creates `t`: CREATE TABLE, or for a view its real definition
+    /// (MySQL SHOW CREATE VIEW; PostgreSQL pg_get_viewdef as CREATE OR REPLACE VIEW, or
+    /// CREATE MATERIALIZED VIEW).
     pub async fn ddl(&self, t: &TableRef) -> Result<String> {
         let t = self.table(t);
         let d = self.driver;
         let rel = qualified(d, &t);
         let lit = literal(d, &rel);
+        let kind = self.relation_kind(&t).await?;
         if d == Driver::Mysql {
+            let sql = if kind == ObjectKind::Table {
+                format!("SHOW CREATE TABLE {rel};")
+            } else {
+                format!("SHOW CREATE VIEW {rel};")
+            };
             return Ok(self
-                .query(&format!("SHOW CREATE TABLE {rel};"))
+                .query(&sql)
                 .await?
                 .rows
                 .first()
@@ -479,6 +545,20 @@ impl Session {
                 .cloned()
                 .flatten()
                 .unwrap_or_default());
+        }
+        if kind.is_view() {
+            let body = self
+                .strings(&format!("SELECT pg_get_viewdef({lit}::regclass, true)"))
+                .await?
+                .into_iter()
+                .next()
+                .unwrap_or_default();
+            let body = body.trim().trim_end_matches(';').trim_end();
+            return Ok(if kind == ObjectKind::MaterializedView {
+                format!("CREATE MATERIALIZED VIEW {rel} AS\n{body};")
+            } else {
+                format!("CREATE OR REPLACE VIEW {rel} AS\n{body};")
+            });
         }
         let cols=self.query(&format!("SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull, pg_get_expr(d.adbin, d.adrelid) FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum WHERE a.attrelid = {lit}::regclass AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum")).await?.rows;
         let cons=self.query(&format!("SELECT conname, pg_get_constraintdef(oid, true) FROM pg_constraint WHERE conrelid = {lit}::regclass ORDER BY contype = 'p' DESC, conname")).await?.rows;

@@ -24,13 +24,19 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
   - Safe Mode levels and SSL modes.
   - Password storage in the macOS Keychain, Ask on connect, or None.
   - Test the connection before you save it.
+  - ↑ / ↓ select a connection and Enter connects (also to the only search match).
+  - Deleting a connection or a group asks first. Deleting a connection removes its Keychain password too.
 - **SQL editor:**
-  - syntax highlighting, autocomplete, multi-cursor and comment toggle;
+  - syntax highlighting, multi-cursor and comment toggle;
+  - autocomplete with keywords, tables and column names. Columns are read in the background, table by table. They follow aliases (`FROM users u … u.`) and list the columns of the statement's own tables first;
+  - Find (⌘F) and Find and Replace (⌥⌘F), with match case, whole word and regular expressions;
   - Beautify / Uglify;
   - Run current / Run all, and Cancel, which kills the running query;
   - tabs whose drafts persist between launches. A closed query tab's SQL is kept, and the next new SQL tab reopens it.
 - **Table tabs:**
   - Data, Structure and Index views;
+  - views and PostgreSQL materialized views open read-only. The DDL button shows their real definition;
+  - Triggers (in Structure): list, add, edit and delete a table's triggers, saved with ⌘S like every other change;
   - filters with AND/OR;
   - column picker, paging and a row inspector.
 - **Staged editing:**
@@ -41,6 +47,15 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
     - every UPDATE / DELETE is keyed to exactly one row;
     - dangerous statements are checked;
     - commits run in a transaction on a separate connection.
+- **Functions and procedures:** click one in the sidebar (or find it with ⌘P) to open its definition in a tab.
+  - Edit it and press ⌘S to apply it, through Preview and Safe Mode.
+  - PostgreSQL replaces it in place (`CREATE OR REPLACE`).
+  - MySQL can't replace a routine, so Telecat drops it and creates it again, after asking. If the new version fails, the original is put back.
+  - Right-click to Open, Copy Name or Delete (PostgreSQL drops the exact overload).
+- **Export** (results, or a table from its filter bar): CSV, JSON or SQL INSERT.
+  - A table exports every row its applied filters and sort select. The rows are streamed, not just the loaded page, and you can stop the export.
+  - INSERT statements quote identifiers and escape values for the right server.
+  - The save dialog opens in Downloads, then in the folder you last used.
 - **Editable query results:** edit or delete rows in the results of a plain `SELECT`. Writes are allowed only when the server's column metadata proves which base table each column comes from and the table's full key is in the result. JOINs, aggregates, views and anything ambiguous stay read-only, and the results header shows the reason.
 - **Import SQL dump:** right-click the sidebar, then **Import ▸ From SQL Dump…** (`.sql` / `.sql.gz` from mysqldump or pg_dump).
   - The dump is streamed, with progress and Cancel.
@@ -51,11 +66,12 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
 - **Reconnect:** a dropped connection (for example, when a VPN goes down) is detected and shown in the status pill.
   - **⌘⇧R** reconnects, and Telecat also retries automatically. Staged edits survive.
   - If a connection drops mid-save, the save is never retried. Telecat checks the server and tells you whether the save was applied.
-- **Admin:** create tables, Drop / Truncate with confirmation, and Running Queries (⌘.) with kill and auto-refresh.
+- **Admin:** create tables, Drop / Truncate with confirmation (Truncate is offered for tables only; a materialized view drops with `DROP MATERIALIZED VIEW`), and Running Queries (⌘.) with kill and auto-refresh.
   - On MySQL, right-click a new column in Structure to choose where it goes (Move Up / Down, Move to First, Move After ▸).
   - Discard a table that was never saved with Esc, Delete in the sidebar, or by closing its tab.
 - **Sidebar:** Items / Queries / History; right-click a group to add a connection to it. The item search matches letters in order (`team` finds `user_telegram_chats`) and highlights them.
 - **Thai text:** shaped correctly in both the grid and the editor.
+- **Help ▸ Keyboard Shortcuts** lists every shortcut, from any window.
 
 ## Install
 

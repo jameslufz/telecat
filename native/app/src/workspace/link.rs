@@ -544,12 +544,17 @@ impl Workspace {
             .filter(|t| match t.kind {
                 TabKind::Table(_) => t.table.as_ref().is_some_and(|e| !e.dirty() && !e.is_new),
                 TabKind::Running => true,
+                TabKind::Routine(_) => !t.routine_dirty(),
                 TabKind::Query => false,
             })
             .map(|t| t.id)
             .collect();
         for id in ids {
             self.state.active = id;
+            if let Some(t) = self.state.current_mut().table.as_mut() {
+                // Clean tables only: read the triggers again when the sheet next opens.
+                t.triggers = Default::default();
+            }
             self.refresh_tab(cx);
         }
         self.state.active = active;
@@ -1077,7 +1082,7 @@ async fn check_settled(
     }
 }
 #[cfg(test)]
-mod tests;
+pub(in crate::workspace) mod tests;
 /// An indeterminate progress bar along the bottom of the status pill.
 fn progress_bar() -> impl IntoElement {
     div()

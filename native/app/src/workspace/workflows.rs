@@ -158,12 +158,14 @@ impl Workspace {
         } else {
             format!("{}.sql", tab.title.trim_end_matches(".sql"))
         };
-        let prompt = cx.prompt_for_new_path(&self.services.profile.root, Some(&name));
+        let prompt =
+            cx.prompt_for_new_path(&crate::export_dialog::default_directory(), Some(&name));
         let id = tab.id;
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(path))) = prompt.await else {
                 return;
             };
+            crate::export_dialog::remember_directory(&path);
             let title = path
                 .file_name()
                 .unwrap_or_default()
@@ -331,6 +333,7 @@ impl Workspace {
                             Pick::Object(DbObject {
                                 table: t.table.clone(),
                                 kind: ObjectKind::Table,
+                                signature: None,
                             }),
                         ));
                     }
@@ -369,30 +372,7 @@ impl Workspace {
         self.sheet = None;
         match pick {
             Pick::Database(db) => self.switch_database(db, window, cx),
-            Pick::Object(o) => {
-                if matches!(o.kind, ObjectKind::Table | ObjectKind::View) {
-                    self.open_table(o.table, cx);
-                } else {
-                    let sql = if self.state.connection.driver == Driver::Mysql {
-                        format!(
-                            "SHOW CREATE {} `{}`;",
-                            if o.kind == ObjectKind::Procedure {
-                                "PROCEDURE"
-                            } else {
-                                "FUNCTION"
-                            },
-                            o.table.name.replace('`', "``")
-                        )
-                    } else {
-                        format!(
-                            "SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = '{}' AND p.proname = '{}';",
-                            o.table.schema.replace('\'', "''"),
-                            o.table.name.replace('\'', "''")
-                        )
-                    };
-                    self.open_history(&sql, window, cx);
-                }
-            }
+            Pick::Object(o) => self.open_object(o, cx),
             Pick::Query(q) => self.open_named_query(&q.sql, &q.name, cx),
         }
         cx.notify();
@@ -427,15 +407,48 @@ impl Workspace {
                                     .child("Loading…"),
                             )
                         })
-                        .when(items.is_empty() && !self.databases_loading, |d| {
-                            d.child(
-                                div()
-                                    .p(px(16.))
-                                    .text_center()
-                                    .text_color(rgb(telecat_theme::MUTED))
-                                    .child("No matches"),
-                            )
-                        })
+                        .when_some(
+                            self.databases_error
+                                .clone()
+                                .filter(|_| database && !self.databases_loading),
+                            |d, e| {
+                                d.child(
+                                    div()
+                                        .p(px(16.))
+                                        .flex()
+                                        .flex_col()
+                                        .items_center()
+                                        .gap(px(10.))
+                                        .child(
+                                            div()
+                                                .text_center()
+                                                .text_color(rgb(0xff8a80))
+                                                .child(format!("Couldn't load the databases: {e}")),
+                                        )
+                                        .child(
+                                            small_button("databases-retry", "Try Again").on_click(
+                                                cx.listener(|this, _, _, cx| {
+                                                    this.load_databases(cx)
+                                                }),
+                                            ),
+                                        ),
+                                )
+                            },
+                        )
+                        .when(
+                            items.is_empty()
+                                && !self.databases_loading
+                                && !(database && self.databases_error.is_some()),
+                            |d| {
+                                d.child(
+                                    div()
+                                        .p(px(16.))
+                                        .text_center()
+                                        .text_color(rgb(telecat_theme::MUTED))
+                                        .child("No matches"),
+                                )
+                            },
+                        )
                         .children(items.into_iter().enumerate().map(|(i, (label, pick))| {
                             let selected = i == self.picker_selection;
                             let (path, detail, current) = match &pick {
@@ -443,16 +456,19 @@ impl Workspace {
                                     ("Database.svg", None, db == &self.state.database)
                                 }
                                 Pick::Query(_) => ("", Some("saved query"), false),
-                                Pick::Object(o) => match o.kind {
-                                    ObjectKind::Table => ("Table.svg", Some("table"), false),
-                                    ObjectKind::View => ("View.svg", Some("view"), false),
-                                    ObjectKind::Function => {
-                                        ("Function.svg", Some("function"), false)
-                                    }
-                                    ObjectKind::Procedure => {
-                                        ("Function.svg", Some("procedure"), false)
-                                    }
-                                },
+                                Pick::Object(o) => (
+                                    match o.kind {
+                                        ObjectKind::Table => "Table.svg",
+                                        ObjectKind::View | ObjectKind::MaterializedView => {
+                                            "View.svg"
+                                        }
+                                        ObjectKind::Function | ObjectKind::Procedure => {
+                                            "Function.svg"
+                                        }
+                                    },
+                                    Some(o.kind.label()),
+                                    false,
+                                ),
                             };
                             div()
                                 .id(("picker-item", i))
@@ -579,6 +595,8 @@ impl Workspace {
                     t.discard();
                     t.structure.loaded = false;
                     t.index.loaded = false;
+                    // Read again when the Triggers sheet next opens.
+                    t.triggers = Default::default();
                 }
             }
             self.refresh_tab(cx);

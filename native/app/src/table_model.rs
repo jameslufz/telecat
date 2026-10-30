@@ -1,6 +1,6 @@
 //! TableTab/useEditRows state, independent of the grid's rendering and input API.
 use anyhow::Result;
-use telecat_core::{changes::*, types::*};
+use telecat_core::{changes::*, objects::TriggerEdit, types::*};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Part {
@@ -105,6 +105,8 @@ impl EditBuffer {
                 .filter(|r| !r.deleted)
                 .map(|r| r.cur.iter().map(|v| v.value().map(str::to_owned)).collect())
                 .collect(),
+            // The server's JSON text belonged to the rows as read; they changed.
+            json_text: None,
             ..self.result.clone()
         };
         self.reset(result, None);
@@ -117,9 +119,47 @@ impl EditBuffer {
     }
 }
 
+/// The Triggers sheet's staged edits; `None` until the table's triggers were read.
+#[derive(Debug, Clone, Default)]
+pub struct TriggerState {
+    pub edits: Option<Vec<TriggerEdit>>,
+    pub selected: usize,
+}
+impl TriggerState {
+    pub fn dirty(&self) -> bool {
+        self.edits.iter().flatten().any(TriggerEdit::changed)
+    }
+    pub fn discard(&mut self) {
+        if let Some(edits) = &mut self.edits {
+            edits.retain(|e| e.orig.is_some());
+            for e in edits.iter_mut() {
+                e.cur = e.orig.clone().unwrap_or_default();
+                e.deleted = false;
+            }
+        }
+    }
+    /// After the save of the edit `key`: it is now what the server has.
+    pub fn committed(&mut self, key: &str) {
+        if let Some(edits) = &mut self.edits
+            && let Some(i) = edits.iter().position(|e| e.key == key)
+        {
+            if edits[i].deleted {
+                edits.remove(i);
+            } else {
+                edits[i].orig = Some(edits[i].cur.clone());
+            }
+        }
+        self.selected = self
+            .selected
+            .min(self.edits.as_ref().map_or(0, |e| e.len().saturating_sub(1)));
+    }
+}
 #[derive(Debug, Clone)]
 pub struct TableEditor {
     pub table: TableRef,
+    /// Table, view or materialized view. Only a table's structure, indexes and triggers can be
+    /// edited, and only a table's rows.
+    pub kind: ObjectKind,
     pub part: Part,
     pub name: String,
     pub is_new: bool,
@@ -137,6 +177,7 @@ pub struct TableEditor {
     pub column_filter: Option<String>,
     pub show_ddl: bool,
     pub ddl: Option<String>,
+    pub triggers: TriggerState,
 }
 pub fn new_filter() -> Filter {
     Filter {
@@ -184,6 +225,7 @@ impl TableEditor {
         let mut this = Self {
             name: table.name.clone(),
             table,
+            kind: ObjectKind::Table,
             part: if is_new { Part::Structure } else { Part::Data },
             is_new,
             primary: "id".into(),
@@ -200,6 +242,7 @@ impl TableEditor {
             column_filter: None,
             show_ddl: false,
             ddl: None,
+            triggers: TriggerState::default(),
         };
         this.structure.result.columns = structure_columns(driver);
         this.index.result.columns = index_columns(driver);
@@ -251,12 +294,17 @@ impl TableEditor {
             Part::Index => &mut self.index,
         }
     }
+    /// A view of any kind: read-only in Telecat apart from its definition.
+    pub fn read_only(&self) -> bool {
+        self.kind != ObjectKind::Table
+    }
     pub fn dirty(&self) -> bool {
         self.is_new
             || self.name != self.table.name
             || self.data.dirty()
             || self.structure.dirty()
             || self.index.dirty()
+            || self.triggers.dirty()
     }
     pub fn load_data(&mut self, data: &TableDataResult) {
         self.primary_key = data.primary_key.clone();
@@ -293,7 +341,7 @@ impl TableEditor {
         });
     }
     pub fn add_row(&mut self, d: Driver) {
-        if !self.buffer().loaded {
+        if !self.buffer().loaded || self.read_only() {
             return;
         }
         let values = self
@@ -352,6 +400,12 @@ impl TableEditor {
         let mut groups = vec![];
         if self.data.dirty() {
             anyhow::ensure!(self.data.loaded, "Reload table data before editing again");
+            anyhow::ensure!(
+                !self.read_only(),
+                "{} is a {}: its rows can't be edited here",
+                self.table.name,
+                self.kind.label()
+            );
             let meta = TableMeta {
                 columns: self.data.result.columns.clone(),
                 primary_key: self.primary_key.clone(),
@@ -392,6 +446,7 @@ impl TableEditor {
                         },
                         columns: self.structure.result.columns.clone(),
                         rows: self.structure.rows.clone(),
+                        relation: self.kind,
                     },
                 )?,
                 verify: vec![],
@@ -408,6 +463,7 @@ impl TableEditor {
                         schema: self.table.schema.clone(),
                         name: self.name.clone(),
                     },
+                    self.kind,
                     &self.index.result.columns,
                     &self.index.rows,
                 )?,
@@ -433,6 +489,7 @@ impl TableEditor {
         self.data.discard();
         self.structure.discard();
         self.index.discard();
+        self.triggers.discard();
         self.name = self.table.name.clone();
     }
 }

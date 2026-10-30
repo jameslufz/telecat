@@ -2,6 +2,7 @@
 use crate::table_model::{EditBuffer, Part, TableEditor};
 use std::time::{Duration, Instant};
 use telecat_core::changes::{RowVerify, Stmt, table_op_statement};
+use telecat_core::objects::{CreateSettings, routine_save, trigger_saves};
 use telecat_core::position::{self, Location};
 use telecat_core::result_edit::ResultEditPlan;
 use telecat_core::{sql, types::*};
@@ -14,6 +15,8 @@ pub const LOADING_INDICATOR_DELAY: Duration = Duration::from_millis(150);
 pub enum LoadSlot {
     Part(Part),
     Results,
+    /// A table tab's triggers, read when the Triggers sheet opens.
+    Triggers,
 }
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum LoadState {
@@ -90,6 +93,10 @@ pub enum CommitTarget {
     /// Edits to the shown result of a query tab.
     Result(u64),
     Operation(StagedOperation),
+    /// The edited definition in a function or procedure tab.
+    Routine(u64),
+    /// One staged trigger edit of a table tab: (tab, edit key).
+    Trigger(u64, String),
 }
 #[derive(Debug, Clone)]
 pub struct CommitUnit {
@@ -100,6 +107,21 @@ pub struct CommitUnit {
     pub session: Vec<(String, String)>,
     /// See `CommitGroup::verify`.
     pub verify: Vec<RowVerify>,
+    /// MySQL replaces a routine or trigger by dropping and creating it: what puts the original
+    /// back if the new one fails.
+    pub restore: Vec<Stmt>,
+}
+impl CommitUnit {
+    pub fn new(target: CommitTarget, statements: Vec<Stmt>, transaction: bool) -> Self {
+        Self {
+            target,
+            statements,
+            transaction,
+            session: vec![],
+            verify: vec![],
+            restore: vec![],
+        }
+    }
 }
 /// What one ⌘S sends to the server in one call.
 #[derive(Debug, Clone)]
@@ -109,6 +131,7 @@ pub struct CommitBatch {
     pub transaction: bool,
     pub session: Vec<(String, String)>,
     pub verify: Vec<RowVerify>,
+    pub restore: Vec<Stmt>,
 }
 impl CommitBatch {
     fn of(unit: CommitUnit) -> Self {
@@ -118,6 +141,17 @@ impl CommitBatch {
             transaction: unit.transaction,
             session: unit.session,
             verify: unit.verify,
+            restore: unit.restore,
+        }
+    }
+    fn empty() -> Self {
+        Self {
+            targets: vec![],
+            statements: vec![],
+            transaction: true,
+            session: vec![],
+            verify: vec![],
+            restore: vec![],
         }
     }
 }
@@ -139,13 +173,7 @@ pub fn commit_batches(units: Vec<CommitUnit>, driver: Driver) -> Vec<CommitBatch
 }
 fn plain_batches(units: Vec<CommitUnit>, driver: Driver) -> Vec<CommitBatch> {
     if driver == Driver::Postgres {
-        let mut all = CommitBatch {
-            targets: vec![],
-            statements: vec![],
-            transaction: true,
-            session: vec![],
-            verify: vec![],
-        };
+        let mut all = CommitBatch::empty();
         for unit in units {
             all.targets.push(unit.target);
             all.statements.extend(unit.statements);
@@ -160,13 +188,7 @@ fn plain_batches(units: Vec<CommitUnit>, driver: Driver) -> Vec<CommitBatch> {
     let (rows, rest): (Vec<_>, Vec<_>) = units.into_iter().partition(|u| u.transaction);
     let mut out = vec![];
     if !rows.is_empty() {
-        let mut first = CommitBatch {
-            targets: vec![],
-            statements: vec![],
-            transaction: true,
-            session: vec![],
-            verify: vec![],
-        };
+        let mut first = CommitBatch::empty();
         for unit in rows {
             first.targets.push(unit.target);
             first.statements.extend(unit.statements);
@@ -180,6 +202,18 @@ fn plain_batches(units: Vec<CommitUnit>, driver: Driver) -> Vec<CommitBatch> {
 /// For a save MySQL can't make atomic, the explanation to confirm before anything runs.
 pub fn partial_commit_notice(batches: &[CommitBatch]) -> Option<String> {
     let immediate = batches.iter().filter(|b| !b.transaction).count();
+    let replaced = batches.iter().filter(|b| !b.restore.is_empty()).count();
+    if replaced > 0 {
+        return Some(format!(
+            "MySQL can't change a function, procedure or trigger in place: Telecat drops it and creates it again ({replaced} object{}). Until it is created again it doesn't exist, and if creating the new version fails, Telecat puts the original back.{}",
+            if replaced == 1 { "" } else { "s" },
+            if batches.len() > 1 {
+                " The other changes in this save run one at a time; if one fails, the ones before it stay saved."
+            } else {
+                ""
+            }
+        ));
+    }
     if batches.len() < 2 || immediate == 0 {
         return None;
     }
@@ -215,6 +249,16 @@ pub enum TabKind {
     Query,
     Table(TableRef),
     Running,
+    /// A function or procedure's definition.
+    Routine(DbObject),
+}
+/// A function or procedure tab: the definition as loaded (the editor holds the edited text).
+#[derive(Debug, Clone, Default)]
+pub struct RoutineEditor {
+    /// `None` until the definition was read.
+    pub original: Option<String>,
+    /// MySQL: the settings it was created under, used again when it is saved.
+    pub settings: CreateSettings,
 }
 #[derive(Debug, Clone)]
 pub struct Tab {
@@ -241,6 +285,19 @@ pub struct Tab {
     /// Notices about this tab's server session (it was reset by a reconnect), shown after the
     /// results in Messages.
     pub notes: Vec<String>,
+    pub routine: Option<RoutineEditor>,
+}
+/// The server's MySQL JSON text a query-tab export may use, by column: taken from the rows the
+/// grid shows (the result editor's copy when there is one, which a save replaces and clears), and
+/// only while it still covers every row.
+pub fn export_json_text<'a>(
+    grid: &'a QueryResult,
+    edit: Option<&'a ResultEditor>,
+) -> Option<&'a [(usize, Vec<Option<String>>)]> {
+    let base = edit.map_or(grid, |r| &r.data.result);
+    base.json_text
+        .as_deref()
+        .filter(|j| j.iter().all(|c| c.1.len() == base.rows.len()))
 }
 /// Staged edits to a query result: rows, undo and discard work as for a table's Data grid.
 #[derive(Debug, Clone)]
@@ -322,7 +379,21 @@ impl Tab {
             error_locations: vec![],
             run_text: String::new(),
             notes: vec![],
+            routine: None,
         }
+    }
+    /// A function or procedure tab whose definition was edited and not saved yet.
+    pub fn routine_dirty(&self) -> bool {
+        self.routine
+            .as_ref()
+            .and_then(|r| r.original.as_deref())
+            .is_some_and(|o| o != self.editor.text)
+    }
+    /// Any staged change in this tab: table edits, result edits or an edited definition.
+    pub fn dirty(&self) -> bool {
+        self.table.as_ref().is_some_and(TableEditor::dirty)
+            || self.result_dirty()
+            || self.routine_dirty()
     }
     /// The Messages panel's text: each statement and its outcome. Errors say where they are,
     /// with the line they point into and a caret.
@@ -510,48 +581,80 @@ impl WorkspaceState {
         let mut units = vec![];
         for (id, table) in tables {
             for group in table.groups(self.connection.driver, id)? {
-                units.push(CommitUnit {
-                    target: CommitTarget::Table(group.tab_id, group.part),
-                    statements: group.statements,
-                    transaction: group.transaction,
-                    session: vec![],
-                    verify: group.verify,
-                });
+                let mut unit = CommitUnit::new(
+                    CommitTarget::Table(group.tab_id, group.part),
+                    group.statements,
+                    group.transaction,
+                );
+                unit.verify = group.verify;
+                units.push(unit);
             }
         }
         for t in &self.tabs {
             if let Some(r) = t.result_edit.as_ref().filter(|r| r.data.dirty()) {
-                units.push(CommitUnit {
-                    target: CommitTarget::Result(t.id),
-                    statements: r.plan.statements(&r.data.rows)?,
-                    transaction: true,
-                    session: r.plan.session.clone(),
-                    verify: vec![],
-                });
+                let mut unit = CommitUnit::new(
+                    CommitTarget::Result(t.id),
+                    r.plan.statements(&r.data.rows)?,
+                    true,
+                );
+                unit.session = r.plan.session.clone();
+                units.push(unit);
+            }
+        }
+        let driver = self.connection.driver;
+        for t in &self.tabs {
+            if let Some(editor) = t.table.as_ref().filter(|e| e.triggers.dirty()) {
+                let edits = editor.triggers.edits.as_deref().unwrap_or_default();
+                // A rename in the same save runs first, so the triggers belong to the new name.
+                let table = TableRef {
+                    schema: editor.table.schema.clone(),
+                    name: editor.name.clone(),
+                };
+                for (key, save) in trigger_saves(driver, &table, editor.kind, edits)? {
+                    let mut unit = CommitUnit::new(
+                        CommitTarget::Trigger(t.id, key),
+                        save.statements,
+                        save.transaction,
+                    );
+                    unit.restore = save.restore;
+                    unit.session = save.settings;
+                    units.push(unit);
+                }
+            }
+            if let (TabKind::Routine(object), Some(original)) = (
+                &t.kind,
+                t.routine.as_ref().and_then(|r| r.original.as_deref()),
+            ) && t.routine_dirty()
+            {
+                let settings = t
+                    .routine
+                    .as_ref()
+                    .map(|r| r.settings.clone())
+                    .unwrap_or_default();
+                let save = routine_save(driver, object, original, &t.editor.text, &settings)?;
+                let mut unit = CommitUnit::new(
+                    CommitTarget::Routine(t.id),
+                    save.statements,
+                    save.transaction,
+                );
+                unit.restore = save.restore;
+                unit.session = save.settings;
+                units.push(unit);
             }
         }
         let mut ops = self.operations.clone();
         ops.sort_by_key(|o| !o.truncate);
-        units.extend(ops.into_iter().map(|op| CommitUnit {
-            statements: vec![table_op_statement(
-                self.connection.driver,
-                &op.object.table,
-                op.truncate,
-                op.object.kind == ObjectKind::View,
-            )],
-            transaction: false,
-            session: vec![],
-            verify: vec![],
-            target: CommitTarget::Operation(op),
-        }));
+        for op in ops {
+            units.push(CommitUnit::new(
+                CommitTarget::Operation(op.clone()),
+                vec![table_op_statement(driver, &op.object, op.truncate)?],
+                false,
+            ));
+        }
         Ok(units)
     }
     pub fn has_changes(&self) -> bool {
-        !self.operations.is_empty()
-            || self
-                .tabs
-                .iter()
-                .any(|t| t.table.as_ref().is_some_and(TableEditor::dirty) || t.result_dirty())
+        !self.operations.is_empty() || self.tabs.iter().any(Tab::dirty)
     }
     pub fn committed(&mut self, target: &CommitTarget) {
         match target {
@@ -577,21 +680,38 @@ impl WorkspaceState {
                 }
             }
             CommitTarget::Operation(op) => {
-                self.operations
-                    .retain(|o| o.object.table != op.object.table);
+                self.operations.retain(|o| o.object != op.object);
                 if !op.truncate {
-                    self.objects.retain(|o| o.table != op.object.table);
-                    if let Some(id) = self
-                        .tabs
-                        .iter()
-                        .find(|t| t.kind == TabKind::Table(op.object.table.clone()))
-                        .map(|t| t.id)
-                    {
+                    self.objects.retain(|o| *o != op.object);
+                    let kind = if op.object.kind.is_routine() {
+                        TabKind::Routine(op.object.clone())
+                    } else {
+                        TabKind::Table(op.object.table.clone())
+                    };
+                    if let Some(id) = self.tabs.iter().find(|t| t.kind == kind).map(|t| t.id) {
                         if self.tabs.len() == 1 {
                             self.open_query("SQL Query", "");
                         }
                         self.close_tab(id);
                     }
+                }
+            }
+            CommitTarget::Routine(id) => {
+                if let Some(t) = self.tabs.iter_mut().find(|t| t.id == *id) {
+                    let text = t.editor.text.clone();
+                    if let Some(r) = &mut t.routine {
+                        r.original = Some(text);
+                    }
+                }
+            }
+            CommitTarget::Trigger(id, key) => {
+                if let Some(e) = self
+                    .tabs
+                    .iter_mut()
+                    .find(|t| t.id == *id)
+                    .and_then(|t| t.table.as_mut())
+                {
+                    e.triggers.committed(key);
                 }
             }
         }
@@ -657,12 +777,39 @@ impl WorkspaceState {
             self.activate(id);
             return id;
         }
-        let editor = TableEditor::new(table.clone(), self.connection.driver, false);
+        let mut editor = TableEditor::new(table.clone(), self.connection.driver, false);
+        // The sidebar's kind until the server confirms it when the tab loads.
+        if let Some(o) = self
+            .objects
+            .iter()
+            .find(|o| o.table == table && o.kind.is_relation())
+        {
+            editor.kind = o.kind;
+        }
         let id = self.open(
             display_name(&table, self.connection.driver),
             TabKind::Table(table),
         );
         self.current_mut().table = Some(editor);
+        id
+    }
+    /// Opens a function or procedure in its own tab, or switches to it when it is open.
+    pub fn open_routine(&mut self, object: DbObject) -> u64 {
+        let kind = TabKind::Routine(object.clone());
+        if let Some(id) = self.tabs.iter().find(|t| t.kind == kind).map(|t| t.id) {
+            self.activate(id);
+            return id;
+        }
+        // Overloads share a name: their tabs show the arguments too.
+        let title = match object.signature.as_deref().filter(|a| !a.is_empty()) {
+            Some(args) => format!(
+                "{}({args})",
+                display_name(&object.table, self.connection.driver)
+            ),
+            None => display_name(&object.table, self.connection.driver),
+        };
+        let id = self.open(title, kind);
+        self.current_mut().routine = Some(RoutineEditor::default());
         id
     }
     pub fn open_running(&mut self) -> u64 {

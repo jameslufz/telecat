@@ -4,7 +4,10 @@ use serde_json::json;
 use std::sync::Arc;
 use telecat_app::{
     credentials::{NATIVE_SERVICE, resolve_password},
-    store::{connection_matches, connection_menu, group_menu, new_connection},
+    store::{
+        connection_matches, connection_menu, delete_connection_prompt, delete_group_prompt,
+        enter_target, group_menu, listed_connections, new_connection, step_selection,
+    },
 };
 use telecat_core::types::*;
 #[derive(Clone)]
@@ -36,7 +39,14 @@ enum Sheet {
         connection: ConnectionConfig,
         input: Entity<InputState>,
     },
+    /// Asks before deleting a connection (and its Keychain password) or a group.
+    ConfirmDelete(DeleteTarget),
     Error(String),
+}
+#[derive(Clone)]
+enum DeleteTarget {
+    Connection(ConnectionConfig),
+    Group(ConnectionGroup),
 }
 pub struct Welcome {
     services: Services,
@@ -47,6 +57,8 @@ pub struct Welcome {
     smoke: bool,
     dragging: Option<String>,
     subscriptions: Vec<Subscription>,
+    /// The window itself, focused while a sheet without a field is open so Enter / Esc reach it.
+    focus: FocusHandle,
 }
 impl Welcome {
     pub fn show_picker(&mut self, cx: &mut Context<Self>) {
@@ -59,9 +71,81 @@ impl Welcome {
             cx.notify();
             cx.stop_propagation();
         }
-        if event.keystroke.key == "enter" {
-            self.accept_sheet(window, cx);
+        // A held Enter repeats: the repeat must not submit a sheet the first press opened.
+        if event.keystroke.key == "enter" && !event.is_held {
+            if self.sheet.is_some() {
+                self.accept_sheet(window, cx);
+            } else {
+                self.connect_selected(window, cx);
+            }
+            cx.stop_propagation();
         }
+    }
+    /// ↑ / ↓ move the selection through the listed connections, from the search field too.
+    fn arrows(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+        let down = match event.keystroke.key.as_str() {
+            "down" => true,
+            "up" => false,
+            _ => return,
+        };
+        if self.sheet.is_some() || event.keystroke.modifiers.modified() {
+            return;
+        }
+        let snapshot = self.services.model.read(cx).snapshot.clone();
+        let query = self.search.read(cx).value().to_string();
+        let listed = listed_connections(&snapshot, &query);
+        if let Some(id) = step_selection(&listed, self.selected.as_deref(), down) {
+            self.selected = Some(id);
+        }
+        cx.stop_propagation();
+        cx.notify();
+    }
+    /// Enter: connect to the selected connection, or to the only one the search leaves.
+    fn connect_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.busy {
+            return;
+        }
+        let snapshot = self.services.model.read(cx).snapshot.clone();
+        let query = self.search.read(cx).value().to_string();
+        let listed = listed_connections(&snapshot, &query);
+        if let Some(c) = enter_target(&listed, self.selected.as_deref()).cloned() {
+            self.connect(c, None, window, cx);
+        }
+    }
+    fn confirm_delete(&mut self, target: DeleteTarget, cx: &mut Context<Self>) {
+        self.sheet = Some(Sheet::ConfirmDelete(target));
+        cx.notify();
+    }
+    fn delete_confirmed(&mut self, target: DeleteTarget, cx: &mut Context<Self>) {
+        self.sheet = None;
+        match target {
+            DeleteTarget::Group(g) => {
+                if let Err(e) = self.services.profile.delete_group(&g.id) {
+                    self.error(e, cx);
+                }
+                self.services.refresh(cx);
+            }
+            DeleteTarget::Connection(c) => {
+                if self.selected.as_deref() == Some(c.id.as_str()) {
+                    self.selected = None;
+                }
+                let services = self.services.clone();
+                let task = services
+                    .runtime
+                    .spawn_blocking(move || services.profile.delete_connection(&c.id));
+                cx.spawn(async move |this, cx| {
+                    let result = task.await.map_err(anyhow::Error::from).and_then(|v| v);
+                    let _ = this.update(cx, |this, cx| {
+                        if let Err(e) = result {
+                            this.error(e, cx);
+                        }
+                        this.services.refresh(cx);
+                    });
+                })
+                .detach();
+            }
+        }
+        cx.notify();
     }
 
     fn accept_sheet(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -99,28 +183,13 @@ impl Welcome {
                     cx.notify();
                 }
             }
-            Some(Sheet::Error(_)) => {
+            // Enter never deletes: it closes the confirmation, like Cancel.
+            Some(Sheet::Error(_) | Sheet::ConfirmDelete(_)) => {
                 self.sheet = None;
                 cx.notify();
             }
-            _ => {}
+            None => {}
         }
-    }
-    fn watch_sheet_input(
-        &mut self,
-        input: &Entity<InputState>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.subscriptions.push(cx.subscribe_in(
-            input,
-            window,
-            |this, _, event: &crate::ui::InputEvent, window, cx| {
-                if matches!(event, crate::ui::InputEvent::PressEnter { .. }) {
-                    this.accept_sheet(window, cx);
-                }
-            },
-        ));
     }
     pub fn new(
         services: Services,
@@ -136,16 +205,10 @@ impl Welcome {
             search.update(cx, |s, cx| s.focus(window, cx));
         }
         let subscriptions = vec![
-            cx.subscribe_in(
-                &search,
-                window,
-                |this, _, event: &crate::ui::InputEvent, window, cx| {
-                    if matches!(event, crate::ui::InputEvent::PressEnter { .. }) {
-                        this.accept_sheet(window, cx);
-                    }
-                    cx.notify();
-                },
-            ),
+            // Enter is handled once, by the window (`keyboard`), never by the field as well: the
+            // keystroke that opens a sheet (Enter on an Ask-password connection) must not also
+            // submit it.
+            cx.subscribe(&search, |_, _, _: &crate::ui::InputEvent, cx| cx.notify()),
             cx.observe(&services.model, |this, model, cx| {
                 if let Some(error) = model.update(cx, |model, _| model.import_error.take()) {
                     this.error(error, cx);
@@ -154,6 +217,7 @@ impl Welcome {
             }),
         ];
         Self {
+            focus: cx.focus_handle(),
             services,
             search,
             selected: None,
@@ -185,7 +249,6 @@ impl Welcome {
             collapsed: None,
         });
         let input = text_input(group.name.clone(), "Group name", false, window, cx);
-        self.watch_sheet_input(&input, window, cx);
         input.update(cx, |s, cx| s.focus(window, cx));
         self.sheet = Some(Sheet::Group {
             group,
@@ -206,7 +269,6 @@ impl Welcome {
         }
         if c.password_mode == PasswordMode::Ask && password.is_none() {
             let input = text_input("", "Password", true, window, cx);
-            self.watch_sheet_input(&input, window, cx);
             input.update(cx, |s, cx| s.focus(window, cx));
             self.sheet = Some(Sheet::Password {
                 connection: c,
@@ -317,15 +379,11 @@ impl Welcome {
                         Err(e) => this.error(e, cx),
                     }
                 }
-                "duplicate" | "delete" => {
+                "delete" => this.confirm_delete(DeleteTarget::Connection(c), cx),
+                "duplicate" => {
                     let services = this.services.clone();
-                    let duplicate = action == "duplicate";
                     let task = services.runtime.spawn_blocking(move || {
-                        if duplicate {
-                            services.profile.duplicate_connection(&c.id).map(|_| ())
-                        } else {
-                            services.profile.delete_connection(&c.id)
-                        }
+                        services.profile.duplicate_connection(&c.id).map(|_| ())
                     });
                     cx.spawn(async move |this, cx| {
                         let result = task.await.map_err(anyhow::Error::from).and_then(|v| v);
@@ -595,11 +653,8 @@ impl Welcome {
                                 cx.notify();
                             } else if id == "rename" {
                                 this.group_sheet(Some(g), None, window, cx);
-                            } else {
-                                if let Err(e) = this.services.profile.delete_group(&g.id) {
-                                    this.error(e, cx);
-                                }
-                                this.services.refresh(cx);
+                            } else if id == "delete" {
+                                this.confirm_delete(DeleteTarget::Group(g), cx);
                             }
                         },
                     );
@@ -868,6 +923,57 @@ impl Welcome {
                     ),
                 )
             }
+            Sheet::ConfirmDelete(target) => {
+                let (title, detail) = match target {
+                    DeleteTarget::Connection(c) => delete_connection_prompt(c),
+                    DeleteTarget::Group(g) => {
+                        let members = self
+                            .services
+                            .model
+                            .read(cx)
+                            .snapshot
+                            .connections
+                            .iter()
+                            .filter(|c| c.group_id.as_deref() == Some(g.id.as_str()))
+                            .count();
+                        delete_group_prompt(g, members)
+                    }
+                };
+                let target = target.clone();
+                Some(
+                    backdrop().child(
+                        sheet(420., title)
+                            .child(
+                                div()
+                                    .text_color(rgb(telecat_theme::TEXT_SECONDARY))
+                                    .text_size(px(12.))
+                                    .child(detail),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .justify_end()
+                                    .gap(px(8.))
+                                    .mt(px(16.))
+                                    .child(
+                                        button("delete-confirm", "Delete", false, false)
+                                            .text_color(rgb(0xff8a80))
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                this.delete_confirmed(target.clone(), cx)
+                                            })),
+                                    )
+                                    .child(
+                                        button("delete-cancel", "Cancel", true, false).on_click(
+                                            cx.listener(|this, _, _, cx| {
+                                                this.sheet = None;
+                                                cx.notify();
+                                            }),
+                                        ),
+                                    ),
+                            ),
+                    ),
+                )
+            }
             Sheet::Error(message) => Some(
                 backdrop().child(
                     sheet(420., "Connection failed")
@@ -890,14 +996,34 @@ impl Welcome {
         }
     }
 }
+impl Welcome {
+    /// When the focused field went away with its sheet (the password sheet closed and an error
+    /// took its place), keys would reach nothing: focus the open sheet's field, else the window
+    /// while a sheet is open, else the search field.
+    fn keep_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if window.focused(cx).is_some() {
+            return;
+        }
+        match &self.sheet {
+            Some(Sheet::Password { input, .. } | Sheet::Group { input, .. }) => {
+                input.update(cx, |s, cx| s.focus(window, cx))
+            }
+            Some(_) => window.focus(&self.focus, cx),
+            None => self.search.update(cx, |s, cx| s.focus(window, cx)),
+        }
+    }
+}
 impl Render for Welcome {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let _ = &self.subscriptions;
+        self.keep_focus(window, cx);
         div()
+            .track_focus(&self.focus)
             .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" {
                     this.keyboard(event, window, cx);
                 }
+                this.arrows(event, cx);
             }))
             .on_key_down(cx.listener(Self::keyboard))
             .relative()
@@ -944,23 +1070,16 @@ impl Render for Welcome {
                             )
                             .child(div().flex_1())
                             .child(
-                                div()
-                                    .w_full()
-                                    .flex()
-                                    .flex_col()
-                                    .gap(px(12.))
-                                    .child(pill("Backup Database", "upload.svg", true))
-                                    .child(pill("Restore Database", "download.svg", true))
-                                    .child(
-                                        pill("Create Connection", "plug.svg", false)
-                                            .id("create")
-                                            .hover(|s| s.bg(rgba(0xffffff1c)))
-                                            .on_click(cx.listener(|this, _, _, cx| {
-                                                this.sheet =
-                                                    Some(Sheet::Picker(Driver::Postgres, None));
-                                                cx.notify();
-                                            })),
-                                    ),
+                                div().w_full().flex().flex_col().gap(px(12.)).child(
+                                    pill("Create Connection", "plug.svg", false)
+                                        .id("create")
+                                        .hover(|s| s.bg(rgba(0xffffff1c)))
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.sheet =
+                                                Some(Sheet::Picker(Driver::Postgres, None));
+                                            cx.notify();
+                                        })),
+                                ),
                             ),
                     ),
             )
@@ -1039,5 +1158,119 @@ impl Render for Welcome {
                     }),
             )
             .children(self.render_sheet(cx))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Sheet, Welcome};
+    use crate::Services;
+    use gpui::{AnyWindowHandle, TestAppContext};
+    use gpui_kit::{AppContext, Entity};
+    use std::sync::Arc;
+    use telecat_core::types::*;
+
+    fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<Welcome>) {
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            let root = std::env::temp_dir()
+                .join("telecat-ui-profiles")
+                .join(uuid::Uuid::new_v4().to_string());
+            std::fs::create_dir_all(&root).unwrap();
+            let mut ask = empty_connection(Driver::Mysql);
+            ask.id = "ask".into();
+            ask.name = "Asks".into();
+            ask.password_mode = PasswordMode::Ask;
+            let services = Services {
+                profile: Arc::new(telecat_app::store::Profile::new(
+                    root,
+                    Arc::new(telecat_app::credentials::MemoryKeychain::default()),
+                )),
+                runtime: Arc::new(
+                    tokio::runtime::Builder::new_multi_thread()
+                        .worker_threads(1)
+                        .enable_all()
+                        .build()
+                        .unwrap()
+                        .into(),
+                ),
+                model: cx.new(|_| crate::Model {
+                    import_error: None,
+                    snapshot: StoreSnapshot {
+                        connections: vec![ask],
+                        groups: vec![],
+                    },
+                }),
+                // No database is ever opened: connecting ends in an error sheet.
+                scenario: true,
+            };
+            let (w, view) = gpui_kit::open_window(Default::default(), cx, |window, cx| {
+                cx.new(|cx| Welcome::new(services, "", window, cx))
+            })
+            .unwrap();
+            (w, view)
+        })
+    }
+    fn paint(cx: &mut TestAppContext, w: AnyWindowHandle) {
+        cx.update_window(w, |_, w, cx| {
+            w.draw(cx).clear(cx);
+        })
+        .unwrap();
+    }
+    #[gpui::test]
+    fn the_enter_that_opens_the_password_sheet_never_submits_it(cx: &mut TestAppContext) {
+        let (w, view) = open(cx);
+        cx.update_window(w, |_, window, _| window.activate_window())
+            .unwrap();
+        paint(cx, w);
+        // Search focused: ↓ selects the connection, Enter asks for its password.
+        cx.simulate_keystrokes(w, "down");
+        assert_eq!(
+            view.read_with(cx, |v, _| v.selected.clone()).as_deref(),
+            Some("ask")
+        );
+        cx.simulate_keystrokes(w, "enter");
+        cx.run_until_parked();
+        paint(cx, w);
+        view.read_with(cx, |v, _| {
+            assert!(
+                matches!(v.sheet, Some(Sheet::Password { .. })),
+                "the sheet waits for the password"
+            );
+            assert!(!v.busy, "nothing was submitted");
+        });
+        // Typing a password and Enter submits it, once.
+        cx.simulate_input(w, "pw");
+        cx.simulate_keystrokes(w, "enter");
+        view.read_with(cx, |v, _| {
+            assert!(
+                !matches!(v.sheet, Some(Sheet::Password { .. })),
+                "submitted"
+            );
+        });
+        // The connect attempt ends (scenario services never open a database).
+        for _ in 0..200 {
+            cx.executor().allow_parking();
+            cx.run_until_parked();
+            if !view.read_with(cx, |v, _| v.busy) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        paint(cx, w);
+        view.read_with(cx, |v, _| assert!(matches!(v.sheet, Some(Sheet::Error(_)))));
+        // The password field went away with its sheet: Enter still reaches the error sheet.
+        paint(cx, w);
+        cx.simulate_keystrokes(w, "enter");
+        cx.run_until_parked();
+        paint(cx, w);
+        view.read_with(cx, |v, _| {
+            assert!(v.sheet.is_none() && !v.busy, "Enter closed it")
+        });
+        // And Esc closes the next one.
+        view.update(cx, |v, cx| v.error("again", cx));
+        paint(cx, w);
+        cx.simulate_keystrokes(w, "escape");
+        view.read_with(cx, |v, _| assert!(v.sheet.is_none(), "Esc closed it"));
     }
 }

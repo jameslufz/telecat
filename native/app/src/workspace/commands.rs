@@ -11,54 +11,57 @@ impl Command {
         Self { name: name.into() }
     }
 }
+/// Every workspace and edit shortcut: (keys, command). The Keyboard Shortcuts sheet lists them
+/// all (checked by a test).
+pub const BINDINGS: &[(&str, &str)] = &[
+    ("cmd-z", "undo"),
+    ("cmd-shift-z", "redo"),
+    ("cmd-x", "cut"),
+    ("cmd-c", "copy"),
+    ("cmd-v", "paste"),
+    ("alt-cmd-shift-v", "paste-match"),
+    ("cmd-a", "select-all"),
+    ("cmd-t", "new-query"),
+    ("cmd-shift-t", "new-table"),
+    ("cmd-s", "commit"),
+    ("cmd-shift-s", "save-file"),
+    ("cmd-o", "open-file"),
+    ("cmd-p", "quick-open"),
+    ("cmd-f", "filters"),
+    ("cmd-shift-backspace", "discard"),
+    ("cmd-e", "open-sql-query"),
+    ("cmd-w", "close-tab"),
+    ("cmd-r", "refresh"),
+    ("cmd-shift-r", "reconnect"),
+    ("cmd-.", "running-queries"),
+    ("cmd-0", "toggle-sidebar"),
+    ("cmd-shift-0", "toggle-panel"),
+    ("cmd-shift-c", "toggle-console"),
+    ("cmd-[", "prev-tab"),
+    ("cmd-]", "next-tab"),
+    ("cmd-shift-p", "preview"),
+    ("cmd-k", "switch-db"),
+    ("cmd-enter", "run-current"),
+    ("cmd-shift-enter", "run-all"),
+    ("cmd-1", "tab-1"),
+    ("cmd-2", "tab-2"),
+    ("cmd-3", "tab-3"),
+    ("cmd-4", "tab-4"),
+    ("cmd-5", "tab-5"),
+    ("cmd-6", "tab-6"),
+    ("cmd-7", "tab-7"),
+    ("cmd-8", "tab-8"),
+    ("cmd-9", "tab-9"),
+    ("cmd-h", "hide"),
+    ("alt-cmd-h", "hide-others"),
+    ("cmd-m", "minimize"),
+    ("ctrl-cmd-f", "fullscreen"),
+];
 pub fn install(cx: &mut App) {
     cx.bind_keys(
-        [
-            ("cmd-z", "undo"),
-            ("cmd-shift-z", "redo"),
-            ("cmd-x", "cut"),
-            ("cmd-c", "copy"),
-            ("cmd-v", "paste"),
-            ("alt-cmd-shift-v", "paste-match"),
-            ("cmd-a", "select-all"),
-            ("cmd-t", "new-query"),
-            ("cmd-shift-t", "new-table"),
-            ("cmd-s", "commit"),
-            ("cmd-shift-s", "save-file"),
-            ("cmd-o", "open-file"),
-            ("cmd-p", "quick-open"),
-            ("cmd-f", "filters"),
-            ("cmd-shift-backspace", "discard"),
-            ("cmd-e", "open-sql-query"),
-            ("cmd-w", "close-tab"),
-            ("cmd-r", "refresh"),
-            ("cmd-shift-r", "reconnect"),
-            ("cmd-.", "running-queries"),
-            ("cmd-0", "toggle-sidebar"),
-            ("cmd-shift-0", "toggle-panel"),
-            ("cmd-shift-c", "toggle-console"),
-            ("cmd-[", "prev-tab"),
-            ("cmd-]", "next-tab"),
-            ("cmd-shift-p", "preview"),
-            ("cmd-k", "switch-db"),
-            ("cmd-enter", "run-current"),
-            ("cmd-shift-enter", "run-all"),
-            ("cmd-1", "tab-1"),
-            ("cmd-2", "tab-2"),
-            ("cmd-3", "tab-3"),
-            ("cmd-4", "tab-4"),
-            ("cmd-5", "tab-5"),
-            ("cmd-6", "tab-6"),
-            ("cmd-7", "tab-7"),
-            ("cmd-8", "tab-8"),
-            ("cmd-9", "tab-9"),
-            ("cmd-h", "hide"),
-            ("alt-cmd-h", "hide-others"),
-            ("cmd-m", "minimize"),
-            ("ctrl-cmd-f", "fullscreen"),
-        ]
-        .into_iter()
-        .map(|(key, name)| KeyBinding::new(key, Command::new(name), None)),
+        BINDINGS
+            .iter()
+            .map(|(key, name)| KeyBinding::new(key, Command::new(name), None)),
     );
     cx.on_action(|command: &Command, cx| {
         let command = command.clone();
@@ -75,32 +78,116 @@ pub fn install(cx: &mut App) {
                     let view = host::active_workspace(window,cx);
                     if let Some(view) = view {
                         view.update(cx, |this, cx| this.command(&command.name, window, cx));
-                    } else if ["undo","redo","cut","copy","paste","paste-match","select-all","delete"].contains(&command.name.as_str()) {
+                    } else if EDIT.contains(&command.name.as_str()) {
                         components::native_edit(&command.name,window,cx);
                     } else if command.name == "close-tab" {
                         window.remove_window();
+                    } else if command.name == "shortcuts" {
+                        crate::shortcuts::show_window(false, cx);
+                    } else {
+                        forward(&command.name, window, cx);
                     }
                 });
             }
         });
     });
 }
+const EDIT: [&str; 8] = [
+    "undo",
+    "redo",
+    "cut",
+    "copy",
+    "paste",
+    "paste-match",
+    "select-all",
+    "delete",
+];
+/// A connection-window command chosen while the connections or form window is in front: run it
+/// in the frontmost connection window, or say that it needs one.
+fn forward(name: &str, window: &mut Window, cx: &mut App) {
+    let target = cx
+        .window_stack()
+        .unwrap_or_else(|| cx.windows())
+        .into_iter()
+        .find_map(|handle| {
+            handle
+                .update(cx, |_, window, cx| host::active_workspace(window, cx))
+                .ok()
+                .flatten()
+                .map(|view| (handle, view))
+        });
+    if let Some((handle, view)) = target {
+        let name = name.to_owned();
+        let _ = handle.update(cx, |_, window, cx| {
+            window.activate_window();
+            view.update(cx, |this, cx| this.command(&name, window, cx));
+        });
+        return;
+    }
+    let answer = window.prompt(
+        PromptLevel::Info,
+        &format!("{} needs a connection window", menu_label(name)),
+        Some("Connect to a database first: double-click a connection in the list, or create one with ⌘N."),
+        &["OK"],
+        cx,
+    );
+    cx.spawn(async move |_| answer.await.ok()).detach();
+}
+/// The menu wording of a command, for messages.
+fn menu_label(name: &str) -> String {
+    match name {
+        "new-query" => "New Tab",
+        "new-table" => "New Table",
+        "commit" => "Commit Changes",
+        "preview" => "Preview Changes",
+        "discard" => "Discard Changes",
+        "save-file" => "Save SQL As",
+        "open-file" => "Open SQL File",
+        "import-dump" => "Import SQL Dump",
+        "quick-open" => "Open Anything",
+        "open-sql-query" => "Open SQL Query",
+        "switch-db" => "Switch Database",
+        "running-queries" => "Running Queries",
+        "refresh" => "Reload Workspace",
+        "reconnect" => "Reconnect",
+        "toggle-sidebar" => "Toggle Sidebar",
+        "toggle-panel" => "Toggle Right Panel",
+        "toggle-console" => "Toggle Console Log",
+        "prev-tab" => "Previous Tab",
+        "next-tab" => "Next Tab",
+        "filters" => "Filters",
+        "run-current" => "Run Current",
+        "run-all" => "Run All",
+        s if s.starts_with("tab-") => return format!("Tab {}", &s[4..]),
+        _ => "This command",
+    }
+    .to_owned()
+}
+/// The system alert sound, for a command that can't run right now.
+fn beep() {
+    unsafe extern "C" {
+        fn NSBeep();
+    }
+    // SAFETY: AppKit's NSBeep takes no arguments and only plays the alert sound.
+    unsafe { NSBeep() }
+}
 impl Workspace {
     fn command(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
-        if self.sheet.is_some()
-            && [
-                "undo",
-                "redo",
-                "cut",
-                "copy",
-                "paste",
-                "paste-match",
-                "select-all",
-                "delete",
-            ]
-            .contains(&name)
-        {
+        if self.sheet.is_some() && EDIT.contains(&name) {
             components::native_edit(name, window, cx);
+            return;
+        }
+        if name == "shortcuts" {
+            // Over another sheet (a pending confirmation must not be dropped) it opens in its
+            // own window.
+            match &self.sheet {
+                Some(Sheet::Shortcuts) => {}
+                Some(_) => crate::shortcuts::show_window(self.services.scenario, cx),
+                None => {
+                    self.sheet = Some(Sheet::Shortcuts);
+                    cx.notify();
+                }
+            }
             return;
         }
         // Reconnecting must work whatever is open or hung, a save that never returns included.
@@ -111,6 +198,10 @@ impl Workspace {
             return;
         }
         if self.sheet.is_some() || (self.saving && !name.starts_with("toggle-")) {
+            // Busy with a dialog or a save: say so instead of doing nothing.
+            if !self.services.scenario {
+                beep();
+            }
             return;
         }
         match name {
@@ -149,7 +240,6 @@ impl Workspace {
                 }
             }
             "close-tab" => self.request_close_tab(self.state.active, window, cx),
-            "close-window" => self.request_close_window(window, cx),
             "refresh" => self.reload_workspace(window, cx),
             "running-queries" => {
                 self.state.open_running();
@@ -165,7 +255,6 @@ impl Workspace {
                 self.sheet = Some(Sheet::Preview);
             }
             "switch-db" => self.open_database_picker(window, cx),
-            "shortcuts" => self.sheet = Some(Sheet::Shortcuts),
             "run-current" => self.run(false, window, cx),
             "run-all" => self.run(true, window, cx),
             _ => {}

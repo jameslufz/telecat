@@ -376,16 +376,14 @@ async fn qa2_pg_single_transaction_batch() -> Result<()> {
         Stmt::new("ALTER TABLE \"public\".\"qads2_a\" ADD COLUMN \"z\" int;"),
         table_op_statement(
             Driver::Postgres,
-            &tref(Driver::Postgres, "qads2_b"),
+            &DbObject::new(tref(Driver::Postgres, "qads2_b"), ObjectKind::Table),
             true,
-            false,
-        ),
+        )?,
         table_op_statement(
             Driver::Postgres,
-            &tref(Driver::Postgres, "qads2_c"),
+            &DbObject::new(tref(Driver::Postgres, "qads2_c"), ObjectKind::Table),
             false,
-            false,
-        ),
+        )?,
         Stmt {
             sql: "DELETE FROM \"public\".\"qads2_a\" WHERE \"id\" = $1;".into(),
             params: vec![json!("404")],
@@ -652,6 +650,7 @@ async fn qa2_mysql_lossy_alter_edges() -> Result<()> {
             cur[4] = Cell::Text(c.into());
         }
         let change = StructureChange {
+            relation: telecat_core::types::ObjectKind::Table,
             table: t.clone(),
             new_name: "qads2_alt".into(),
             is_new: false,

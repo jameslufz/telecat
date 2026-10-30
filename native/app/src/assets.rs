@@ -6,6 +6,7 @@ impl AssetSource for Assets {
         Ok(match path {
             "spinner.svg" => Some(Cow::Borrowed(include_bytes!("../assets/spinner.svg"))),
             "ChevronDown.svg" => Some(Cow::Borrowed(include_bytes!("../assets/ChevronDown.svg"))),
+            "ChevronUp.svg" => Some(Cow::Borrowed(include_bytes!("../assets/ChevronUp.svg"))),
             "ChevronLeft.svg" => Some(Cow::Borrowed(include_bytes!("../assets/ChevronLeft.svg"))),
             "ChevronRight.svg" => Some(Cow::Borrowed(include_bytes!("../assets/ChevronRight.svg"))),
             "Console.svg" => Some(Cow::Borrowed(include_bytes!("../assets/Console.svg"))),

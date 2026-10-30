@@ -96,28 +96,23 @@ impl Workspace {
         let Some(object) = self.tree_state.focused.clone() else {
             return false;
         };
-        if !matches!(object.kind, ObjectKind::Table | ObjectKind::View) {
-            return false;
-        }
         match event.keystroke.key.as_str() {
             "backspace" | "delete" if !event.keystroke.modifiers.platform => {
-                if self.table_status(&object.table) == Some("new") {
+                if self.object_status(&object) == Some("new") {
                     self.discard_new_table(&object.table, window, cx);
-                } else {
-                    let truncate =
-                        event.keystroke.modifiers.alt && object.kind == ObjectKind::Table;
-                    self.stage_operation(object, truncate, window, cx);
+                } else if !event.keystroke.modifiers.alt {
+                    self.stage_operation(object, false, window, cx);
+                } else if object.kind == ObjectKind::Table {
+                    self.stage_operation(object, true, window, cx);
                 }
                 true
             }
-            "escape" if self.table_status(&object.table) == Some("new") => {
+            "escape" if self.object_status(&object) == Some("new") => {
                 self.discard_new_table(&object.table, window, cx);
                 true
             }
             "escape" => {
-                self.state
-                    .operations
-                    .retain(|o| o.object.table != object.table);
+                self.state.operations.retain(|o| o.object != object);
                 cx.notify();
                 true
             }

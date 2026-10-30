@@ -97,3 +97,51 @@ fn menu_bar_commands_reach_the_workspace(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(!workspace.read_with(cx, |w, _| w.sidebar));
 }
+
+#[gpui::test]
+fn help_shortcuts_opens_over_a_sheet_in_its_own_window(cx: &mut TestAppContext) {
+    let (_, workspace) = open(cx, "04-ws-mysql");
+    cx.update(|cx| cx.dispatch_action(&super::Command::new("shortcuts")));
+    cx.run_until_parked();
+    assert!(workspace.read_with(cx, |w, _| matches!(
+        w.sheet,
+        Some(crate::workspace::Sheet::Shortcuts)
+    )));
+    // Another sheet is open (a confirmation): it stays, and the list opens in a window.
+    workspace.update(cx, |w, _| {
+        w.sheet = Some(crate::workspace::Sheet::Error("busy".into()))
+    });
+    let windows = cx.windows().len();
+    cx.update(|cx| cx.dispatch_action(&super::Command::new("shortcuts")));
+    cx.run_until_parked();
+    assert_eq!(cx.windows().len(), windows + 1);
+    assert!(workspace.read_with(cx, |w, _| matches!(
+        w.sheet,
+        Some(crate::workspace::Sheet::Error(_))
+    )));
+}
+
+struct Plain;
+impl gpui_kit::Render for Plain {
+    fn render(
+        &mut self,
+        _: &mut gpui_kit::Window,
+        _: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
+        gpui_kit::div()
+    }
+}
+#[gpui::test]
+fn workspace_menu_items_from_another_window_run_in_the_connection_window(cx: &mut TestAppContext) {
+    let (_, workspace) = open(cx, "04-ws-mysql");
+    let tabs = workspace.read_with(cx, |w, _| w.state.tabs.len());
+    // A window without a workspace in front, like the connection list or form.
+    let other = cx
+        .update(|cx| cx.open_window(Default::default(), |_, cx| cx.new(|_| Plain)))
+        .unwrap();
+    cx.update_window(other.into(), |_, window, _| window.activate_window())
+        .unwrap();
+    cx.update(|cx| cx.dispatch_action(&super::Command::new("new-query")));
+    cx.run_until_parked();
+    assert_eq!(workspace.read_with(cx, |w, _| w.state.tabs.len()), tabs + 1);
+}

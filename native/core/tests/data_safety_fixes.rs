@@ -631,6 +631,7 @@ fn structure(d: Driver, old: &str, new: &str) -> Vec<Stmt> {
     structure_statements(
         d,
         &StructureChange {
+            relation: telecat_core::types::ObjectKind::Table,
             table: table(),
             new_name: "t".into(),
             is_new: false,

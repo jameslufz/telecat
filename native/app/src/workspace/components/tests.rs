@@ -333,20 +333,29 @@ fn named_queries_history_and_file_dialogs(cx: &mut TestAppContext) {
     )));
 }
 #[test]
-fn export_matches_electron_null_empty_and_escaping() {
-    let cols = vec!["a".into(), "b".into()];
+fn export_keeps_null_empty_and_escaping_and_quotes_identifiers() {
+    use telecat_core::export::{ExportFormat, ExportWriter};
+    let cols: Vec<String> = vec!["a".into(), "b c".into()];
     let rows = vec![vec![None, Some("ธนาคาร,\"😺\"\n".into())]];
+    let write = |format, d, rows: &[Vec<Option<String>>]| {
+        let mut w = ExportWriter::new(format, d, "`x`".into(), cols.clone(), vec![false, false]);
+        w.header() + &w.rows(rows) + &w.footer()
+    };
     assert_eq!(
-        super::export_text("x", &cols, &rows, "csv"),
-        "\u{feff}a,b\r\n,\"ธนาคาร,\"\"😺\"\"\n\"\r\n"
+        write(ExportFormat::Csv, Driver::Mysql, &rows),
+        "\u{feff}a,b c\r\n,\"ธนาคาร,\"\"😺\"\"\n\"\r\n"
     );
     let json: serde_json::Value =
-        serde_json::from_str(&super::export_text("x", &cols, &rows, "json")).unwrap();
+        serde_json::from_str(&write(ExportFormat::Json, Driver::Mysql, &rows)).unwrap();
     assert!(json[0]["a"].is_null());
-    assert_eq!(json[0]["b"], "ธนาคาร,\"😺\"\n");
+    assert_eq!(json[0]["b c"], "ธนาคาร,\"😺\"\n");
     assert_eq!(
-        super::export_text("x", &cols, &[vec![Some("a'b\\c".into()), None]], "sql"),
-        "INSERT INTO x (a, b) VALUES ('a''b\\\\c', NULL);\n"
+        write(
+            ExportFormat::Sql,
+            Driver::Mysql,
+            &[vec![Some("a'b\\c".into()), None]]
+        ),
+        "INSERT INTO `x` (`a`, `b c`) VALUES ('a''b\\\\c', NULL);\n"
     );
 }
 
@@ -2786,11 +2795,16 @@ fn unsaved_new_tables_can_be_discarded(cx: &mut TestAppContext) {
         })
         .unwrap();
         paint(cx, w);
-        let table = s.read_with(cx, |s, _| s.state.current().table.as_ref().unwrap().table.clone());
+        let table = s.read_with(cx, |s, _| {
+            s.state.current().table.as_ref().unwrap().table.clone()
+        });
         let exists = |cx: &mut TestAppContext| {
             s.read_with(cx, |s, _| {
                 (
-                    s.state.tabs.iter().any(|t| t.kind == TabKind::Table(table.clone())),
+                    s.state
+                        .tabs
+                        .iter()
+                        .any(|t| t.kind == TabKind::Table(table.clone())),
                     s.state.objects.iter().any(|o| o.table == table),
                 )
             })
@@ -2803,6 +2817,7 @@ fn unsaved_new_tables_can_be_discarded(cx: &mut TestAppContext) {
                         telecat_core::types::DbObject {
                             table: table.clone(),
                             kind: telecat_core::types::ObjectKind::Table,
+                            signature: None,
                         },
                         false,
                         window,
@@ -2830,7 +2845,11 @@ fn unsaved_new_tables_can_be_discarded(cx: &mut TestAppContext) {
         ask(cx);
         cx.simulate_prompt_answer("Discard");
         cx.run_until_parked();
-        assert_eq!(exists(cx), (false, false), "{how}: Discard removes tab and entry");
+        assert_eq!(
+            exists(cx),
+            (false, false),
+            "{how}: Discard removes tab and entry"
+        );
         assert!(
             s.read_with(cx, |s, _| s.state.operations.is_empty()),
             "{how}: nothing is staged for the server"
@@ -2845,9 +2864,22 @@ fn new_mysql_columns_move_from_the_context_menu(cx: &mut TestAppContext) {
     let (w, s) = setup(cx, "53-structure-staged");
     paint(cx, w);
     let (k, rows) = s.read_with(cx, |s, _| {
-        (key(s.state.current()), s.state.current().table.as_ref().unwrap().structure.rows.clone())
+        (
+            key(s.state.current()),
+            s.state
+                .current()
+                .table
+                .as_ref()
+                .unwrap()
+                .structure
+                .rows
+                .clone(),
+        )
     });
-    let new = rows.iter().position(|r| r.orig.is_none()).expect("the scenario has a new column");
+    let new = rows
+        .iter()
+        .position(|r| r.orig.is_none())
+        .expect("the scenario has a new column");
     let saved = rows.iter().position(|r| r.orig.is_some()).unwrap();
     let t = s.read_with(cx, |s, _| s.state.current().table.clone().unwrap());
     let labels = |row: usize| {
@@ -2856,15 +2888,32 @@ fn new_mysql_columns_move_from_the_context_menu(cx: &mut TestAppContext) {
             .map(|v| v["label"].as_str().unwrap_or("").to_owned())
             .collect::<Vec<_>>()
     };
-    assert_eq!(labels(new), ["Move Up", "Move Down", "Move to First", "Move After"]);
-    assert!(!t.column_movable(Driver::Mysql, saved), "saved columns have no move items");
+    assert_eq!(
+        labels(new),
+        ["Move Up", "Move Down", "Move to First", "Move After"]
+    );
+    assert!(
+        !t.column_movable(Driver::Mysql, saved),
+        "saved columns have no move items"
+    );
     let menu = |cx: &mut TestAppContext, id: String, row: usize| {
         let key = s.read_with(cx, |s, _| {
-            s.state.current().table.as_ref().unwrap().structure.rows[row].key.clone()
+            s.state.current().table.as_ref().unwrap().structure.rows[row]
+                .key
+                .clone()
         });
         cx.update_window(w, |_, window, cx| {
             s.update(cx, |s, cx| {
-                s.grid_event(k, GridEvent::Menu { id, cell: Cell { row, col: 1 }, key: Some(key) }, window, cx)
+                s.grid_event(
+                    k,
+                    GridEvent::Menu {
+                        id,
+                        cell: Cell { row, col: 1 },
+                        key: Some(key),
+                    },
+                    window,
+                    cx,
+                )
             })
         })
         .unwrap();
@@ -2873,20 +2922,100 @@ fn new_mysql_columns_move_from_the_context_menu(cx: &mut TestAppContext) {
     let moved = rows[new].key.clone();
     let at = |cx: &mut TestAppContext| {
         s.read_with(cx, |s, _| {
-            s.state.current().table.as_ref().unwrap().structure.rows.iter().position(|r| r.key == moved).unwrap()
+            s.state
+                .current()
+                .table
+                .as_ref()
+                .unwrap()
+                .structure
+                .rows
+                .iter()
+                .position(|r| r.key == moved)
+                .unwrap()
         })
     };
     menu(cx, "move-first".into(), new);
     assert_eq!(at(cx), 0);
     let selected = current_grid(cx, &s).read_with(cx, |g, _| g.model().selection.rows.clone());
-    assert_eq!(selected.into_iter().collect::<Vec<_>>(), [0], "the selection follows it");
+    assert_eq!(
+        selected.into_iter().collect::<Vec<_>>(),
+        [0],
+        "the selection follows it"
+    );
     menu(cx, "move-down".into(), 0);
     assert_eq!(at(cx), 1);
     let after = rows[2].key.clone();
     menu(cx, format!("move-after:{after}"), 1);
     assert_eq!(at(cx), 3, "right after the third saved column");
     let sql = s.read_with(cx, |s, _| {
-        s.state.collect_changes().unwrap()[0].statements[0].sql.clone()
+        s.state.collect_changes().unwrap()[0].statements[0]
+            .sql
+            .clone()
     });
     assert!(sql.contains("AFTER `bank_name_th`"), "{sql}");
+}
+
+#[gpui::test]
+fn open_anything_opens_a_function_in_its_own_tab(cx: &mut TestAppContext) {
+    let (w, s) = setup(cx, "22-pg-table");
+    paint(cx, w);
+    let function = s.read_with(cx, |s, _| {
+        s.state
+            .objects
+            .iter()
+            .find(|o| o.kind == telecat_core::types::ObjectKind::Function)
+            .cloned()
+            .unwrap()
+    });
+    let before: Vec<String> = s.read_with(cx, |s, _| {
+        s.state.tabs.iter().map(|t| t.editor.text.clone()).collect()
+    });
+    cx.update_window(w, |_, window, cx| {
+        s.update(cx, |s, cx| {
+            s.choose_picker(
+                super::super::workflows::Pick::Object(function.clone()),
+                window,
+                cx,
+            )
+        })
+    })
+    .unwrap();
+    s.read_with(cx, |s, _| {
+        assert_eq!(s.state.current().kind, TabKind::Routine(function.clone()));
+        // The other tabs' SQL is untouched (⌘P used to append the definition to it).
+        let texts: Vec<String> = s.state.tabs.iter().map(|t| t.editor.text.clone()).collect();
+        assert_eq!(&texts[..before.len()], &before[..]);
+    });
+    // A second pick switches to the same tab.
+    let tabs = s.read_with(cx, |s, _| s.state.tabs.len());
+    cx.update_window(w, |_, window, cx| {
+        s.update(cx, |s, cx| {
+            s.choose_picker(
+                super::super::workflows::Pick::Object(function.clone()),
+                window,
+                cx,
+            )
+        })
+    })
+    .unwrap();
+    assert_eq!(s.read_with(cx, |s, _| s.state.tabs.len()), tabs);
+    paint(cx, w);
+}
+#[gpui::test]
+fn the_fixture_rail_never_draws_in_a_real_window(cx: &mut TestAppContext) {
+    let (_, s) = setup(cx, "95-rail");
+    assert!(s.read_with(cx, |s, _| s.fixture_rail_visible()));
+    s.update(cx, |s, _| s.services.scenario = false);
+    assert!(!s.read_with(cx, |s, _| s.fixture_rail_visible()));
+}
+#[test]
+fn autocomplete_reads_columns_of_named_tables_and_qualifiers() {
+    let tables = super::completion_tables(
+        "SELECT u.id, orders.total FROM users u -- comment FROM nope\nJOIN `ธนาคาร` b ON b.id = u.bank;",
+        Driver::Mysql,
+    );
+    for t in ["users", "ธนาคาร", "orders", "u", "b"] {
+        assert!(tables.iter().any(|x| x == t), "{t}: {tables:?}");
+    }
+    assert!(!tables.iter().any(|x| x == "nope"), "{tables:?}");
 }

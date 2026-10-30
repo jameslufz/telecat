@@ -57,64 +57,27 @@ impl Workspace {
                             ),
                     )
             }
-            Sheet::Shortcuts => {
-                let groups: serde_json::Value =
-                    serde_json::from_str(include_str!("shortcuts.json")).unwrap();
-                let groups = groups.as_array().unwrap();
-                let columns = [&groups[..2], &groups[2..]].into_iter().map(|groups| {
-                    let blocks = groups.iter().map(|g| {
-                        let rows = g["keys"].as_array().unwrap().iter().map(|row| {
+            Sheet::Shortcuts => sheet(720., "Keyboard Shortcuts")
+                .line_height(px(15.5))
+                .child(
+                    div()
+                        .relative()
+                        .child(
                             div()
-                                .flex()
-                                .gap(px(10.))
-                                .py(px(2.))
-                                .text_size(px(11.5))
-                                // Chromium's normal 12.5px system-font line box is 15px.
-                                .line_height(px(13.5))
-                                .child(
-                                    div()
-                                        .w(px(118.))
-                                        .flex_shrink_0()
-                                        .child(row[0].as_str().unwrap().to_owned()),
-                                )
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .text_color(rgb(telecat_theme::TEXT_SECONDARY))
-                                        .child(row[1].as_str().unwrap().to_owned()),
-                                )
-                        });
-                        div()
-                            .mb(px(14.))
-                            .child(
-                                div()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .mb(px(6.))
-                                    .child(g["title"].as_str().unwrap().to_owned()),
-                            )
-                            .children(rows)
-                    });
-                    div().flex_1().min_w_0().children(blocks)
-                });
-                sheet(720., "Keyboard Shortcuts")
-                    .line_height(px(15.5))
-                    .child(
-                        div()
-                            .flex()
-                            .line_height(px(14.))
-                            .gap(px(28.))
-                            .children(columns),
-                    )
-                    .child(div().mt(px(16.)).flex().justify_end().child(
-                        button("done", "Done", true, false).on_click(cx.listener(
-                            |this, _, _, cx| {
-                                this.sheet = None;
-                                cx.notify();
-                            },
-                        )),
-                    ))
-            }
+                                .id("shortcuts")
+                                .max_h(px((self.viewport_height - 200.).max(240.)))
+                                .overflow_y_scroll()
+                                .track_scroll(&self.detail_scroll)
+                                .child(crate::shortcuts::body()),
+                        )
+                        .child(super::layout::scrollbar(&self.detail_scroll, cx)),
+                )
+                .child(div().mt(px(16.)).flex().justify_end().child(
+                    button("done", "Done", true, false).on_click(cx.listener(|this, _, _, cx| {
+                        this.sheet = None;
+                        cx.notify();
+                    })),
+                )),
             Sheet::Preview => {
                 let preview = self.preview_text().unwrap_or_else(|e| e.to_string());
                 let has = !preview.is_empty();
@@ -333,6 +296,7 @@ impl Workspace {
             Sheet::Import(stage) => self.import_sheet(stage, cx),
             Sheet::ReconnectPassword => self.reconnect_password_sheet(cx),
             Sheet::CommitUnknown => self.commit_unknown_sheet(cx),
+            Sheet::Triggers => self.triggers_sheet(cx),
             Sheet::Error(message) => sheet(560., "Telecat")
                 .child(div().text_color(rgb(0xff8a80)).child(message.clone()))
                 .child(div().mt(px(16.)).flex().justify_end().child(close())),

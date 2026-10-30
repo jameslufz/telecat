@@ -213,12 +213,23 @@ fn with_lossy_check_removed(ours: &Value, electron: &Value) -> Value {
     }
     ours
 }
+/// Electron leaked a JavaScript TypeError for a saved column whose name was cleared; Telecat
+/// refuses the same edits with a message that says what to do.
+fn with_js_error_named(ours: &Value, electron: &Value) -> Value {
+    const JS: &str = "Cannot read properties of null (reading 'replace')";
+    match (ours["error"].as_str(), electron["error"].as_str()) {
+        (Some(e), Some(JS)) if e.starts_with("Column ") && e.contains(" has no name.") => {
+            json!({"error": JS})
+        }
+        _ => ours.clone(),
+    }
+}
 #[test]
 fn structure_parity() {
     for (i, c) in fixture("structure").iter().enumerate() {
         let ours = outcome(structure_statements(de(&c["d"]), &de(&c["c"])));
         assert_eq!(
-            with_lossy_check_removed(&ours, &c["out"]),
+            with_js_error_named(&with_lossy_check_removed(&ours, &c["out"]), &c["out"]),
             c["out"],
             "structure {i}: {c}"
         );
@@ -231,6 +242,7 @@ fn indexes_parity() {
             outcome(index_statements(
                 de(&c["d"]),
                 &de(&c["t"]),
+                ObjectKind::Table,
                 &de::<Vec<String>>(&c["columns"]),
                 &de::<Vec<EditRow>>(&c["rows"])
             )),

@@ -32,6 +32,14 @@ pub fn validate(c: &ConnectionConfig, port_text: &str) -> Result<ConnectionConfi
     };
     Ok(c)
 }
+/// A status colour typed in the custom colour sheet, as `#rrggbb`; the `#` may be left out.
+pub fn parse_hex_color(input: &str) -> Result<String> {
+    let hex = input.trim().trim_start_matches('#');
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        bail!("Type a colour as #RRGGBB, for example #3A7D44.");
+    }
+    Ok(format!("#{}", hex.to_ascii_lowercase()))
+}
 pub fn password_placeholder(mode: PasswordMode) -> &'static str {
     match mode {
         PasswordMode::Ask => "asked on connect (used for Test)",

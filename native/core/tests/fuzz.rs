@@ -62,10 +62,17 @@ fn arbitrary_unicode_never_panics() {
                 rid: Some(vec![s.clone(); (next() % 4) as usize]),
             };
             let _ = data_statements(d, &table, &meta, std::slice::from_ref(&r));
-            let _ = index_statements(d, &table, &columns, std::slice::from_ref(&r));
+            let _ = index_statements(
+                d,
+                &table,
+                telecat_core::types::ObjectKind::Table,
+                &columns,
+                std::slice::from_ref(&r),
+            );
             let _ = structure_statements(
                 d,
                 &StructureChange {
+                    relation: telecat_core::types::ObjectKind::Table,
                     table: table.clone(),
                     new_name: s.clone(),
                     is_new: next() % 2 == 0,

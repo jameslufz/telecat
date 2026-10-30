@@ -2,16 +2,18 @@
 mod guards;
 mod import;
 mod metadata;
+mod objects;
 mod result_sources;
 mod tls;
 mod values;
 mod wire;
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 pub use guards::{CommitReview, EngineWarning};
 pub use import::{
     FileCheck, ImportFailure, ImportOptions, ImportProgress, ImportReport, Outcome, scan_dump,
     scan_dump_checked,
 };
+pub use objects::{EXPORT_CHUNK, RoutineDefinition};
 use serde_json::Value;
 use telecat_core::{
     changes::{NOT_UNIQUE, ROW_MISSING, Stmt},
@@ -21,8 +23,8 @@ use telecat_core::{
 use tokio::sync::Mutex;
 use wire::Wire;
 pub use wire::{
-    CONNECT_TIMEOUT, ServerError, buffer_cell, format_bytes, is_auth_failure, is_connection_lost,
-    validate_endpoint, validate_test_endpoint,
+    CONNECT_TIMEOUT, RowSink, ServerError, buffer_cell, format_bytes, is_auth_failure,
+    is_connection_lost, validate_endpoint, validate_test_endpoint,
 };
 #[cfg(feature = "test-support")]
 pub mod test_proxy;
@@ -313,6 +315,37 @@ const IMPLICIT_COMMIT: [&str; 16] = [
     "LOAD",
     "CALL",
 ];
+/// Session settings a MySQL routine or trigger save may run under (see `execute_guarded`).
+const OBJECT_SETTINGS: [&str; 2] = ["sql_mode", "collation_connection"];
+/// Sets each of `settings` on the connection; returns what they were before.
+async fn swap_settings(
+    conn: &mut Wire,
+    settings: &[(String, String)],
+) -> Result<Vec<(String, String)>> {
+    let mut previous = vec![];
+    for (name, value) in settings {
+        ensure!(
+            OBJECT_SETTINGS.contains(&name.as_str()),
+            "Unsupported session setting {name}"
+        );
+        let old = conn
+            .run(&format!("SELECT @@SESSION.{name}"), &[])
+            .await?
+            .0
+            .rows
+            .into_iter()
+            .next()
+            .and_then(|r| r.into_iter().next().flatten())
+            .unwrap_or_default();
+        conn.run(
+            &format!("SET SESSION {name} = ?"),
+            &[Value::String(value.clone())],
+        )
+        .await?;
+        previous.push((name.clone(), old));
+    }
+    Ok(previous)
+}
 pub struct Session {
     pub driver: Driver,
     pub backend_id: String,
@@ -583,6 +616,18 @@ impl Session {
             "IntervalStyle",
             "extra_float_digits",
         ];
+        // A MySQL routine or trigger is created again under the settings it was created under
+        // (SHOW CREATE). They hold for this call only: the connection gets its own back after.
+        let (object, settings): (Vec<_>, Vec<_>) = settings
+            .iter()
+            .cloned()
+            .partition(|(n, _)| OBJECT_SETTINGS.contains(&n.as_str()));
+        let settings = &settings[..];
+        if !object.is_empty()
+            && (self.driver != Driver::Mysql || transaction || !settings.is_empty())
+        {
+            bail!("Object settings apply to MySQL routine and trigger saves only");
+        }
         if let Some((name, _)) = settings
             .iter()
             .find(|(n, _)| !ALLOWED.contains(&n.as_str()))
@@ -653,6 +698,23 @@ impl Session {
             p.backend = identity.as_ref().map(|i| i.id.clone());
             p.identity = identity;
         });
+        if !object.is_empty() && tx {
+            *slot = Some(conn);
+            bail!("Object settings apply to MySQL routine and trigger saves only");
+        }
+        let previous = if object.is_empty() {
+            None
+        } else {
+            match swap_settings(&mut conn, &object).await {
+                Ok(previous) => Some(previous),
+                Err(e) => {
+                    // Its settings are unknown now: the next save opens a fresh connection.
+                    conn.close().await;
+                    self.note_commit(|p| p.finished = true);
+                    return Err(e.context("Couldn't apply the object's sql_mode / collation"));
+                }
+            }
+        };
         let mut nontransactional_started = false;
         let result = async {
             let review = if tx { guards::review(&mut conn, self.driver, &self.database, stmts).await? } else { CommitReview::default() };
@@ -701,7 +763,15 @@ impl Session {
                         if check.message == NOT_UNIQUE && n == 0 {
                             bail!("{ROW_MISSING} (matched 0)");
                         }
-                        bail!("{} (matched {n})", check.message);
+                        // A check may explain each result on its own line: "when <n>: …".
+                        let prefix = format!("when {n}: ");
+                        if let Some(reason) =
+                            check.message.lines().find_map(|l| l.strip_prefix(&prefix))
+                        {
+                            bail!("{reason}");
+                        }
+                        let general = check.message.lines().next().unwrap_or_default();
+                        bail!("{general} (matched {n})");
                     }
                 }
                 if table_locks { guards::precheck_write(&mut conn, &self.database, st).await?; }
@@ -775,6 +845,19 @@ impl Session {
                         .map_or(String::new(), |c| format!("{c:#}\n\n"))
                 );
             }
+        }
+        if let Some(previous) = previous
+            && let Err(e) = swap_settings(&mut conn, &previous).await
+        {
+            conn.close().await;
+            self.note_commit(|p| p.finished = true);
+            bail!(
+                "{}Resetting the commit connection failed ({e:#}); Telecat reconnects on the next commit.",
+                result
+                    .as_ref()
+                    .err()
+                    .map_or(String::new(), |c| format!("{c:#}\n\n"))
+            );
         }
         *slot = Some(conn);
         self.note_commit(|p| p.finished = true);

@@ -526,10 +526,16 @@ async fn qa_file_change_detection() -> Result<()> {
         .map(|r| r.rows)
         .unwrap_or_default();
     let message = r.err().map(|f| f.message).unwrap_or_default();
-    assert!(message.contains("content differs"), "{message}");
+    // Either safe refusal: the content hash at the end (macOS), or Linux noticing the rewrite
+    // (its ctime changes) before anything ran.
+    assert!(
+        message.contains("content differs")
+            || message.contains("The file changed after it was checked. Nothing ran"),
+        "{message}"
+    );
     assert!(
         has99999.is_empty() && tcount.is_empty(),
-        "the import must roll back"
+        "nothing ran or the import rolled back"
     );
 
     // (c) grow the file while it is being imported (between chunks)

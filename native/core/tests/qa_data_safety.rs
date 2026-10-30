@@ -332,6 +332,7 @@ fn qa_mysql_structure_lossy_change_has_no_check() {
         .collect();
     cur[2] = Cell::Text("decimal(10,1)".into());
     let c = StructureChange {
+        relation: telecat_core::types::ObjectKind::Table,
         table: TableRef {
             schema: "zixma".into(),
             name: "t".into(),

@@ -380,6 +380,86 @@ pub fn connection_matches(c: &ConnectionConfig, search: &str) -> bool {
             .iter()
             .any(|s| s.to_lowercase().contains(&q))
 }
+/// The connections the welcome list shows, in its order: each group's members (unless the
+/// group is collapsed and nothing is being searched), then the ungrouped ones.
+pub fn listed_connections<'a>(s: &'a StoreSnapshot, search: &str) -> Vec<&'a ConnectionConfig> {
+    let searching = !search.trim().is_empty();
+    let visible: Vec<_> = s
+        .connections
+        .iter()
+        .filter(|c| connection_matches(c, search))
+        .collect();
+    let mut out = vec![];
+    for g in &s.groups {
+        if g.collapsed == Some(true) && !searching {
+            continue;
+        }
+        out.extend(
+            visible
+                .iter()
+                .filter(|c| c.group_id.as_deref() == Some(g.id.as_str())),
+        );
+    }
+    out.extend(visible.iter().filter(|c| {
+        c.group_id
+            .as_ref()
+            .is_none_or(|id| !s.groups.iter().any(|g| &g.id == id))
+    }));
+    out
+}
+/// The connection Enter opens: the selected one when it is listed, else the only one listed.
+pub fn enter_target<'a>(
+    listed: &[&'a ConnectionConfig],
+    selected: Option<&str>,
+) -> Option<&'a ConnectionConfig> {
+    selected
+        .and_then(|id| listed.iter().find(|c| c.id == id).copied())
+        .or_else(|| (listed.len() == 1).then(|| listed[0]))
+}
+/// The connection ↑ / ↓ selects next: the neighbour of the selection, or the first / last.
+pub fn step_selection(
+    listed: &[&ConnectionConfig],
+    selected: Option<&str>,
+    down: bool,
+) -> Option<String> {
+    let at = selected.and_then(|id| listed.iter().position(|c| c.id == id));
+    let next = match (at, down) {
+        (Some(i), true) => (i + 1).min(listed.len().saturating_sub(1)),
+        (Some(i), false) => i.saturating_sub(1),
+        (None, true) => 0,
+        (None, false) => listed.len().checked_sub(1)?,
+    };
+    listed.get(next).map(|c| c.id.clone())
+}
+/// The confirmation shown before a connection is deleted: title and detail.
+pub fn delete_connection_prompt(c: &ConnectionConfig) -> (String, String) {
+    let name = if c.name.is_empty() {
+        "Untitled"
+    } else {
+        &c.name
+    };
+    (
+        format!("Delete the connection {name}?"),
+        if c.password_mode == PasswordMode::Keychain {
+            "Its saved password is removed from the macOS Keychain too. This can't be undone."
+                .into()
+        } else {
+            "Any password Telecat saved for it in the macOS Keychain is removed too. This can't be undone."
+                .into()
+        },
+    )
+}
+/// The confirmation shown before a group is deleted: title and detail.
+pub fn delete_group_prompt(g: &ConnectionGroup, members: usize) -> (String, String) {
+    (
+        format!("Delete the group {}?", g.name),
+        match members {
+            0 => "The group is empty.".into(),
+            1 => "Its connection stays and moves out of the group.".into(),
+            n => format!("Its {n} connections stay and move out of the group."),
+        },
+    )
+}
 /// The context menu of a connection group in the welcome list.
 pub fn group_menu() -> Value {
     json!([{"id":"new","label":"New Connection…"},{"type":"separator"},{"id":"rename","label":"Rename…"},{"id":"delete","label":"Delete Group"}])
