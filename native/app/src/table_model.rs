@@ -263,6 +263,35 @@ impl TableEditor {
         self.data
             .reset(data.result.clone(), data.row_ids.as_deref());
     }
+    /// A column's place in the list is where it lands: MySQL adds new columns with FIRST/AFTER,
+    /// and CREATE TABLE lists them in order. PostgreSQL can only append to an existing table,
+    /// and saved columns never move.
+    pub fn column_movable(&self, d: Driver, row: usize) -> bool {
+        (d == Driver::Mysql || self.is_new)
+            && self
+                .structure
+                .rows
+                .get(row)
+                .is_some_and(|r| r.orig.is_none())
+    }
+    /// Moves a new column right after the column at `after`, or to the top when it is `None`.
+    pub fn move_column(&mut self, d: Driver, row: usize, after: Option<usize>) {
+        let to = match after {
+            None => 0,
+            Some(a) if a < row => a + 1,
+            Some(a) => a,
+        };
+        if !self.column_movable(d, row) || after == Some(row) || to == row {
+            return;
+        }
+        if to >= self.structure.rows.len() {
+            return;
+        }
+        self.structure.apply(|rows| {
+            let r = rows.remove(row);
+            rows.insert(to, r);
+        });
+    }
     pub fn add_row(&mut self, d: Driver) {
         if !self.buffer().loaded {
             return;

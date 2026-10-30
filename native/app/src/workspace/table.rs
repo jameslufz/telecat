@@ -459,13 +459,13 @@ impl Workspace {
                                 || (self.scenario == "52-filter" && i == 1),
                         )
                         .h(px(28.))
-                        .text_size(px(13.)),
+                        .text_size(px(12.)),
                     )
                     .when(between && !raw, |d| {
                         d.child("and").child(
                             input_box(&inputs.filters[i].1, false, false)
                                 .h(px(28.))
-                                .text_size(px(13.)),
+                                .text_size(px(12.)),
                         )
                     })
                     .child(
@@ -506,7 +506,7 @@ impl Workspace {
             .child(icon("Sliders.svg",16.,0x8a8a8a))
             .child(small_button("filter-export","Export").on_click(cx.listener(|this,_,_,cx|this.export_result(cx))))
             .child(small_button("filter-sql","SQL").on_click(cx.listener(|this,_,_,cx|this.filter_sql(cx))))
-            .child(div().flex_1().min_w_0().truncate().text_size(px(12.)).text_color(rgb(telecat_theme::MUTED)).child("Show: ⌘F  Insert: ⌘I  Remove: ⇧⌘I  Apply All: ⌘Return  Up: ⌘↑  Down: ⌘↓"))
+            .child(div().flex_1().min_w_0().truncate().text_size(px(11.)).text_color(rgb(telecat_theme::MUTED)).child("Show: ⌘F  Insert: ⌘I  Remove: ⇧⌘I  Apply All: ⌘Return  Up: ⌘↑  Down: ⌘↓"))
             .child(div().flex_1())
             .child(small_button("filter-clear","Clear").on_click(cx.listener(|this,_,window,cx|this.navigate_table(TableNavigation::Clear,window,cx))))
             .child(div().flex().h(px(28.)).border_1().border_color(rgb(0x3c3c3c)).rounded(px(7.)).bg(rgb(telecat_theme::INPUT_2))
@@ -564,13 +564,13 @@ impl Workspace {
                     .bg(rgb(0x242424))
                     .border_b_1()
                     .border_color(rgb(0x111111))
-                    .child(div().text_size(px(14.)).ml(px(6.)).child("Name"))
+                    .child(div().text_size(px(12.5)).ml(px(6.)).child("Name"))
                     .child(if structure {
                         input_box(&inputs.name, self.saving, false)
                             .flex_none()
                             .w(px(280.))
                             .font(mono())
-                            .text_size(px(13.))
+                            .text_size(px(12.))
                             .when(t.name != t.table.name, |d| d.border_color(rgb(0xe0b84a)))
                     } else {
                         div()
@@ -583,15 +583,15 @@ impl Workspace {
                             .border_color(rgb(telecat_theme::BORDER))
                             .rounded(px(7.))
                             .bg(rgb(telecat_theme::INPUT))
-                            .text_size(px(14.))
+                            .text_size(px(12.5))
                             .child(t.name.clone())
                     })
                     .when(structure, |d| {
-                        d.child(div().text_size(px(14.)).ml(px(6.)).child("Primary"))
+                        d.child(div().text_size(px(12.5)).ml(px(6.)).child("Primary"))
                             .child(if t.is_new {
                                 input_box(&inputs.primary, self.saving, false)
                                     .font(mono())
-                                    .text_size(px(12.5))
+                                    .text_size(px(11.5))
                             } else {
                                 div()
                                     .flex_1()
@@ -612,7 +612,7 @@ impl Workspace {
                                             .px(px(10.))
                                             .py(px(1.))
                                             .font(mono())
-                                            .text_size(px(12.5))
+                                            .text_size(px(11.5))
                                             .child(key.clone())
                                     }))
                             })
@@ -649,8 +649,8 @@ impl Workspace {
                             .track_scroll(&self.ddl_scroll)
                             .p(px(14.))
                             .font(mono())
-                            .text_size(px(12.5))
-                            .line_height(px(20.))
+                            .text_size(px(11.5))
+                            .line_height(px(18.))
                             .child(if t.is_new {
                                 "-- save the table first (⌘S)".into()
                             } else {

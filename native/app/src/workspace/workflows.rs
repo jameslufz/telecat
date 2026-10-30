@@ -463,15 +463,15 @@ impl Workspace {
                                 .gap(px(8.))
                                 .rounded(px(6.))
                                 .font(mono())
-                                .text_size(px(13.))
-                                .line_height(px(16.))
+                                .text_size(px(12.))
+                                .line_height(px(14.5))
                                 .when(selected, |d| {
                                     d.bg(rgb(telecat_theme::ACCENT)).text_color(rgb(0xffffff))
                                 })
                                 .child(if matches!(pick, Pick::Query(_)) {
                                     div()
                                         .font(mono())
-                                        .text_size(px(9.8))
+                                        .text_size(px(9.))
                                         .font_weight(FontWeight::BOLD)
                                         .child("SQL")
                                         .into_any_element()
@@ -492,8 +492,8 @@ impl Workspace {
                                     d.child(
                                         div()
                                             .font(ui_font())
-                                            .text_size(px(11.))
-                                            .line_height(px(13.))
+                                            .text_size(px(10.))
+                                            .line_height(px(11.5))
                                             .px(px(6.))
                                             .py(px(1.))
                                             .rounded(px(4.))
@@ -506,7 +506,7 @@ impl Workspace {
                                     d.child(
                                         div()
                                             .font(ui_font())
-                                            .text_size(px(12.))
+                                            .text_size(px(11.))
                                             .text_color(rgb(if selected {
                                                 0xdbe6ff
                                             } else {

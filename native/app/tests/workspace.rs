@@ -60,10 +60,12 @@ fn navigation_close_restore_and_status() {
         SqlDraft {
             title: "Thai".into(),
             sql: "SELECT '😺'".into(),
+            closed: false,
         },
         SqlDraft {
             title: "Two".into(),
             sql: "SELECT 2".into(),
+            closed: false,
         },
     ]);
     assert_eq!(s.current().title, "Thai");
@@ -81,6 +83,40 @@ fn navigation_close_restore_and_status() {
         ),
         "QA Schema.Mixed Tbl"
     );
+}
+#[test]
+fn closed_query_tabs_reopen_their_sql_in_order() {
+    let mut s = WorkspaceState::new(config(Driver::Mysql));
+    for sql in ["SELECT 'A'", "SELECT 'B'", "  "] {
+        let id = s.open_query("SQL Query", sql);
+        assert!(s.close_tab(id));
+    }
+    // A blank tab is not remembered; the others come back oldest first.
+    assert_eq!(s.closed_queries.len(), 2);
+    let saved = s.drafts();
+    assert_eq!(saved.iter().filter(|d| d.closed).count(), 2);
+    s.reopen_query();
+    assert_eq!(s.current().editor.text, "SELECT 'A'");
+    s.reopen_query();
+    assert_eq!(s.current().editor.text, "SELECT 'B'");
+    s.reopen_query();
+    assert_eq!(s.current().editor.text, "");
+    // Closing again remembers it again, once.
+    let a = s.tabs.iter().find(|t| t.editor.text == "SELECT 'A'").unwrap().id;
+    s.close_tab(a);
+    let b = s.open_query("SQL Query", "SELECT 'A'");
+    s.close_tab(b);
+    assert_eq!(s.closed_queries.len(), 1);
+    // Saved closed drafts survive a restart without opening tabs; old files have no flag.
+    let mut r = WorkspaceState::new(config(Driver::Mysql));
+    r.restore_drafts(&saved);
+    assert_eq!(r.tabs.len(), 1);
+    assert_eq!(r.closed_queries.len(), 2);
+    let old: Vec<SqlDraft> =
+        serde_json::from_str(r#"[{"title":"Old","sql":"SELECT 1"}]"#).unwrap();
+    r.restore_drafts(&old);
+    assert_eq!(r.current().title, "Old");
+    assert!(r.closed_queries.is_empty());
 }
 #[test]
 fn query_selection_utf16_limits_and_both_gates() {
@@ -357,4 +393,38 @@ async fn mysql_shell_live() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn postgres_shell_live() -> Result<()> {
     live(Driver::Postgres).await
+}
+#[test]
+fn sidebar_search_matches_letters_in_order_like_tableplus() {
+    // The order TablePlus shows for "team".
+    let expected = [
+        "team",
+        "user_telegram_chats",
+        "user_telegram_groups",
+        "customer_diamonds",
+        "customer_diamond_logs",
+        "system_payment_channels",
+        "internal_system_settings",
+        "customer_name_verifications",
+        "internal_system_setting_keys",
+        "internal_system_ip_whitelists",
+        "merchant_external_transfer_confirmations",
+    ];
+    let mut names: Vec<&str> = expected.to_vec();
+    names.extend(["users", "banks"]);
+    names.sort();
+    let found = fuzzy_filter("team", names.iter().map(|n| (n.to_string(), ())));
+    let order: Vec<_> = found.iter().map(|f| f.0.as_str()).collect();
+    assert_eq!(order, expected);
+    let m = fuzzy_match("team", "user_telegram_chats").unwrap();
+    assert_eq!(m.ranges, vec![5..7, 11..13]);
+    assert_eq!(fuzzy_match("TEAM", "team").unwrap().ranges, vec![0..4]);
+    // Ranges are byte offsets in the name, so non-ASCII names highlight whole characters.
+    let m = fuzzy_match("ธก", "ธนาคารกรุงเทพ").unwrap();
+    assert_eq!(m.ranges, vec![0..3, 18..21]);
+    let m = fuzzy_match("ö", "😺Öl").unwrap();
+    assert_eq!(m.ranges, vec![4..6]);
+    assert!(fuzzy_match("tz", "team").is_none());
+    let all = fuzzy_filter("", ["b", "a"].map(|n| (n.to_string(), ())));
+    assert_eq!(all.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(), ["b", "a"]);
 }

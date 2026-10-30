@@ -333,7 +333,7 @@ impl ConnectionForm {
             .border_color(rgb(0x3c3c3c))
             .rounded(px(7.))
             .bg(rgb(telecat_theme::INPUT_2))
-            .text_size(px(14.));
+            .text_size(px(12.5));
         if key == "safe" {
             let safe = choices()["SAFE_MODES"]
                 .as_array()
@@ -450,7 +450,7 @@ fn row(label: &'static str) -> Div {
                 .w(px(84.))
                 .flex_shrink_0()
                 .text_align(TextAlign::Right)
-                .text_size(px(14.))
+                .text_size(px(12.5))
                 .child(label),
         )
 }
@@ -467,7 +467,7 @@ fn small(label: &'static str) -> Div {
     div()
         .ml(px(6.))
         .flex_shrink_0()
-        .text_size(px(14.))
+        .text_size(px(12.5))
         .child(label)
 }
 fn menu(values: &Value, current: Value) -> Value {
@@ -596,7 +596,7 @@ impl Render for ConnectionForm {
                 .flex_1()
                 .min_w_0()
                 .px(px(8.))
-                .text_size(px(13.))
+                .text_size(px(12.))
                 .text_color(rgb(telecat_theme::TEXT_SECONDARY))
                 .on_click(cx.listener(move |this, _, _, cx| this.pick(i, cx))),
             );
@@ -634,8 +634,8 @@ impl Render for ConnectionForm {
             .bg(rgb(telecat_theme::BG))
             .font(ui_font())
             .text_color(rgb(telecat_theme::TEXT))
-            .text_size(px(13.))
-            .line_height(px(16.))
+            .text_size(px(12.))
+            .line_height(px(14.5))
             .px(px(18.))
             .pb(px(16.))
             .flex()
@@ -647,7 +647,7 @@ impl Render for ConnectionForm {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(px(15.))
+                    .text_size(px(13.5))
                     .font_weight(FontWeight::MEDIUM)
                     .on_mouse_down(MouseButton::Left, |_, window, _| window.start_window_move())
                     .child(if self.c.driver == Driver::Mysql {
@@ -709,7 +709,7 @@ impl Render for ConnectionForm {
                     .max_h(px(52.))
                     .px(px(4.))
                     .pb(px(8.))
-                    .text_size(px(12.5))
+                    .text_size(px(11.5))
                     .text_color(rgb(col))
                     .flex()
                     .items_center()

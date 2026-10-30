@@ -334,7 +334,7 @@ impl Render for WorkspaceHost {
                             26.,
                             if on { color } else { telecat_theme::MUTED },
                         ))
-                        .child(div().text_size(px(12.)).child(label))
+                        .child(div().text_size(px(11.)).child(label))
                         .child(
                             div()
                                 .id(("close-connection", i))

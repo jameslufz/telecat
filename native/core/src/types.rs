@@ -256,6 +256,9 @@ pub struct SavedQuery {
 pub struct SqlDraft {
     pub title: String,
     pub sql: String,
+    /// The tab was closed: the SQL waits to be reopened by the next new SQL Query tab.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub closed: bool,
 }
 pub type SavedQueries = std::collections::BTreeMap<String, Vec<SavedQuery>>;
 pub type Drafts = std::collections::BTreeMap<String, Vec<SqlDraft>>;

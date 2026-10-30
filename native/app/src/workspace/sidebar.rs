@@ -101,11 +101,17 @@ impl Workspace {
         }
         match event.keystroke.key.as_str() {
             "backspace" | "delete" if !event.keystroke.modifiers.platform => {
-                if self.table_status(&object.table) != Some("new") {
+                if self.table_status(&object.table) == Some("new") {
+                    self.discard_new_table(&object.table, window, cx);
+                } else {
                     let truncate =
                         event.keystroke.modifiers.alt && object.kind == ObjectKind::Table;
                     self.stage_operation(object, truncate, window, cx);
                 }
+                true
+            }
+            "escape" if self.table_status(&object.table) == Some("new") => {
+                self.discard_new_table(&object.table, window, cx);
                 true
             }
             "escape" => {

@@ -412,3 +412,44 @@ async fn postgres_result_writes_touch_exactly_the_rows_shown() -> Result<()> {
     let _turn = serial();
     writes(Driver::Postgres).await
 }
+/// A legacy DOUBLE primary key (AUTO_INCREMENT on MySQL 8.0; 8.4 no longer allows it): rows with whole-number ids save by that id;
+/// a fractional id can't be matched exactly and is refused.
+#[tokio::test]
+async fn mysql_double_auto_increment_key_results_are_editable() -> Result<()> {
+    let _turn = serial();
+    let s = Session::connect_test(&config(Driver::Mysql), "secret").await?;
+    for sql in [
+        "DROP TABLE IF EXISTS telecat_re_dbl",
+        "CREATE TABLE telecat_re_dbl (id double NOT NULL, name varchar(40), credit double NOT NULL, PRIMARY KEY (id))",
+        "INSERT INTO telecat_re_dbl (id, name, credit) VALUES (24143793, 'a', 1.5), (24143794, 'b', 0), (2.5, 'c', 0)",
+    ] {
+        s.query(sql).await?;
+    }
+    let sql = "SELECT * FROM telecat_re_dbl ORDER BY id DESC";
+    let (p, mut rows) = plan(&s, sql).await?;
+    assert_eq!(p.badge(), "Editable · telecat_re_dbl");
+    assert_eq!(p.editable, [false, true, true]);
+    p.stage(&mut rows, 0, 1, Cell::Text("ธนาคาร".into()))
+        .unwrap();
+    p.stage(&mut rows, 1, 2, Cell::Text("99.25".into())).unwrap();
+    assert!(p.stage(&mut rows, 2, 1, Cell::Null).is_err());
+    s.execute_after_review(&p.statements(&rows)?, true, false)
+        .await?;
+    assert_eq!(
+        s.query(sql).await?.rows,
+        [
+            [Some("24143794"), Some("ธนาคาร"), Some("0")],
+            [Some("24143793"), Some("a"), Some("99.25")],
+            [Some("2.5"), Some("c"), Some("0")],
+        ]
+        .map(|r| r.map(|v| v.map(str::to_owned)).to_vec())
+    );
+    let (p, mut rows) = plan(&s, sql).await?;
+    p.delete(&mut rows, &[1]).unwrap();
+    assert!(p.delete(&mut rows, &[2]).is_err());
+    s.execute_after_review(&p.statements(&rows)?, true, false)
+        .await?;
+    assert_eq!(s.query(sql).await?.rows.len(), 2);
+    s.query("DROP TABLE telecat_re_dbl").await?;
+    Ok(())
+}

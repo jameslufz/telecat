@@ -410,8 +410,8 @@ impl Welcome {
                             .flex()
                             .items_center()
                             .gap(px(8.))
-                            .text_size(px(15.))
-                            .line_height(px(18.))
+                            .text_size(px(13.5))
+                            .line_height(px(16.))
                             .child(div().min_w_0().truncate().child(if c.name.is_empty() {
                                 "Untitled".into()
                             } else {
@@ -420,8 +420,8 @@ impl Welcome {
                             .when(!c.tag.is_empty(), |d| {
                                 d.child(
                                     div()
-                                        .text_size(px(12.))
-                                        .line_height(px(14.))
+                                        .text_size(px(11.))
+                                        .line_height(px(12.5))
                                         .py(px(1.))
                                         .px(px(7.))
                                         .rounded(px(5.))
@@ -434,8 +434,8 @@ impl Welcome {
                     )
                     .child(
                         div()
-                            .text_size(px(12.5))
-                            .line_height(px(15.))
+                            .text_size(px(11.5))
+                            .line_height(px(13.5))
                             .text_color(rgb(if selected { 0xdbe6ff } else { 0x8a8a8a }))
                             .truncate()
                             .child(format!(
@@ -552,13 +552,13 @@ impl Welcome {
                         .flex_1()
                         .min_w_0()
                         .truncate()
-                        .text_size(px(16.))
+                        .text_size(px(14.5))
                         .font_weight(FontWeight::MEDIUM)
                         .child(group.name),
                 )
                 .child(
                     div()
-                        .text_size(px(12.))
+                        .text_size(px(11.))
                         .text_color(rgb(telecat_theme::MUTED))
                         .child(
                             snapshot
@@ -651,7 +651,7 @@ impl Welcome {
                     .rounded(px(8.))
                     .text_align(TextAlign::Center)
                     .text_color(rgb(telecat_theme::MUTED))
-                    .text_size(px(12.5))
+                    .text_size(px(11.5))
                     .child("Drop here to remove from group"),
             );
         }
@@ -661,7 +661,7 @@ impl Welcome {
                     .mt(px(90.))
                     .text_align(TextAlign::Center)
                     .text_color(rgb(telecat_theme::MUTED))
-                    .line_height(px(23.4))
+                    .line_height(px(21.))
                     .child(div().child("No connections yet."))
                     .child(
                         div()
@@ -713,7 +713,7 @@ impl Welcome {
                                             .items_center()
                                             .justify_center()
                                             .gap(px(10.))
-                                            .text_size(px(14.))
+                                            .text_size(px(12.5))
                                             .child(badge(d, col, 56.))
                                             .child(label)
                                             .on_click(cx.listener(
@@ -874,7 +874,7 @@ impl Welcome {
                         .child(
                             div()
                                 .text_color(rgb(0xffb4ae))
-                                .text_size(px(12.5))
+                                .text_size(px(11.5))
                                 .child(message.clone()),
                         )
                         .child(div().flex().justify_end().mt(px(16.)).child(
@@ -904,8 +904,8 @@ impl Render for Welcome {
             .size_full()
             .flex()
             .font(ui_font())
-            .text_size(px(13.))
-            .line_height(px(16.))
+            .text_size(px(12.))
+            .line_height(px(14.5))
             .text_color(rgb(telecat_theme::TEXT))
             .child(
                 div()
@@ -939,7 +939,7 @@ impl Render for Welcome {
                                 div()
                                     .mt(px(4.))
                                     .text_color(rgb(telecat_theme::TEXT_SECONDARY))
-                                    .line_height(px(16.))
+                                    .line_height(px(14.5))
                                     .child(concat!("Version ", env!("CARGO_PKG_VERSION"))),
                             )
                             .child(div().flex_1())
@@ -1030,7 +1030,7 @@ impl Render for Welcome {
                                             div()
                                                 .flex_1()
                                                 .min_w_0()
-                                                .text_size(px(14.))
+                                                .text_size(px(12.5))
                                                 .child(Input::new(&self.search)),
                                         ),
                                 ),

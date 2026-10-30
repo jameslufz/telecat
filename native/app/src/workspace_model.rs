@@ -453,6 +453,8 @@ impl Tab {
         }
     }
 }
+/// Closed query tabs remembered per connection; the oldest are forgotten first.
+const MAX_CLOSED_QUERIES: usize = 50;
 #[derive(Debug, Clone)]
 pub struct WorkspaceState {
     pub connection: ConnectionConfig,
@@ -466,6 +468,8 @@ pub struct WorkspaceState {
     pub active: u64,
     pub logs: Vec<LogEntry>,
     pub operations: Vec<StagedOperation>,
+    /// SQL from closed query tabs, oldest first. A new SQL Query tab reopens the first one.
+    pub closed_queries: Vec<SqlDraft>,
     next_id: u64,
     navigation: Vec<u64>,
     nav_pos: usize,
@@ -484,6 +488,7 @@ impl WorkspaceState {
             active: 1,
             logs: vec![],
             operations: vec![],
+            closed_queries: vec![],
             next_id: 2,
             navigation: vec![1],
             nav_pos: 0,
@@ -680,7 +685,17 @@ impl WorkspaceState {
         let Some(index) = self.tabs.iter().position(|t| t.id == id) else {
             return true;
         };
-        self.tabs.remove(index);
+        let tab = self.tabs.remove(index);
+        if tab.kind == TabKind::Query && !sql::trim(&tab.editor.text).is_empty() {
+            self.closed_queries.retain(|d| d.sql != tab.editor.text);
+            self.closed_queries.push(SqlDraft {
+                title: tab.title,
+                sql: tab.editor.text,
+                closed: true,
+            });
+            let over = self.closed_queries.len().saturating_sub(MAX_CLOSED_QUERIES);
+            self.closed_queries.drain(..over);
+        }
         self.navigation.retain(|x| *x != id);
         if self.active == id {
             self.active = self.tabs[index.min(self.tabs.len() - 1)].id;
@@ -692,6 +707,14 @@ impl WorkspaceState {
             .unwrap_or(0);
         true
     }
+    /// Opens a new SQL Query tab with the SQL of the earliest closed query tab, if any.
+    pub fn reopen_query(&mut self) -> u64 {
+        if self.closed_queries.is_empty() {
+            return self.open_query("SQL Query", "");
+        }
+        let d = self.closed_queries.remove(0);
+        self.open_query(&d.title, &d.sql)
+    }
     pub fn drafts(&self) -> Vec<SqlDraft> {
         self.tabs
             .iter()
@@ -699,10 +722,14 @@ impl WorkspaceState {
             .map(|t| SqlDraft {
                 title: t.title.clone(),
                 sql: t.editor.text.clone(),
+                closed: false,
             })
+            .chain(self.closed_queries.iter().cloned())
             .collect()
     }
     pub fn restore_drafts(&mut self, drafts: &[SqlDraft]) {
+        self.closed_queries = drafts.iter().filter(|d| d.closed).cloned().collect();
+        let drafts: Vec<_> = drafts.iter().filter(|d| !d.closed).collect();
         if drafts.is_empty() {
             return;
         }
@@ -881,4 +908,69 @@ pub async fn run_plan(
         });
     }
     Ok(out)
+}
+/// How a sidebar search matches a name: its letters in order, not necessarily together.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FuzzyMatch {
+    /// Byte ranges of the matched characters in the name, for highlighting.
+    pub ranges: Vec<std::ops::Range<usize>>,
+    /// Matched characters that follow the previous one directly; more ranks higher.
+    pub adjacent: usize,
+}
+/// Matches `query` against `text` ignoring case: the first place the whole query appears,
+/// else each character at its first place after the previous one.
+pub fn fuzzy_match(query: &str, text: &str) -> Option<FuzzyMatch> {
+    let fold = |c: char| c.to_lowercase().collect::<String>();
+    let query: Vec<String> = query.chars().map(fold).collect();
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    let same = |i: usize, q: &String| fold(chars[i].1) == *q;
+    let found: Vec<usize> = (0..chars.len())
+        .find(|&start| {
+            start + query.len() <= chars.len()
+                && query.iter().enumerate().all(|(k, q)| same(start + k, q))
+        })
+        .map(|start| (start..start + query.len()).collect())
+        .or_else(|| {
+            let mut at = 0;
+            query
+                .iter()
+                .map(|q| {
+                    let i = (at..chars.len()).find(|&i| same(i, q))?;
+                    at = i + 1;
+                    Some(i)
+                })
+                .collect()
+        })?;
+    let mut ranges: Vec<std::ops::Range<usize>> = vec![];
+    let mut adjacent = 0;
+    for (n, &i) in found.iter().enumerate() {
+        let (start, c) = chars[i];
+        let end = start + c.len_utf8();
+        if n > 0 && found[n - 1] + 1 == i {
+            adjacent += 1;
+            ranges.last_mut().unwrap().end = end;
+        } else {
+            ranges.push(start..end);
+        }
+    }
+    Some(FuzzyMatch { ranges, adjacent })
+}
+/// The names matching `query`, best first: more adjacent letters, then shorter names.
+/// An empty query keeps every name in its order.
+pub fn fuzzy_filter<T>(
+    query: &str,
+    items: impl IntoIterator<Item = (String, T)>,
+) -> Vec<(String, T, FuzzyMatch)> {
+    let mut out: Vec<_> = items
+        .into_iter()
+        .filter_map(|(name, item)| fuzzy_match(query, &name).map(|m| (name, item, m)))
+        .collect();
+    if !query.is_empty() {
+        out.sort_by(|a, b| {
+            b.2.adjacent
+                .cmp(&a.2.adjacent)
+                .then(a.0.chars().count().cmp(&b.0.chars().count()))
+        });
+    }
+    out
 }

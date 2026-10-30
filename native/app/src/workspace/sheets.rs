@@ -29,8 +29,8 @@ impl Workspace {
                                     .overflow_y_scroll()
                                     .track_scroll(&self.detail_scroll)
                                     .font(mono())
-                                    .text_size(px(12.5))
-                                    .line_height(px(15.))
+                                    .text_size(px(11.5))
+                                    .line_height(px(13.5))
                                     .p(px(10.))
                                     .border_1()
                                     .border_color(rgb(telecat_theme::BORDER))
@@ -68,9 +68,9 @@ impl Workspace {
                                 .flex()
                                 .gap(px(10.))
                                 .py(px(2.))
-                                .text_size(px(12.5))
+                                .text_size(px(11.5))
                                 // Chromium's normal 12.5px system-font line box is 15px.
-                                .line_height(px(15.))
+                                .line_height(px(13.5))
                                 .child(
                                     div()
                                         .w(px(118.))
@@ -98,11 +98,11 @@ impl Workspace {
                     div().flex_1().min_w_0().children(blocks)
                 });
                 sheet(720., "Keyboard Shortcuts")
-                    .line_height(px(17.))
+                    .line_height(px(15.5))
                     .child(
                         div()
                             .flex()
-                            .line_height(px(15.5))
+                            .line_height(px(14.))
                             .gap(px(28.))
                             .children(columns),
                     )
@@ -127,8 +127,8 @@ impl Workspace {
                             .rounded(px(8.))
                             .bg(rgb(telecat_theme::INPUT))
                             .font(mono())
-                            .text_size(px(12.))
-                            .line_height(px(14.4))
+                            .text_size(px(11.))
+                            .line_height(px(13.))
                             .child(preview)
                     } else {
                         div()
@@ -222,8 +222,8 @@ impl Workspace {
                                         .border_color(rgb(telecat_theme::BORDER))
                                         .bg(rgb(telecat_theme::INPUT))
                                         .font(mono())
-                                        .text_size(px(12.))
-                                        .line_height(px(15.))
+                                        .text_size(px(11.))
+                                        .line_height(px(13.5))
                                         .child(sql),
                                 ),
                         );
@@ -279,8 +279,8 @@ impl Workspace {
                                 .border_color(rgb(telecat_theme::BORDER))
                                 .bg(rgb(telecat_theme::INPUT))
                                 .font(mono())
-                                .text_size(px(12.))
-                                .line_height(px(15.))
+                                .text_size(px(11.))
+                                .line_height(px(13.5))
                                 .child(sql.clone()),
                         );
                 }

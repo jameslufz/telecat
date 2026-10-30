@@ -410,7 +410,16 @@ impl Workspace {
                 }
                 this.end_load(None, &flatten(&result));
                 match result {
-                    Ok(Ok(objects)) => {
+                    Ok(Ok(mut objects)) => {
+                        for t in this.state.tabs.iter().filter_map(|t| t.table.as_ref()) {
+                            if t.is_new && !objects.iter().any(|o| o.table == t.table) {
+                                objects.push(DbObject {
+                                    table: t.table.clone(),
+                                    kind: ObjectKind::Table,
+                                });
+                            }
+                        }
+                        objects.sort_by_key(|o| o.table.name.to_lowercase());
                         this.state.objects = objects;
                         this.update_completion_schema(cx);
                     }
@@ -576,8 +585,13 @@ impl Workspace {
         self.refresh_tab(cx);
         cx.notify();
     }
+    /// A blank new query reopens the SQL of the earliest closed query tab.
     fn new_query(&mut self, sql: &str, cx: &mut Context<Self>) {
-        self.state.open_query("SQL Query", sql);
+        if sql.is_empty() {
+            self.state.reopen_query();
+        } else {
+            self.state.open_query("SQL Query", sql);
+        }
         self.persist_drafts();
         cx.notify();
     }
@@ -932,6 +946,12 @@ impl Workspace {
         if key == "escape"
             && let Some(t) = &mut self.state.current_mut().table
         {
+            if t.is_new {
+                let table = t.table.clone();
+                self.discard_new_table(&table, window, cx);
+                cx.stop_propagation();
+                return;
+            }
             if t.buffer().dirty() {
                 t.buffer_mut().discard();
                 cx.stop_propagation();
@@ -1049,7 +1069,7 @@ impl Workspace {
                 native_menu::choose(json!(items),e.position,window,cx,|this,id,_,cx|{
                     if let Ok(mode)=serde_json::from_value(json!(id)){this.change_safe_mode(mode,cx);}
                 });
-            }))).child(tool("database","Database.svg",false).on_click(cx.listener(|this,_,window,cx|{this.open_database_picker(window,cx);}))).child(tool_box("sql").text_size(px(13.)).font_weight(FontWeight::BOLD).child("SQL").on_click(cx.listener(|this,_,_,cx|this.new_query("",cx)))))
+            }))).child(tool("database","Database.svg",false).on_click(cx.listener(|this,_,window,cx|{this.open_database_picker(window,cx);}))).child(tool_box("sql").text_size(px(12.)).font_weight(FontWeight::BOLD).child("SQL").on_click(cx.listener(|this,_,_,cx|this.new_query("",cx)))))
             .child(self.status_pill(cx))
             .child(tool_group().child(tool("refresh","Refresh.svg",false).on_click(cx.listener(|this,_,window,cx|{this.reload_workspace(window,cx);}))))
             .child(tool_group().child(tool("console","Console.svg",!self.console).on_click(cx.listener(|this,_,_,cx|{this.console=!this.console;cx.notify();}))).child(tool("panel","PanelRight.svg",!self.panel).on_click(cx.listener(|this,_,_,cx|{this.panel=!this.panel;cx.notify();}))))
@@ -1172,8 +1192,8 @@ impl Render for Workspace {
             .relative()
             .flex()
             .font(ui_font())
-            .text_size(px(13.))
-            .line_height(px(16.))
+            .text_size(px(12.))
+            .line_height(px(14.5))
             .text_color(rgb(telecat_theme::TEXT))
             .bg(rgb(telecat_theme::BG))
             .when(self.has_rail() && self.host.is_none(), |d| {
@@ -1308,7 +1328,7 @@ fn small_button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Sta
     button(id, label, false, false)
         .h(px(26.))
         .px(px(11.))
-        .text_size(px(13.))
+        .text_size(px(12.))
 }
 fn subbar() -> Div {
     div()
@@ -1381,7 +1401,7 @@ fn tab_list(this: &Workspace, cx: &mut Context<Workspace>) -> Stateful<Div> {
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(13.5))
+                .text_size(px(12.))
                 .text_color(rgb(if active { 0xffffff } else { 0xb8b8b8 }))
                 .when(active, |d| d.bg(rgb(0x4a4a4a)))
                 .child(

@@ -403,7 +403,7 @@ impl Workspace {
             ImportStage::Confirm(r) => {
                 let blocked = r.blocked_reason(d);
                 let mut body = sheet(620., "Import SQL Dump")
-                    .text_size(px(13.))
+                    .text_size(px(12.))
                     .child(row("Connection", self.state.connection.name.clone()))
                     .child(row(
                         "Into",
@@ -451,7 +451,7 @@ impl Workspace {
                                 .rounded(px(6.))
                                 .bg(rgb(telecat_theme::INPUT))
                                 .font(mono())
-                                .text_size(px(12.))
+                                .text_size(px(11.))
                                 .children(
                                     r.scan
                                         .risk_counts
@@ -479,7 +479,7 @@ impl Workspace {
                                 .rounded(px(6.))
                                 .bg(rgb(telecat_theme::INPUT))
                                 .font(mono())
-                                .text_size(px(12.))
+                                .text_size(px(11.))
                                 .text_color(rgb(0xff8a80))
                                 .children(
                                     r.scan
@@ -574,7 +574,7 @@ impl Workspace {
                     0.
                 };
                 sheet(520., format!("Importing {file}"))
-                    .text_size(px(13.))
+                    .text_size(px(12.))
                     .child(div().child(format!(
                         "{done} of {statements} statements · {} of {}",
                         size_label(bytes),
@@ -636,7 +636,7 @@ impl Workspace {
                             .max_h(px(260.))
                             .overflow_y_scroll()
                             .font(mono())
-                            .text_size(px(12.5))
+                            .text_size(px(11.5))
                             .text_color(rgb(color))
                             .child(text),
                     )

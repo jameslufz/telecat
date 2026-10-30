@@ -416,6 +416,13 @@ impl Workspace {
         if self.saving {
             return;
         }
+        // A table that was never saved has nothing to drop or truncate on the server.
+        if self.table_status(&object.table) == Some("new") {
+            if !truncate {
+                self.discard_new_table(&object.table, window, cx);
+            }
+            return;
+        }
         let name = display_name(&object.table, self.state.connection.driver);
         let kind = if object.kind == ObjectKind::View {
             "view"
@@ -501,6 +508,52 @@ impl Workspace {
     }
 }
 impl Workspace {
+    /// Throws away a table that was never saved: its tab and its sidebar entry. It only ever
+    /// existed in Telecat, so nothing is sent to the database.
+    pub(super) fn discard_new_table(
+        &mut self,
+        table: &TableRef,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.saving {
+            return;
+        }
+        let Some(tab) = self.state.tabs.iter().find(|t| {
+            t.kind == TabKind::Table(table.clone()) && t.table.as_ref().is_some_and(|e| e.is_new)
+        }) else {
+            return;
+        };
+        let id = tab.id;
+        let name = tab.table.as_ref().map_or(String::new(), |e| e.name.clone());
+        let prompt = window.prompt(
+            PromptLevel::Warning,
+            &format!("Discard new table {name}?"),
+            Some("The table was never saved, so nothing changes in the database."),
+            &["Discard", "Cancel"],
+            cx,
+        );
+        let table = table.clone();
+        self.saving = true;
+        cx.spawn(async move |this, cx| {
+            let ok = prompt.await == Ok(0);
+            let _ = this.update(cx, |this, cx| {
+                this.saving = false;
+                if ok {
+                    if this.state.tabs.len() == 1 {
+                        this.state.open_query("SQL Query", "");
+                    }
+                    this.state.close_tab(id);
+                    this.table_inputs.remove(&id);
+                    this.state.objects.retain(|o| o.table != table);
+                    this.cancel_grid_edits(cx);
+                    this.reset_inspector();
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
     pub(super) fn table_status(&self, table: &TableRef) -> Option<&'static str> {
         if self.scenario == "55-new-table" && table.name == "sa_banks" {
             return None;
@@ -618,16 +671,21 @@ impl Workspace {
         let Some(tab) = self.state.tabs.iter().find(|t| t.id == id) else {
             return;
         };
-        let query = tab.kind == TabKind::Query && !tab.editor.text.trim().is_empty();
+        let new_table = tab.table.as_ref().filter(|e| e.is_new).map(|e| e.table.clone());
+        // A query tab's SQL is remembered when it closes (the next SQL Query tab reopens it),
+        // so only staged edits need asking about.
         let dirty = tab.table.as_ref().is_some_and(|t| t.dirty()) || tab.result_dirty();
-        if !query && !dirty {
+        if !dirty {
             self.state.close_tab(id);
+            if let Some(t) = &new_table {
+                self.state.objects.retain(|o| o.table != *t);
+            }
             self.table_inputs.remove(&id);
             self.persist_drafts();
             cx.notify();
             return;
         }
-        let prompt=window.prompt(PromptLevel::Warning,&if query{format!("Close {}?",tab.title)}else{format!("Discard unsaved changes to {}?",tab.title)},Some(if query{"The SQL in this tab will be deleted. (Telecat otherwise keeps it, even after quitting.)"}else{"Closing the tab throws away its staged edits."}),&[if query{"Close Tab"}else{"Discard"},"Cancel"],cx);
+        let prompt=window.prompt(PromptLevel::Warning,&format!("Discard unsaved changes to {}?",tab.title),Some("Closing the tab throws away its staged edits."),&["Discard","Cancel"],cx);
         self.saving = true;
         cx.spawn(async move |this, cx| {
             let ok = prompt.await == Ok(0);
@@ -635,6 +693,9 @@ impl Workspace {
                 this.saving = false;
                 if ok {
                     this.state.close_tab(id);
+                    if let Some(t) = &new_table {
+                        this.state.objects.retain(|o| o.table != *t);
+                    }
                     this.table_inputs.remove(&id);
                     this.persist_drafts();
                 }

@@ -398,8 +398,8 @@ impl Workspace {
                                                 .flex_1()
                                                 .min_w_0()
                                                 .font(mono())
-                                                .text_size(px(12.5))
-                                                .line_height(px(15.))
+                                                .text_size(px(11.5))
+                                                .line_height(px(13.5))
                                                 .text_color(rgb(telecat_theme::TEXT_SECONDARY))
                                                 .truncate()
                                                 .child(label.clone()),
@@ -411,8 +411,8 @@ impl Workspace {
                                                     .flex_shrink_0()
                                                     .px(px(5.))
                                                     .rounded(px(4.))
-                                                    .text_size(px(11.))
-                                                    .line_height(px(15.))
+                                                    .text_size(px(10.))
+                                                    .line_height(px(13.5))
                                                     .text_color(rgb(telecat_theme::MUTED))
                                                     .hover(|d| {
                                                         d.bg(rgb(telecat_theme::INPUT_2))
@@ -469,8 +469,8 @@ fn field_box(state: FieldState) -> Div {
         .rounded(px(6.))
         .bg(rgb(state.background()))
         .font(mono())
-        .text_size(px(13.))
-        .line_height(px(18.))
+        .text_size(px(12.))
+        .line_height(px(16.))
 }
 fn editable_field(input: &Entity<TextareaState>, state: FieldState) -> Div {
     field_box(state).min_h(px(30.)).child(Textarea::new(input))

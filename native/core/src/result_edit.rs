@@ -57,11 +57,26 @@ pub struct ResultEditPlan {
 }
 const COMPUTED: &str = "computed column (expression, alias of an expression or aggregate)";
 const KEY_COLUMN: &str = "key column: it identifies the row";
+/// DOUBLE keys (an AUTO_INCREMENT DOUBLE id) are matched only by whole-number values, row by
+/// row: see [`ResultEditPlan::key_reason`].
 fn exact_key_kind(k: IdentityKind) -> bool {
     matches!(
         k,
-        IdentityKind::Signed | IdentityKind::Unsigned | IdentityKind::Decimal | IdentityKind::Other
+        IdentityKind::Signed
+            | IdentityKind::Unsigned
+            | IdentityKind::Decimal
+            | IdentityKind::Double
+            | IdentityKind::Other
     )
+}
+/// A whole number a DOUBLE holds exactly (|n| ≤ 2^53), spelled as the grid shows it. Its text is
+/// then the stored value itself, so `col = ? + 0e0` can match no other row.
+fn exact_double_text(v: &str) -> bool {
+    let digits = v.strip_prefix('-').unwrap_or(v);
+    !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && (digits == "0" || !digits.starts_with('0'))
+        && digits.parse::<u64>().is_ok_and(|n| n <= 1 << 53)
 }
 impl ResultEditPlan {
     /// Why edits staged under `old` can't be saved under this plan, made again for the same
@@ -259,12 +274,29 @@ impl ResultEditPlan {
             return Some("the row is marked for deletion".into());
         }
         let (ti, _) = self.sources.columns[col].clone()?;
-        self.key_of(ti, r).is_none().then(|| {
-            format!(
+        match self.key_of(ti, r) {
+            None => Some(format!(
                 "this row has no {} row (its key is NULL)",
                 self.sources.tables[ti].table.name
-            )
-        })
+            )),
+            Some(key) => self.key_reason(ti, &key),
+        }
+    }
+    /// Why the key values `key` can't pick out exactly one stored row of table `ti`; `None` when
+    /// they can. A DOUBLE key is exact only as a whole number up to 2^53: other values are shown
+    /// rounded.
+    fn key_reason(&self, ti: usize, key: &[String]) -> Option<String> {
+        let t = &self.sources.tables[ti];
+        t.key_kinds
+            .iter()
+            .zip(&t.key)
+            .zip(key)
+            .find(|((kind, _), v)| **kind == IdentityKind::Double && !exact_double_text(v))
+            .map(|((_, col), v)| {
+                format!(
+                    "this row's key {col} = {v} is not a whole number, so it can't be matched exactly"
+                )
+            })
     }
     /// Sets cell (`row`, `col`) and every displayed copy of the same stored value: other rows
     /// with the same key (a join's fan-out) and other columns showing the same column.
@@ -301,6 +333,9 @@ impl ResultEditPlan {
             .collect();
         if keys.is_empty() {
             return Err("no deletable row is selected".into());
+        }
+        if let Some(r) = keys.iter().find_map(|k| self.key_reason(ti, k)) {
+            return Err(r);
         }
         for r in rows.iter_mut() {
             if self.key_of(ti, r).is_some_and(|k| keys.contains(&k)) {
@@ -363,6 +398,9 @@ impl ResultEditPlan {
                 let Some(key) = self.key_of(ti, r) else {
                     bail!("A row marked for deletion has no key");
                 };
+                if let Some(r) = self.key_reason(ti, &key) {
+                    bail!("A row marked for deletion can't be deleted: {r}");
+                }
                 if done.insert(key.clone()) {
                     let mut p = Params::new(d);
                     let w = self.key_where(ti, &key, &mut p);
@@ -409,6 +447,9 @@ impl ResultEditPlan {
                 }
             }
             for (key, sets) in changes {
+                if let Some(r) = self.key_reason(ti, &key) {
+                    bail!("A changed row can't be saved: {r}");
+                }
                 // Every displayed copy of this stored row must agree.
                 for r in rows
                     .iter()
@@ -707,5 +748,57 @@ mod tests {
         assert_eq!(plan.editable, [false, false, false, false]);
         assert_eq!(plan.read_only.as_deref(), Some("no editable columns"));
         assert_eq!(plan.column_reason(3).unwrap(), COMPUTED);
+    }
+    /// An AUTO_INCREMENT DOUBLE id is editable by its whole-number values only, row by row.
+    #[test]
+    fn double_keys_edit_rows_with_whole_number_keys_only() {
+        let mut t = table("m", &["id"]);
+        t.key_kinds = vec![IdentityKind::Double];
+        let plan = ResultEditPlan::new(
+            Driver::Mysql,
+            ResultSources {
+                tables: vec![t],
+                columns: vec![col(0, "id"), col(0, "name")],
+            },
+            &[],
+        );
+        assert_eq!(plan.badge(), "Editable · m");
+        assert_eq!(plan.editable, [false, true]);
+        let mut rows = rows(&[
+            &[Some("24143793"), Some("a")],
+            &[Some("0.5"), Some("b")],
+            &[Some("1e+300"), Some("c")],
+            &[Some("9007199254740993"), Some("d")],
+            &[Some("-7"), Some("e")],
+        ]);
+        plan.stage(&mut rows, 0, 1, Cell::Text("x".into())).unwrap();
+        plan.stage(&mut rows, 4, 1, Cell::Text("y".into())).unwrap();
+        for r in 1..4 {
+            let why = plan.stage(&mut rows, r, 1, Cell::Null).unwrap_err();
+            assert!(why.contains("is not a whole number"), "{why}");
+            assert!(plan.delete(&mut rows, &[0, r]).is_err());
+        }
+        assert!(rows.iter().all(|r| !r.deleted));
+        let st = plan.statements(&rows).unwrap();
+        assert_eq!(st.len(), 2);
+        assert_eq!(
+            st[0].sql,
+            "UPDATE `s`.`m` SET `name` = ? WHERE `id` = ? + 0e0 AND BINARY CAST(`name` AS CHAR) = BINARY ? LIMIT 1;"
+        );
+        // A row staged before its key was checked is never written.
+        rows[1].cur[1] = Cell::Null;
+        assert!(plan.statements(&rows).is_err());
+        for (v, ok) in [
+            ("0", true),
+            ("-0", true),
+            ("9007199254740992", true),
+            ("9007199254740993", false),
+            ("007", false),
+            ("1.0", false),
+            ("", false),
+            ("-", false),
+        ] {
+            assert_eq!(exact_double_text(v), ok, "{v}");
+        }
     }
 }

@@ -28,7 +28,7 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
   - syntax highlighting, autocomplete, multi-cursor and comment toggle;
   - Beautify / Uglify;
   - Run current / Run all, and Cancel, which kills the running query;
-  - tabs whose drafts persist between launches.
+  - tabs whose drafts persist between launches. A closed query tab's SQL is kept, and the next new SQL tab reopens it.
 - **Table tabs:**
   - Data, Structure and Index views;
   - filters with AND/OR;
@@ -52,7 +52,9 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
   - **⌘⇧R** reconnects, and Telecat also retries automatically. Staged edits survive.
   - If a connection drops mid-save, the save is never retried. Telecat checks the server and tells you whether the save was applied.
 - **Admin:** create tables, Drop / Truncate with confirmation, and Running Queries (⌘.) with kill and auto-refresh.
-- **Sidebar:** Items / Queries / History; right-click a group to add a connection to it.
+  - On MySQL, right-click a new column in Structure to choose where it goes (Move Up / Down, Move to First, Move After ▸).
+  - Discard a table that was never saved with Esc, Delete in the sidebar, or by closing its tab.
+- **Sidebar:** Items / Queries / History; right-click a group to add a connection to it. The item search matches letters in order (`team` finds `user_telegram_chats`) and highlights them.
 - **Thai text:** shaped correctly in both the grid and the editor.
 
 ## Install

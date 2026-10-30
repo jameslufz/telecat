@@ -893,8 +893,8 @@ impl Workspace {
             .gap(px(10.))
             .text_color(rgb(0xffffff))
             .font(mono())
-            .text_size(px(13.))
-            .line_height(px(36.));
+            .text_size(px(12.))
+            .line_height(px(32.5));
         let text = |s: String| div().flex_1().min_w_0().truncate().child(s);
         match &self.link.link {
             Link::Connected => pill
@@ -935,12 +935,12 @@ impl Workspace {
                         .flex_shrink_0()
                         .px(px(8.))
                         .h(px(22.))
-                        .line_height(px(22.))
+                        .line_height(px(20.))
                         .rounded(px(6.))
                         .bg(rgba(0x00000040))
                         .hover(|d| d.bg(rgba(0x00000066)))
                         .font(ui_font())
-                        .text_size(px(12.))
+                        .text_size(px(11.))
                         .child("Cancel")
                         .on_click(cx.listener(|this, _, _, cx| {
                             cx.stop_propagation();

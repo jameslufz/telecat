@@ -450,7 +450,7 @@ impl Workspace {
                             .border_color(rgb(0x5a4a1a))
                             .bg(rgba(0x2a2a2af2))
                             .font(ui_font())
-                            .text_size(px(12.5))
+                            .text_size(px(11.5))
                             .text_color(rgb(0xf0d27a))
                             .child(text.clone()),
                     )
@@ -857,6 +857,11 @@ impl Workspace {
             }
             GridEvent::Escape => {
                 if let Some(t) = &mut tab.table {
+                    if t.is_new {
+                        let table = t.table.clone();
+                        self.discard_new_table(&table, window, cx);
+                        return;
+                    }
                     buffer(t, part).discard();
                 }
             }
@@ -939,6 +944,10 @@ impl Workspace {
                     {
                         items.push(json!({"id":"revert","label":if part==Part::Data {"Revert Row"}else{"Revert"}}));
                     }
+                    if part == Part::Structure && t.column_movable(self.state.connection.driver, real) {
+                        items.push(json!({"type":"separator"}));
+                        items.extend(column_moves(t, real));
+                    }
                     items.push(json!({"type":"separator"}));
                 }
                 items.extend(telecat_grid::COPY_MENU.iter().map(|item| {
@@ -975,6 +984,17 @@ impl Workspace {
                         .iter()
                         .filter_map(|k| locate(t, Some(k)))
                         .collect();
+                    if let Some(after) = column_move(t, row, &id).filter(|_| part == Part::Structure) {
+                        let moved = t.structure.rows[row].key.clone();
+                        t.move_column(self.state.connection.driver, row, after);
+                        // The selection follows the column, so a Delete next acts on it.
+                        inserted = t
+                            .structure
+                            .rows
+                            .iter()
+                            .position(|r| r.key == moved)
+                            .map(|i| i..i + 1);
+                    } else {
                     let b = buffer(t, part);
                     match id.as_str() {
                         "null" => b.set_cell(cell.row, cell.col, Value::Null),
@@ -994,6 +1014,7 @@ impl Workspace {
                             }
                         }),
                         _ => {}
+                    }
                     }
                 }
             }
@@ -1118,6 +1139,40 @@ pub(super) fn data_column_editable(result: &QueryResult, col: usize) -> bool {
         .and_then(|b| b.get(col))
         .copied()
         .unwrap_or(false)
+}
+/// The context-menu items that place a new column: MySQL adds it with FIRST/AFTER the column
+/// above it, so its row position is its position in the table.
+fn column_moves(t: &telecat_app::table_model::TableEditor, row: usize) -> Vec<serde_json::Value> {
+    let rows = &t.structure.rows;
+    let col = t.structure.result.columns.iter().position(|c| c == "column_name");
+    let name = |r: &EditRow| col.and_then(|c| r.cur.get(c)).and_then(|v| v.value()).unwrap_or("").to_owned();
+    let above = rows[..row].iter().rposition(|r| !r.deleted);
+    let after: Vec<_> = rows
+        .iter()
+        .enumerate()
+        .filter(|&(i, r)| i != row && !r.deleted)
+        .map(|(i, r)| json!({"id":format!("move-after:{}", r.key),"label":name(r),"checked":Some(i)==above}))
+        .collect();
+    vec![
+        json!({"id":"move-up","label":"Move Up","enabled":row > 0}),
+        json!({"id":"move-down","label":"Move Down","enabled":row + 1 < rows.len()}),
+        json!({"id":"move-first","label":"Move to First","enabled":above.is_some()}),
+        json!({"label":"Move After","enabled":!after.is_empty(),"submenu":after}),
+    ]
+}
+/// Where a column-move menu item puts the column at `row`: `Some(after)`, with `after` `None`
+/// for the top. `None` when `id` is not a move.
+fn column_move(t: &telecat_app::table_model::TableEditor, row: usize, id: &str) -> Option<Option<usize>> {
+    let rows = &t.structure.rows;
+    match id {
+        "move-first" => Some(None),
+        "move-up" => Some(row.checked_sub(2)).filter(|_| row > 0),
+        "move-down" => Some(Some(row + 1)),
+        _ => id
+            .strip_prefix("move-after:")
+            .and_then(|key| rows.iter().position(|r| r.key == key))
+            .map(Some),
+    }
 }
 fn buffer(
     t: &mut telecat_app::table_model::TableEditor,

@@ -64,8 +64,8 @@ pub fn pill(label: &'static str, icon: &'static str, disabled: bool) -> Div {
         .text_align(TextAlign::Left)
         .items_center()
         .gap(px(12.))
-        .text_size(px(15.))
-        .line_height(px(18.))
+        .text_size(px(13.5))
+        .line_height(px(16.))
         .text_color(rgb(0xdddddd))
         .opacity(if disabled { 0.5 } else { 1.0 })
         .child(
@@ -127,8 +127,8 @@ pub fn input_box(state: &Entity<InputState>, disabled: bool, focus: bool) -> Div
         .border_1()
         .border_color(rgb(if focus { 0x2f6fed } else { 0x383838 }))
         .bg(rgb(telecat_theme::INPUT))
-        .text_size(px(14.))
-        .line_height(px(17.))
+        .text_size(px(12.5))
+        .line_height(px(15.5))
         .opacity(if disabled { 0.45 } else { 1. })
         .when(focus, |d| {
             d.shadow(vec![BoxShadow {
@@ -159,8 +159,8 @@ pub fn button(
         .border_1()
         .border_color(rgb(if primary { 0x2f6fed } else { 0x3c3c3c }))
         .bg(rgb(if primary { 0x2f6fed } else { 0x2f2f2f }))
-        .text_size(px(14.))
-        .line_height(px(17.))
+        .text_size(px(12.5))
+        .line_height(px(15.5))
         .text_color(rgb(if primary { 0xffffff } else { 0xe8e8e8 }))
         .opacity(if disabled { 0.4 } else { 1. })
         .when(!disabled, |d| {
@@ -208,7 +208,7 @@ pub fn sheet(width: f32, title: impl Into<SharedString>) -> Div {
         }])
         .child(
             div()
-                .text_size(px(14.))
+                .text_size(px(12.5))
                 .font_weight(FontWeight::SEMIBOLD)
                 .mb(px(12.))
                 .child(title.into()),
@@ -238,8 +238,8 @@ impl Render for TextTooltip {
             .border_color(rgb(0x3a3a3a))
             .bg(rgb(0x2b2b2b))
             .text_color(rgb(0xe8e8e8))
-            .text_size(px(12.))
-            .line_height(px(16.))
+            .text_size(px(11.))
+            .line_height(px(14.5))
             .child(self.0.clone())
     }
 }

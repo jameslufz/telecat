@@ -2243,6 +2243,66 @@ fn query_result_edits_save_exactly_the_rows_shown(cx: &mut TestAppContext) {
         cx.update_window(w, |_, w, _| w.remove_window()).unwrap();
     }
 }
+/// Regression: a result of a table keyed by a DOUBLE id (a legacy AUTO_INCREMENT DOUBLE) was
+/// read-only. Double-click edits it and ⌘S saves by the id; a fractional id says why it can't.
+#[gpui::test]
+fn query_results_keyed_by_a_double_id_are_editable(cx: &mut TestAppContext) {
+    let (w, s) = live_query_tab(
+        cx,
+        Driver::Mysql,
+        &[
+            "DROP TABLE IF EXISTS telecat_ui_dbl",
+            "CREATE TABLE telecat_ui_dbl (MEMBER_ID double NOT NULL, MEMBER_NAME varchar(40) NOT NULL, `DELETE` int NOT NULL, PRIMARY KEY (MEMBER_ID))",
+            "INSERT INTO telecat_ui_dbl VALUES (24143793, 'a', 0), (24143792, 'b', 0), (0.5, 'c', 0)",
+        ],
+    );
+    run_query(
+        cx,
+        w,
+        &s,
+        "select * from telecat_ui_dbl\nwhere 1\n-- AND MEMBER_NAME = 'x'\nAND `DELETE` = 0\nORDER BY MEMBER_ID DESC\nLIMIT 1000",
+        false,
+    );
+    assert_eq!(badge(cx, &s), "Editable · telecat_ui_dbl");
+    let at = cell_at(cx, &s, 0, 1);
+    double_click_at(cx, w, at);
+    assert_eq!(grid_editor(cx, w, &s).0, Some(Cell { row: 0, col: 1 }));
+    cx.simulate_keystrokes(w, "cmd-a");
+    cx.simulate_input(w, "ธนาคาร");
+    cx.simulate_keystrokes(w, "enter");
+    let at = cell_at(cx, &s, 2, 1);
+    double_click_at(cx, w, at);
+    cx.simulate_keystrokes(w, "cmd-a");
+    cx.simulate_input(w, "zzz");
+    cx.simulate_keystrokes(w, "enter");
+    assert_eq!(
+        result_cells(cx, &s, 1),
+        [
+            Value::Text("ธนาคาร".into()),
+            Value::Text("b".into()),
+            Value::Text("c".into())
+        ]
+    );
+    assert!(
+        hint(cx, &s).is_some_and(|h| h.contains("MEMBER_ID = 0.5 is not a whole number")),
+        "{:?}",
+        hint(cx, &s)
+    );
+    save_and_wait_query(cx, w, &s);
+    assert_eq!(
+        db_rows(
+            Driver::Mysql,
+            "SELECT MEMBER_ID, MEMBER_NAME FROM telecat_ui_dbl ORDER BY MEMBER_ID DESC"
+        ),
+        [
+            vec![Some("24143793".to_owned()), Some("ธนาคาร".to_owned())],
+            vec![Some("24143792".into()), Some("b".into())],
+            vec![Some("0.5".into()), Some("c".into())],
+        ]
+    );
+    drop_table(Driver::Mysql, "telecat_ui_dbl");
+    cx.update_window(w, |_, w, _| w.remove_window()).unwrap();
+}
 fn save_and_wait_query(cx: &mut TestAppContext, w: AnyWindowHandle, s: &Entity<Workspace>) {
     cx.update_window(w, |_, window, cx| {
         s.update(cx, |s, cx| s.request_commit(window, cx))
@@ -2711,4 +2771,122 @@ fn import_sql_dump_into_an_empty_database(cx: &mut TestAppContext) {
         s.state.current().table.as_ref().is_some_and(|t| t.is_new)
     }));
     std::fs::remove_dir_all(dir).unwrap();
+}
+/// Feature: a table that was never saved is thrown away with Esc, with Delete on its sidebar
+/// entry, or by closing its tab; the tab and the sidebar entry go together.
+#[gpui::test]
+fn unsaved_new_tables_can_be_discarded(cx: &mut TestAppContext) {
+    for how in ["escape", "sidebar-delete", "close-tab"] {
+        let (w, s) = setup(cx, "04-ws-mysql");
+        cx.update_window(w, |_, window, cx| {
+            s.update(cx, |s, cx| {
+                s.new_table(cx);
+                s.prepare_components(window, cx);
+            })
+        })
+        .unwrap();
+        paint(cx, w);
+        let table = s.read_with(cx, |s, _| s.state.current().table.as_ref().unwrap().table.clone());
+        let exists = |cx: &mut TestAppContext| {
+            s.read_with(cx, |s, _| {
+                (
+                    s.state.tabs.iter().any(|t| t.kind == TabKind::Table(table.clone())),
+                    s.state.objects.iter().any(|o| o.table == table),
+                )
+            })
+        };
+        let ask = |cx: &mut TestAppContext| {
+            cx.update_window(w, |_, window, cx| {
+                s.update(cx, |s, cx| match how {
+                    "escape" => s.discard_new_table(&table, window, cx),
+                    "sidebar-delete" => s.stage_operation(
+                        telecat_core::types::DbObject {
+                            table: table.clone(),
+                            kind: telecat_core::types::ObjectKind::Table,
+                        },
+                        false,
+                        window,
+                        cx,
+                    ),
+                    _ => {
+                        let id = s.state.active;
+                        s.request_close_tab(id, window, cx)
+                    }
+                })
+            })
+            .unwrap();
+            cx.run_until_parked();
+        };
+        if how == "escape" {
+            // The real key, wherever focus is.
+            cx.simulate_keystrokes(w, "escape");
+        } else {
+            ask(cx);
+        }
+        assert!(cx.has_pending_prompt(), "{how}: asks first");
+        cx.simulate_prompt_answer("Cancel");
+        cx.run_until_parked();
+        assert_eq!(exists(cx), (true, true), "{how}: Cancel keeps it");
+        ask(cx);
+        cx.simulate_prompt_answer("Discard");
+        cx.run_until_parked();
+        assert_eq!(exists(cx), (false, false), "{how}: Discard removes tab and entry");
+        assert!(
+            s.read_with(cx, |s, _| s.state.operations.is_empty()),
+            "{how}: nothing is staged for the server"
+        );
+        cx.update_window(w, |_, w, _| w.remove_window()).unwrap();
+    }
+}
+/// Feature: a new MySQL column can be placed anywhere from its context menu, and the selection
+/// moves with it.
+#[gpui::test]
+fn new_mysql_columns_move_from_the_context_menu(cx: &mut TestAppContext) {
+    let (w, s) = setup(cx, "53-structure-staged");
+    paint(cx, w);
+    let (k, rows) = s.read_with(cx, |s, _| {
+        (key(s.state.current()), s.state.current().table.as_ref().unwrap().structure.rows.clone())
+    });
+    let new = rows.iter().position(|r| r.orig.is_none()).expect("the scenario has a new column");
+    let saved = rows.iter().position(|r| r.orig.is_some()).unwrap();
+    let t = s.read_with(cx, |s, _| s.state.current().table.clone().unwrap());
+    let labels = |row: usize| {
+        super::column_moves(&t, row)
+            .iter()
+            .map(|v| v["label"].as_str().unwrap_or("").to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(labels(new), ["Move Up", "Move Down", "Move to First", "Move After"]);
+    assert!(!t.column_movable(Driver::Mysql, saved), "saved columns have no move items");
+    let menu = |cx: &mut TestAppContext, id: String, row: usize| {
+        let key = s.read_with(cx, |s, _| {
+            s.state.current().table.as_ref().unwrap().structure.rows[row].key.clone()
+        });
+        cx.update_window(w, |_, window, cx| {
+            s.update(cx, |s, cx| {
+                s.grid_event(k, GridEvent::Menu { id, cell: Cell { row, col: 1 }, key: Some(key) }, window, cx)
+            })
+        })
+        .unwrap();
+        paint(cx, w);
+    };
+    let moved = rows[new].key.clone();
+    let at = |cx: &mut TestAppContext| {
+        s.read_with(cx, |s, _| {
+            s.state.current().table.as_ref().unwrap().structure.rows.iter().position(|r| r.key == moved).unwrap()
+        })
+    };
+    menu(cx, "move-first".into(), new);
+    assert_eq!(at(cx), 0);
+    let selected = current_grid(cx, &s).read_with(cx, |g, _| g.model().selection.rows.clone());
+    assert_eq!(selected.into_iter().collect::<Vec<_>>(), [0], "the selection follows it");
+    menu(cx, "move-down".into(), 0);
+    assert_eq!(at(cx), 1);
+    let after = rows[2].key.clone();
+    menu(cx, format!("move-after:{after}"), 1);
+    assert_eq!(at(cx), 3, "right after the third saved column");
+    let sql = s.read_with(cx, |s, _| {
+        s.state.collect_changes().unwrap()[0].statements[0].sql.clone()
+    });
+    assert!(sql.contains("AFTER `bank_name_th`"), "{sql}");
 }

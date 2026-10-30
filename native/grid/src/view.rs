@@ -901,7 +901,7 @@ impl Render for DataGrid {
                 .px(px(if multi { 6. } else { 5. }))
                 .py(px(if multi { 4. } else { 0. }))
                 .font(mono_font())
-                .text_size(px(13.))
+                .text_size(px(12.))
                 .line_height(px(if multi { 18.2 } else { 22. }))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
@@ -949,8 +949,8 @@ impl Render for DataGrid {
                     .border_color(rgb(0x555555))
                     .bg(rgb(0x2a2a2a))
                     .font(ui_font())
-                    .text_size(px(12.))
-                    .line_height(px(16.))
+                    .text_size(px(11.))
+                    .line_height(px(14.5))
                     .text_color(rgb(TEXT))
                     .child(text.clone()),
             );

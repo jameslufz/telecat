@@ -1,5 +1,7 @@
 use super::layout::scrollbar;
 use super::*;
+/// The background behind the letters a sidebar search matched.
+const SEARCH_HIGHLIGHT: u32 = 0x6b6124;
 impl Workspace {
     pub(super) fn sidebar_view(&self, cx: &mut Context<Self>) -> Div {
         let query = self.search.read(cx).value().to_lowercase();
@@ -25,26 +27,21 @@ impl Workspace {
                     ("Tables", ObjectKind::Table, "Table.svg"),
                     ("Views", ObjectKind::View, "View.svg"),
                 ] {
-                    let objects: Vec<_> = self
-                        .state
-                        .objects
-                        .iter()
-                        .filter(|o| {
-                            o.kind == kind
-                                && display_name(&o.table, self.state.connection.driver)
-                                    .to_lowercase()
-                                    .contains(&query)
-                        })
-                        .collect();
+                    let objects = fuzzy_filter(
+                        &query,
+                        self.state.objects.iter().filter(|o| o.kind == kind).map(|o| {
+                            (display_name(&o.table, self.state.connection.driver), o)
+                        }),
+                    );
                     if objects.is_empty() {
                         continue;
                     }
                     let expanded = !self.collapsed.contains(label) || !query.is_empty();
-                    tree_height += 24.;
+                    tree_height += 20.;
                     tree = tree.child(
                         div()
                             .id(label)
-                            .h(px(24.))
+                            .h(px(20.))
                             .flex_shrink_0()
                             .px(px(2.))
                             .flex()
@@ -69,8 +66,8 @@ impl Workspace {
                             })),
                     );
                     if expanded {
-                        for object in objects {
-                            tree_height += 25.;
+                        for (name, object, found) in objects {
+                            tree_height += 20.;
                             let table = object.table.clone();
                             let menu_object = object.clone();
                             let focus_object = object.clone();
@@ -87,7 +84,7 @@ impl Workspace {
                                         "object-{}-{}",
                                         table.schema, table.name
                                     )))
-                                    .h(px(25.))
+                                    .h(px(20.))
                                     .flex_shrink_0()
                                     .min_w_0()
                                     .overflow_hidden()
@@ -149,12 +146,21 @@ impl Workspace {
                                         14.,
                                         if selected { 0xffffff } else { 0x6fa0e8 },
                                     ))
-                                    .child(
-                                        div().flex_1().min_w_0().truncate().child(display_name(
-                                            &table,
-                                            self.state.connection.driver,
-                                        )),
-                                    )
+                                    .child(div().flex_1().min_w_0().truncate().child(
+                                        StyledText::new(name).with_highlights(
+                                            found.ranges.into_iter().map(|r| {
+                                                (
+                                                    r,
+                                                    HighlightStyle {
+                                                        background_color: Some(
+                                                            rgb(SEARCH_HIGHLIGHT).into(),
+                                                        ),
+                                                        ..Default::default()
+                                                    },
+                                                )
+                                            }),
+                                        ),
+                                    ))
                                     .on_mouse_down(
                                         MouseButton::Right,
                                         cx.listener(move |this, e: &MouseDownEvent, window, cx| {
@@ -198,7 +204,7 @@ impl Workspace {
                                                 .items_center()
                                                 .justify_between()
                                                 .gap(px(10.))
-                                                .text_size(px(12.))
+                                                .text_size(px(11.))
                                                 .tooltip(text_tooltip(format!("{name}  {ty}")))
                                                 .child(
                                                     div()
@@ -303,13 +309,13 @@ impl Workspace {
                             .child(
                                 div()
                                     .font(ui_font())
-                                    .text_size(px(11.))
+                                    .text_size(px(10.))
                                     .text_color(rgb(telecat_theme::MUTED))
                                     .child(entry.time.clone()),
                             )
                             .child(
                                 div()
-                                    .text_size(px(12.))
+                                    .text_size(px(11.))
                                     .line_clamp(3)
                                     .overflow_hidden()
                                     .child(entry.sql.clone()),
@@ -361,8 +367,8 @@ impl Workspace {
                 .px(px(6.))
                 .py(px(4.))
                 .rounded(px(6.))
-                .text_size(px(13.5))
-                .line_height(px(16.))
+                .text_size(px(12.))
+                .line_height(px(14.5))
                 .text_color(rgb(if self.segment == segment {
                     0xe8e8e8
                 } else {
@@ -473,7 +479,7 @@ impl Workspace {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_size(px(16.))
+                        .text_size(px(14.5))
                         .text_color(rgb(telecat_theme::TEXT_SECONDARY))
                         .child("No row selected"),
                 )
@@ -515,8 +521,8 @@ impl Workspace {
                                                     .child(
                                                         div()
                                                             .font(mono())
-                                                            .text_size(px(12.5))
-                                                            .line_height(px(15.))
+                                                            .text_size(px(11.5))
+                                                            .line_height(px(13.5))
                                                             .text_color(rgb(
                                                                 telecat_theme::TEXT_SECONDARY,
                                                             ))
@@ -538,7 +544,7 @@ impl Workspace {
                                                             .rounded(px(6.))
                                                             .bg(rgb(telecat_theme::INPUT))
                                                             .font(mono())
-                                                            .text_size(px(13.))
+                                                            .text_size(px(12.))
                                                             .text_color(rgb(if muted {
                                                                 0x666666
                                                             } else {
@@ -604,7 +610,7 @@ impl Workspace {
                             ))
                             .child(
                                 div()
-                                    .text_size(px(12.))
+                                    .text_size(px(11.))
                                     .text_color(rgb(if active { 0xe8e8e8 } else { 0xb8b8b8 }))
                                     .child(label),
                             )
@@ -641,8 +647,8 @@ impl Workspace {
             .pr(px(20.))
             .py(px(6.))
             .font(mono())
-            .text_size(px(12.5))
-            .line_height(px(19.375));
+            .text_size(px(11.5))
+            .line_height(px(17.5));
         for log in &self.state.logs {
             lines = lines.child(
                 div()
@@ -727,10 +733,10 @@ impl Workspace {
         if query {
             content=content.child(div().h(relative(self.layout.query_split(tab.id))).flex_shrink_0().flex().flex_col()
                 .child(self.editor_view())
-                .child(div().h(px(40.)).flex_shrink_0().flex().items_center().gap(px(8.)).px(px(10.)).font(mono()).text_size(px(12.5)).text_color(rgb(telecat_theme::MUTED)).child(icon("Sliders.svg",15.,0x8a8a8a)).child(format!("{} lines, {} characters",tab.editor.text.split('\n').count(),if self.scenario=="c1-lock"{50}else{tab.editor.text.encode_utf16().count()})).child(div().flex_1())
+                .child(div().h(px(40.)).flex_shrink_0().flex().items_center().gap(px(8.)).px(px(10.)).font(mono()).text_size(px(11.5)).text_color(rgb(telecat_theme::MUTED)).child(icon("Sliders.svg",15.,0x8a8a8a)).child(format!("{} lines, {} characters",tab.editor.text.split('\n').count(),if self.scenario=="c1-lock"{50}else{tab.editor.text.encode_utf16().count()})).child(div().flex_1())
                 .child(small_button("query-limit",format!("Limit {}",tab.limit)).h(px(28.)).font(ui_font()).gap(px(6.)).child(icon("UpDown.svg",12.,0xb8b8b8)).on_mouse_down(MouseButton::Left,cx.listener(|this,e:&MouseDownEvent,window,cx|{let items:Vec<_>=[0,100,300,500,1000,5000].iter().map(|n|json!({"id":n.to_string(),"label":if *n==0{"No limit".into()}else{format!("Limit {n}")},"checked":*n==this.state.current().limit})).collect();native_menu::choose(json!(items),e.position,window,cx,|this,id,_,cx|{if let Ok(n)=id.parse(){this.state.current_mut().limit=n;cx.notify();}});})))
                 .child(small_button("beautify","Beautify ⌘I").font(ui_font()).on_click(cx.listener(|this,_,window,cx|this.format_editor(false,window,cx))))
-                .child(div().h(px(28.)).flex_shrink_0().rounded(px(7.)).border_1().border_color(rgb(0x3c3c3c)).bg(rgb(telecat_theme::INPUT_2)).flex().items_center().font(ui_font()).text_size(px(13.)).text_color(rgb(telecat_theme::TEXT))
+                .child(div().h(px(28.)).flex_shrink_0().rounded(px(7.)).border_1().border_color(rgb(0x3c3c3c)).bg(rgb(telecat_theme::INPUT_2)).flex().items_center().font(ui_font()).text_size(px(12.)).text_color(rgb(telecat_theme::TEXT))
                     .child(div().id("run-current").px(px(12.)).h_full().flex().items_center().child(if self.busy{"Cancel"}else{"Run Current ⌘↵"}).on_click(cx.listener(|this,_,window,cx|{if this.busy{this.cancel(cx);}else{this.run(false,window,cx);}})))
                     .child(div().id("run-menu").px(px(7.)).h_full().flex().items_center().border_l_1().border_color(rgba(0xffffff18)).child(icon("ChevronDown.svg",13.,0xe8e8e8)).on_mouse_down(MouseButton::Left,cx.listener(|_this,e:&MouseDownEvent,window,cx|native_menu::choose(json!([{"id":"current","label":"Run Current  ⌘↵"},{"id":"all","label":"Run All  ⇧⌘↵"}]),e.position,window,cx,|this,id,window,cx|this.run(id=="all",window,cx))))))))
                 .child(self.splitter(Splitter::Query(tab.id), cx))
@@ -836,7 +842,7 @@ impl Workspace {
                             .gap(px(6.))
                             .items_center()
                             .font(ui_font())
-                            .text_size(px(12.))
+                            .text_size(px(11.))
                             .children(locations.into_iter().enumerate().map(|(i, at)| {
                                 div()
                                     .id(("error-location", i))
@@ -878,8 +884,8 @@ impl Workspace {
                             .px(px(14.))
                             .py(px(8.))
                             .font(mono())
-                            .text_size(px(12.5))
-                            .line_height(px(19.))
+                            .text_size(px(11.5))
+                            .line_height(px(17.))
                             .text_color(rgb(telecat_theme::TEXT_SECONDARY))
                             .children(text.map(|state| Textarea::new(&state))),
                     ),
@@ -1073,7 +1079,7 @@ fn search_box(input: &Entity<InputState>, height: f32) -> Div {
         .items_center()
         .gap(px(6.))
         .px(px(8.))
-        .text_size(px(13.))
+        .text_size(px(12.))
         .child(icon("Search.svg", 14., 0x8a8a8a))
         .child(div().flex_1().min_w_0().child(Input::new(input)))
 }
@@ -1100,7 +1106,7 @@ fn segments(
                 .rounded(px(5.))
                 .flex()
                 .items_center()
-                .text_size(px(13.))
+                .text_size(px(12.))
                 .when(i == selected, |d| {
                     d.bg(rgb(telecat_theme::ACCENT)).text_color(rgb(0xffffff))
                 })
@@ -1172,7 +1178,7 @@ pub(super) fn load_state_view(placeholder: &Placeholder, id: &'static str) -> Op
                     .border_color(rgb(0x3a3a3a))
                     .bg(rgba(0x2a2a2aee))
                     .font(ui_font())
-                    .text_size(px(13.))
+                    .text_size(px(12.))
                     .text_color(rgb(color))
                     .when(spinner, |d| {
                         d.child(icon("spinner.svg", 14., 0xb8b8b8).with_animation(
