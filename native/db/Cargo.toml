@@ -18,6 +18,12 @@ bytes = "1"
 flate2 = "1"
 futures-util = "0.3"
 regex.workspace = true
+# SSH tunnels, pure Rust: ring for the crypto (no aws-lc C build), RSA keys included.
+russh = { version = "0.65", default-features = false, features = ["ring", "rsa"] }
+ring = "0.17"
+base64 = "0.22"
+socket2 = "0.6"
+zeroize = "1"
 
 [features]
 # A loopback proxy for tests that cut or blackhole the network (src/test_proxy.rs).

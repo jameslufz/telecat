@@ -180,7 +180,7 @@ pub fn options(cx: &App, width: f32, height: f32, blurred: bool) -> WindowOption
 pub fn open_form(
     services: Services,
     c: ConnectionConfig,
-    password: String,
+    secrets: form_view::FormSecrets,
     scenario: &str,
     cx: &mut App,
 ) {
@@ -191,9 +191,21 @@ pub fn open_form(
     }
     .to_owned();
     let state = scenario.to_owned();
-    let result = gpui_kit::open_window(options(cx, 520., 560., false), cx, move |window, cx| {
-        print_window(window, &name, 520., 560., services.scenario, cx);
-        cx.new(|cx| form_view::ConnectionForm::new(services, c, password, &state, window, cx))
+    let (width, mut height) = (form_view::WIDTH, form_view::height(&c));
+    // A short screen gets a shorter form; its cards scroll.
+    if let Some(display) = cx.primary_display() {
+        height = height.min((display.bounds().size.height.as_f32() - 80.).max(480.));
+    }
+    let result = gpui_kit::open_window(options(cx, width, height, false), cx, move |window, cx| {
+        print_window(
+            window,
+            &name,
+            width as f64,
+            height as f64,
+            services.scenario,
+            cx,
+        );
+        cx.new(|cx| form_view::ConnectionForm::new(services, c, secrets, &state, window, cx))
     });
     if let Err(e) = result {
         eprintln!("Open form: {e}");
@@ -257,7 +269,8 @@ fn main() {
                 "20-welcome-list",
                 "03-form-mysql",
                 "50-form-testing",
-                "30-form-pg"
+                "30-form-pg",
+                "31-form-ssh"
             ]
             .contains(&scenario.as_str())
                 || workspace::fixtures::is_workspace_scenario(&scenario),
@@ -316,26 +329,47 @@ fn main() {
                     &scenario,
                     cx,
                 );
-            } else if ["03-form-mysql", "50-form-testing", "30-form-pg"]
-                .contains(&scenario.as_str())
+            } else if [
+                "03-form-mysql",
+                "50-form-testing",
+                "30-form-pg",
+                "31-form-ssh",
+            ]
+            .contains(&scenario.as_str())
             {
-                let mut c = empty_connection(if scenario == "30-form-pg" {
-                    Driver::Postgres
-                } else {
-                    Driver::Mysql
-                });
-                let mut password = String::new();
+                let mut c =
+                    empty_connection(if scenario == "30-form-pg" || scenario == "31-form-ssh" {
+                        Driver::Postgres
+                    } else {
+                        Driver::Mysql
+                    });
+                if scenario == "31-form-ssh" {
+                    c.name = "Production".into();
+                    c.host = "db.internal".into();
+                    c.user = "app".into();
+                    c.database = "main".into();
+                    c.startup_sql = "SET search_path TO app, public;".into();
+                    c.ssh = SshConfig {
+                        enabled: true,
+                        host: "bastion.example.com".into(),
+                        user: "deploy".into(),
+                        use_key: true,
+                        key_path: Some("/Users/me/.ssh/id_ed25519".into()),
+                        ..SshConfig::default()
+                    };
+                }
+                let mut secrets = form_view::FormSecrets::default();
                 if scenario == "03-form-mysql" {
                     c.name = "Local".into();
                     c.port = 3307;
                     c.user = "root".into();
                     c.database = "zixma".into();
-                    password = "secret".into();
+                    secrets.password = "secret".into();
                 }
                 if scenario == "50-form-testing" {
                     c.host = "10.255.255.1".into();
                 }
-                open_form(services.clone(), c, password, &scenario, cx);
+                open_form(services.clone(), c, secrets, &scenario, cx);
             } else {
                 let svc = services.clone();
                 let name = if scenario.is_empty() {

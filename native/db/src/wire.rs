@@ -1,4 +1,4 @@
-use crate::tls::pg_tls;
+use crate::{ssh::Tunnel, tls::pg_tls};
 use anyhow::{Context, Result, bail};
 use bytes::BytesMut;
 use futures_util::{TryStreamExt, pin_mut};
@@ -8,6 +8,7 @@ use mysql_async::{
 use serde_json::Value;
 use std::{
     error::Error,
+    sync::Arc,
     time::{Duration, Instant},
 };
 use telecat_core::{changes::js_string, sql::split_statements, types::*};
@@ -67,14 +68,37 @@ impl<'a> FromSql<'a> for PgText {
         true
     }
 }
-/// Optional harness fence. Production configurations are unrestricted.
+/// The test fence. Tests run with it on (`TELECAT_TEST_DB_ONLY=1`, or `Session::connect_test`)
+/// so that no test can ever reach a real database:
+/// - Direct connections may only go to the test servers, 127.0.0.1:3307 (MySQL) and
+///   127.0.0.1:5434 (PostgreSQL), or to a live test proxy in front of them.
+/// - SSH connections may only log in to the test SSH server at 127.0.0.1:2222 (or a live test
+///   proxy in front of it), and through it only reach the test database containers by their
+///   names on the test Docker network, `telecat-test-mysql:3306` and `telecat-test-pg:5432`.
+///   The tunnel checks again after ~/.ssh/config is applied and before every channel it opens,
+///   and the test SSH server itself only permits forwarding to those two (`PermitOpen`).
+///
+/// Production configurations are unrestricted.
 pub fn validate_endpoint(c: &ConnectionConfig) -> Result<()> {
-    if std::env::var_os("TELECAT_TEST_DB_ONLY").as_deref() != Some(std::ffi::OsStr::new("1")) {
+    if !fence_enabled() {
         return Ok(());
     }
     validate_test_endpoint(c)
 }
+pub(crate) fn fence_enabled() -> bool {
+    std::env::var_os("TELECAT_TEST_DB_ONLY").as_deref() == Some(std::ffi::OsStr::new("1"))
+}
 pub fn validate_test_endpoint(c: &ConnectionConfig) -> Result<()> {
+    if c.ssh.enabled {
+        // Port 0 comes from ~/.ssh/config; the tunnel checks the endpoint it resolves to.
+        let port_ok = c.ssh.port == 0 || test_ssh_endpoint(&c.ssh.host, c.ssh.port);
+        if c.ssh.host != "127.0.0.1" || !port_ok || !test_ssh_target(c.driver, &c.host, c.port) {
+            bail!(
+                "Test safety: only the test SSH server 127.0.0.1:{TEST_SSH_PORT} and the test database containers are permitted"
+            );
+        }
+        return Ok(());
+    }
     let port = if c.driver == Driver::Mysql {
         3307
     } else {
@@ -84,6 +108,18 @@ pub fn validate_test_endpoint(c: &ConnectionConfig) -> Result<()> {
         bail!("Test safety: only 127.0.0.1:{port} is permitted");
     }
     Ok(())
+}
+/// The test SSH server (see `scripts/test-ssh-env.sh`).
+pub(crate) const TEST_SSH_PORT: u16 = 2222;
+pub(crate) fn test_ssh_endpoint(host: &str, port: u16) -> bool {
+    host == "127.0.0.1" && (port == TEST_SSH_PORT || test_proxy_for(port, TEST_SSH_PORT))
+}
+pub(crate) fn test_ssh_target(driver: Driver, host: &str, port: u16) -> bool {
+    (host, port)
+        == match driver {
+            Driver::Mysql => ("telecat-test-mysql", 3306),
+            Driver::Postgres => ("telecat-test-pg", 5432),
+        }
 }
 /// A test-only proxy in front of the test server (see `test_proxy`); never in a release build.
 fn test_proxy_for(port: u16, upstream: u16) -> bool {
@@ -96,6 +132,10 @@ fn test_proxy_for(port: u16, upstream: u16) -> bool {
     }
 }
 fn fatal(e: &anyhow::Error) -> bool {
+    // An SSH failure happens before the database is reached: TLS has nothing to do with it.
+    if crate::ssh::ssh_error(e).is_some() {
+        return true;
+    }
     if let Some(e) = e.downcast_ref::<tokio_postgres::Error>() {
         if e.code()
             .is_some_and(|c| matches!(c.code(), "28P01" | "3D000"))
@@ -123,19 +163,91 @@ fn fatal(e: &anyhow::Error) -> bool {
 /// operating system's TCP timeout, minutes.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const KEEPALIVE_IDLE: Duration = Duration::from_secs(15);
+/// How to open a database connection: the settings, the password, the SSH tunnel when there is
+/// one and the startup SQL. Only a `Session` builds one, so no connection can bypass the tunnel
+/// or skip the startup SQL.
+pub(crate) struct Route<'a> {
+    pub(crate) config: &'a ConnectionConfig,
+    pub(crate) password: &'a str,
+    pub(crate) tunnel: Option<Arc<Tunnel>>,
+    pub(crate) startup: &'a [String],
+    /// Opened by a test: the fence applies whatever the environment says.
+    pub(crate) fenced: bool,
+}
 impl Wire {
-    pub async fn connect(c: &ConnectionConfig, password: &str) -> Result<Self> {
+    pub(crate) async fn connect(route: &Route<'_>) -> Result<Self> {
+        let c = route.config;
         validate_endpoint(c)?;
-        let first = !matches!(c.ssl_mode, SslMode::Disabled | SslMode::Allow);
-        match Self::open(c, password, first).await {
-            Ok(w) => Ok(w),
-            Err(e) if matches!(c.ssl_mode, SslMode::Preferred | SslMode::Allow) && !fatal(&e) => {
-                Self::open(c, password, !first).await
-            }
-            Err(e) => Err(e),
+        if route.fenced {
+            validate_test_endpoint(c)?;
         }
+        let first = !matches!(c.ssl_mode, SslMode::Disabled | SslMode::Allow);
+        let mut wire = match Self::open(route, first).await {
+            Ok(w) => w,
+            Err(e) if matches!(c.ssl_mode, SslMode::Preferred | SslMode::Allow) && !fatal(&e) => {
+                Self::open(route, !first).await?
+            }
+            Err(e) => return Err(e),
+        };
+        wire.startup(route).await?;
+        Ok(wire)
     }
-    async fn open(c: &ConnectionConfig, password: &str, tls: bool) -> Result<Self> {
+    /// Runs the connection's startup SQL (checked by `telecat_core::startup`), then puts back
+    /// what Telecat relies on: UTF-8 on the wire and, on MySQL, autocommit.
+    async fn startup(&mut self, route: &Route<'_>) -> Result<()> {
+        if route.startup.is_empty() {
+            return Ok(());
+        }
+        for (i, sql) in route.startup.iter().enumerate() {
+            if let Err(e) = self.run(sql, &[]).await {
+                if is_connection_lost(&e) {
+                    return Err(e);
+                }
+                bail!("Startup SQL statement {} failed: {e}", i + 1);
+            }
+        }
+        match self {
+            Self::Mysql(_) => {
+                self.run("SET NAMES utf8mb4", &[]).await?;
+                let autocommit = self.run("SELECT @@autocommit", &[]).await?.0.rows;
+                if autocommit
+                    .first()
+                    .and_then(|r| r.first())
+                    .cloned()
+                    .flatten()
+                    .as_deref()
+                    != Some("1")
+                {
+                    bail!(
+                        "The startup SQL turned autocommit off. Telecat's saves rely on it, so the connection was not used."
+                    );
+                }
+            }
+            Self::Postgres { .. } => {
+                self.run("SET client_encoding = 'UTF8'", &[]).await?;
+            }
+        }
+        Ok(())
+    }
+    async fn open(route: &Route<'_>, tls: bool) -> Result<Self> {
+        let c = route.config;
+        // Over SSH the driver connects to the tunnel's local port; TLS still checks the
+        // database's own name. The tunnel's channel is opened right before the driver
+        // connects, so a setup error here never leaves one waiting.
+        let local = match &route.tunnel {
+            Some(tunnel) => Some(tunnel.port()),
+            None if c.ssh.enabled => {
+                return Err(crate::ssh::SshError::Lost("the SSH tunnel is closed.".into()).into());
+            }
+            None => None,
+        };
+        let channel = async || -> Result<()> {
+            if let Some(tunnel) = &route.tunnel {
+                tunnel.prepare().await?;
+            }
+            Ok(())
+        };
+        let password = route.password;
         match c.driver {
             Driver::Mysql => {
                 let ssl = if tls {
@@ -145,6 +257,9 @@ impl Wire {
                             SslMode::VerifyCa | SslMode::VerifyFull
                         ))
                         .with_danger_skip_domain_validation(c.ssl_mode != SslMode::VerifyFull);
+                    if local.is_some() {
+                        s = s.with_danger_tls_hostname_override(Some(c.host.clone()));
+                    }
                     if let Some(ca) = c.ssl_ca.as_ref().filter(|s| !s.is_empty()) {
                         s = s
                             .with_disable_built_in_roots(true)
@@ -160,14 +275,15 @@ impl Wire {
                 } else {
                     None
                 };
+                let host = if local.is_some() || c.host.is_empty() || c.host.starts_with('/') {
+                    "127.0.0.1"
+                } else {
+                    &c.host
+                };
                 let opts = OptsBuilder::default()
-                    .ip_or_hostname(if c.host.is_empty() || c.host.starts_with('/') {
-                        "127.0.0.1"
-                    } else {
-                        &c.host
-                    })
-                    .socket(c.host.starts_with('/').then_some(c.host.clone()))
-                    .tcp_port(c.port)
+                    .ip_or_hostname(host)
+                    .socket((local.is_none() && c.host.starts_with('/')).then_some(c.host.clone()))
+                    .tcp_port(local.unwrap_or(c.port))
                     .user(Some(&c.user))
                     .pass(Some(password))
                     .db_name(if c.database.is_empty() {
@@ -181,6 +297,7 @@ impl Wire {
                     // Notices a dead idle link (a VPN that went away) without any query.
                     .tcp_keepalive(Some(KEEPALIVE_IDLE.as_millis() as u32))
                     .init(vec!["SET NAMES utf8mb4"]);
+                channel().await?;
                 let conn = tokio::time::timeout(CONNECT_TIMEOUT, Conn::new(opts))
                     .await
                     .context("Connection timeout")??;
@@ -189,7 +306,7 @@ impl Wire {
             Driver::Postgres => {
                 let mut cfg = Config::new();
                 cfg.host(&c.host)
-                    .port(c.port)
+                    .port(local.unwrap_or(c.port))
                     .user(&c.user)
                     .password(password)
                     .dbname(if c.database.is_empty() {
@@ -203,6 +320,12 @@ impl Wire {
                     .keepalives_idle(KEEPALIVE_IDLE)
                     .keepalives_interval(Duration::from_secs(5))
                     .keepalives_retries(3);
+                if local.is_some() {
+                    cfg.hostaddr(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
+                }
+                if c.disable_channel_binding {
+                    cfg.channel_binding(tokio_postgres::config::ChannelBinding::Disable);
+                }
                 cfg.ssl_mode(if tls {
                     tokio_postgres::config::SslMode::Require
                 } else {
@@ -218,6 +341,7 @@ impl Wire {
                     tls_config.ssl_key = None;
                 }
                 let connector = tokio_postgres_rustls::MakeRustlsConnect::new(pg_tls(&tls_config)?);
+                channel().await?;
                 // connect_timeout covers the socket only; TLS and authentication can hang too.
                 let (client, connection) =
                     tokio::time::timeout(CONNECT_TIMEOUT, cfg.connect(connector))
@@ -767,6 +891,12 @@ pub fn is_connection_lost(e: &anyhow::Error) -> bool {
 /// password can't help and may lock the account.
 pub fn is_auth_failure(e: &anyhow::Error) -> bool {
     e.chain().any(|cause| {
+        if let Some(ssh) = cause.downcast_ref::<crate::ssh::SshError>() {
+            return matches!(
+                ssh,
+                crate::ssh::SshError::Auth(_) | crate::ssh::SshError::Key(_)
+            );
+        }
         if let Some(s) = cause.downcast_ref::<ServerError>() {
             return s
                 .code
@@ -796,6 +926,9 @@ fn lost_cause(e: &anyhow::Error) -> bool {
     for cause in e.chain() {
         if let Some(s) = cause.downcast_ref::<ServerError>() {
             return s.lost;
+        }
+        if let Some(ssh) = cause.downcast_ref::<crate::ssh::SshError>() {
+            return ssh.retryable();
         }
         if cause.is::<tokio::time::error::Elapsed>() || cause.is::<crate::CommitInterrupted>() {
             return true;

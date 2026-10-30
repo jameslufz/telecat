@@ -1,15 +1,21 @@
+use crate::form_view::FormSecrets;
 use crate::{Services, native_menu, ui::*};
 use gpui_kit::{prelude::*, *};
 use serde_json::json;
 use std::sync::Arc;
 use telecat_app::{
-    credentials::{NATIVE_SERVICE, resolve_password},
+    connect::{host_key_problem, host_key_prompt, open_session},
+    credentials::{Asked, Typed, asked_secrets, connect_error_message, with_keychain_secrets},
     store::{
         connection_matches, connection_menu, delete_connection_prompt, delete_group_prompt,
         enter_target, group_menu, listed_connections, new_connection, step_selection,
     },
 };
-use telecat_core::types::*;
+use telecat_core::{
+    types::*,
+    url::{connection_url, parse_connection_url},
+};
+use telecat_db::ssh::{HostKeyKind, HostKeyProblem};
 #[derive(Clone)]
 struct DragConnection {
     id: String,
@@ -35,13 +41,30 @@ enum Sheet {
         move_id: Option<String>,
         input: Entity<InputState>,
     },
+    /// The secrets set to "Ask every time", one field each.
     Password {
         connection: ConnectionConfig,
+        inputs: Vec<(Asked, Entity<InputState>)>,
+    },
+    /// Connecting stopped at an SSH host key: trust it (and connect again) or cancel.
+    HostKey(Box<PendingHostKey>),
+    /// Copy as URL: the URL holds the saved passwords, so it asks first.
+    CopyUrl(ConnectionConfig),
+    /// Import from URL: a new, unsaved connection form filled from the URL.
+    ImportUrl {
         input: Entity<InputState>,
+        error: Option<String>,
     },
     /// Asks before deleting a connection (and its Keychain password) or a group.
     ConfirmDelete(DeleteTarget),
     Error(String),
+}
+/// A connect waiting for the user to decide on the SSH server's host key.
+struct PendingHostKey {
+    problem: HostKeyProblem,
+    connection: ConnectionConfig,
+    /// What was typed for the connect, to repeat it once the key is trusted.
+    typed: Typed,
 }
 #[derive(Clone)]
 enum DeleteTarget {
@@ -153,14 +176,28 @@ impl Welcome {
             Some(Sheet::Picker(driver, group)) => {
                 let c = new_connection(*driver, group.clone());
                 self.sheet = None;
-                crate::open_form(self.services.clone(), c, String::new(), "", cx);
+                crate::open_form(self.services.clone(), c, FormSecrets::default(), "", cx);
                 cx.notify();
             }
-            Some(Sheet::Password { connection, input }) => {
+            Some(Sheet::Password { connection, inputs }) => {
                 let c = connection.clone();
-                let pw = input.read(cx).value().to_string();
-                self.connect(c, Some(pw), window, cx);
+                let typed = answers(inputs, cx);
+                self.connect(c, Some(typed), window, cx);
             }
+            Some(Sheet::HostKey(pending)) => {
+                // Enter trusts a key seen for the first time; for a changed one it cancels.
+                if pending.problem.kind == HostKeyKind::Unknown {
+                    self.trust_host_key(window, cx);
+                } else {
+                    self.sheet = None;
+                    cx.notify();
+                }
+            }
+            Some(Sheet::CopyUrl(c)) => {
+                let c = c.clone();
+                self.copy_url(c, true, cx);
+            }
+            Some(Sheet::ImportUrl { .. }) => self.import_url(cx),
             Some(Sheet::Group {
                 group,
                 move_id,
@@ -260,23 +297,28 @@ impl Welcome {
     fn connect(
         &mut self,
         c: ConnectionConfig,
-        password: Option<String>,
+        typed: Option<Typed>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.busy {
             return;
         }
-        if c.password_mode == PasswordMode::Ask && password.is_none() {
-            let input = text_input("", "Password", true, window, cx);
-            input.update(cx, |s, cx| s.focus(window, cx));
+        let asked = asked_secrets(&c);
+        if typed.is_none() && !asked.is_empty() {
+            let inputs: Vec<_> = asked
+                .into_iter()
+                .map(|a| (a, text_input("", a.label(), true, window, cx)))
+                .collect();
+            inputs[0].1.update(cx, |s, cx| s.focus(window, cx));
             self.sheet = Some(Sheet::Password {
                 connection: c,
-                input,
+                inputs,
             });
             cx.notify();
             return;
         }
+        let typed = typed.unwrap_or_default();
         self.selected = Some(c.id.clone());
         self.busy = true;
         self.sheet = None;
@@ -284,28 +326,25 @@ impl Welcome {
         let services = self.services.clone();
         let task = services.runtime.spawn({
             let services = services.clone();
+            let (c, typed) = (c.clone(), typed.clone());
             async move {
                 if services.scenario {
                     anyhow::bail!("Scenario fixtures do not open database connections");
                 }
                 let keys = services.profile.keychain.clone();
                 let c2 = c.clone();
-                let password = services
+                let typed = services
                     .runtime
-                    .spawn_blocking(move || {
-                        if password.is_some() || c2.password_mode != PasswordMode::Keychain {
-                            Ok(password)
-                        } else {
-                            keys.get(NATIVE_SERVICE, &c2.id).and_then(|v| {
-                                v.map(String::from_utf8).transpose().map_err(Into::into)
-                            })
-                        }
-                    })
+                    .spawn_blocking(move || with_keychain_secrets(&c2, typed, keys.as_ref()))
                     .await??;
-                let pw =
-                    resolve_password(&c, password.as_deref(), services.profile.keychain.as_ref())
-                        .await?;
-                Ok::<_, anyhow::Error>((Arc::new(telecat_db::Session::connect(&c, &pw).await?), c))
+                let session = open_session(
+                    &c,
+                    &typed,
+                    services.profile.keychain.as_ref(),
+                    &services.profile.ssh_env,
+                )
+                .await?;
+                Ok::<_, anyhow::Error>(Arc::new(session))
             }
         });
         cx.spawn(async move |this, cx| {
@@ -313,32 +352,123 @@ impl Welcome {
             let _ = this.update(cx, |this, cx| {
                 this.busy = false;
                 match result {
-                    Ok((session, connection)) => {
-                        crate::open_workspace(this.services.clone(), session, connection, cx)
-                    }
-                    Err(e) => this.error(e, cx),
+                    Ok(session) => crate::open_workspace(this.services.clone(), session, c, cx),
+                    Err(e) => match host_key_problem(&e) {
+                        Some(problem) => {
+                            this.sheet = Some(Sheet::HostKey(Box::new(PendingHostKey {
+                                problem,
+                                connection: c,
+                                typed,
+                            })))
+                        }
+                        None => this.error(connect_error_message(&c, &e), cx),
+                    },
                 }
                 cx.notify();
             });
         })
         .detach();
     }
-    fn edit(&mut self, c: ConnectionConfig, cx: &mut Context<Self>) {
-        let services = self.services.clone();
-        let c2 = c.clone();
-        let task = services.runtime.spawn_blocking(move || {
-            services
-                .profile
-                .keychain
-                .get(NATIVE_SERVICE, &c2.id)
-                .and_then(|p| p.map(String::from_utf8).transpose().map_err(Into::into))
+    fn trust_host_key(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(Sheet::HostKey(pending)) = self.sheet.take() else {
+            return;
+        };
+        let PendingHostKey {
+            problem,
+            connection,
+            typed,
+        } = *pending;
+        match telecat_db::ssh::trust_host_key(&self.services.profile.ssh_env, &problem) {
+            Ok(()) => self.connect(connection, Some(typed), window, cx),
+            Err(e) => self.error(format!("SSH: {e}"), cx),
+        }
+    }
+    /// Copies the connection's URL, with its saved database and SSH passwords when `passwords`.
+    fn copy_url(&mut self, c: ConnectionConfig, passwords: bool, cx: &mut Context<Self>) {
+        self.sheet = None;
+        cx.notify();
+        let profile = self.services.profile.clone();
+        let id = c.id.clone();
+        let task = self.services.runtime.spawn_blocking(move || {
+            if passwords {
+                profile.saved_secrets(&id)
+            } else {
+                Ok([None, None, None])
+            }
         });
         cx.spawn(async move |this, cx| {
             let result = task.await.map_err(anyhow::Error::from).and_then(|v| v);
             let _ = this.update(cx, |this, cx| match result {
-                Ok(pw) => {
-                    crate::open_form(this.services.clone(), c, pw.unwrap_or_default(), "", cx)
+                Ok([password, ssh_password, _]) => {
+                    let password = password.filter(|_| c.password_mode == PasswordMode::Keychain);
+                    let ssh_password = ssh_password
+                        .filter(|_| c.ssh.enabled && c.ssh.password_mode == PasswordMode::Keychain);
+                    let url = connection_url(&c, password.as_deref(), ssh_password.as_deref());
+                    cx.write_to_clipboard(ClipboardItem::new_string(url));
                 }
+                Err(e) => this.error(e, cx),
+            });
+        })
+        .detach();
+    }
+    fn show_import_url(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let input = text_input(
+            "",
+            "postgresql://user:password@host:5432/database",
+            false,
+            window,
+            cx,
+        );
+        input.update(cx, |s, cx| s.focus(window, cx));
+        self.sheet = Some(Sheet::ImportUrl { input, error: None });
+        cx.notify();
+    }
+    /// Opens a new connection form filled from the URL. Nothing is saved or connected until the
+    /// user does so in the form.
+    fn import_url(&mut self, cx: &mut Context<Self>) {
+        let Some(Sheet::ImportUrl { input, error }) = &mut self.sheet else {
+            return;
+        };
+        let text = input.read(cx).value().to_string();
+        match parse_connection_url(&text) {
+            Ok(u) => {
+                self.sheet = None;
+                crate::open_form(
+                    self.services.clone(),
+                    u.config,
+                    FormSecrets {
+                        password: u.password.unwrap_or_default(),
+                        ssh_password: u.ssh_password.unwrap_or_default(),
+                        passphrase: String::new(),
+                    },
+                    "",
+                    cx,
+                );
+            }
+            Err(e) => *error = Some(e.to_string()),
+        }
+        cx.notify();
+    }
+    fn edit(&mut self, c: ConnectionConfig, cx: &mut Context<Self>) {
+        let services = self.services.clone();
+        let id = c.id.clone();
+        let task = services
+            .runtime
+            .spawn_blocking(move || services.profile.saved_secrets(&id));
+        cx.spawn(async move |this, cx| {
+            let result = task.await.map_err(anyhow::Error::from).and_then(|v| v);
+            let _ = this.update(cx, |this, cx| match result {
+                Ok([password, ssh_password, passphrase]) => crate::open_form(
+                    this.services.clone(),
+                    c,
+                    FormSecrets {
+                        password: password.unwrap_or_default(),
+                        ssh_password: ssh_password.unwrap_or_default(),
+                        passphrase: passphrase.unwrap_or_default(),
+                    },
+                    "",
+                    cx,
+                ),
                 Err(e) => this.error(e, cx),
             });
         })
@@ -380,6 +510,10 @@ impl Welcome {
                     }
                 }
                 "delete" => this.confirm_delete(DeleteTarget::Connection(c), cx),
+                "copy-url" => {
+                    this.sheet = Some(Sheet::CopyUrl(c));
+                    cx.notify();
+                }
                 "duplicate" => {
                     let services = this.services.clone();
                     let task = services.runtime.spawn_blocking(move || {
@@ -497,10 +631,15 @@ impl Welcome {
                             .text_color(rgb(if selected { 0xdbe6ff } else { 0x8a8a8a }))
                             .truncate()
                             .child(format!(
-                                "{}{}{}",
+                                "{}{}{}{}",
                                 c.host,
                                 if c.database.is_empty() { "" } else { " : " },
-                                c.database
+                                c.database,
+                                if c.ssh.enabled {
+                                    format!(" · via SSH {}", c.ssh.host)
+                                } else {
+                                    String::new()
+                                }
                             )),
                     ),
             )
@@ -561,7 +700,7 @@ impl Welcome {
             .on_click(cx.listener(|this,_,_,cx|{this.selected=None;cx.notify();}))
             .on_drop(cx.listener(|this,d:&DragConnection,_,cx|this.drop_into(d,None,cx)))
             .on_mouse_down(MouseButton::Right,cx.listener(|_,event:&MouseDownEvent,window,cx|{
-                native_menu::choose(json!([{"id":"new","label":"New Connection…"},{"id":"group","label":"New Group…"}]),event.position,window,cx,|this,id,window,cx|{if id=="new"{this.show_picker(cx);}else{this.group_sheet(None,None,window,cx);}});
+                native_menu::choose(json!([{"id":"new","label":"New Connection…"},{"id":"group","label":"New Group…"},{"type":"separator"},{"id":"url","label":"Import from URL…"}]),event.position,window,cx,|this,id,window,cx|{match id.as_str(){"new"=>this.show_picker(cx),"url"=>this.show_import_url(window,cx),_=>this.group_sheet(None,None,window,cx)}});
             }));
         let group_ids: Vec<_> = snapshot.groups.iter().map(|g| g.id.clone()).collect();
         for group in snapshot.groups {
@@ -778,7 +917,7 @@ impl Welcome {
                                                         crate::open_form(
                                                             this.services.clone(),
                                                             new_connection(d, group.clone()),
-                                                            String::new(),
+                                                            FormSecrets::default(),
                                                             "",
                                                             cx,
                                                         );
@@ -799,6 +938,13 @@ impl Welcome {
                                     .gap(px(8.))
                                     .mt(px(16.))
                                     .child(
+                                        button("picker-url", "Import from URL…", false, false)
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.show_import_url(window, cx)
+                                            })),
+                                    )
+                                    .child(div().flex_1())
+                                    .child(
                                         button("picker-cancel", "Cancel", false, false).on_click(
                                             cx.listener(|this, _, _, cx| {
                                                 this.sheet = None;
@@ -813,7 +959,7 @@ impl Welcome {
                                                 crate::open_form(
                                                     this.services.clone(),
                                                     new_connection(driver, group.clone()),
-                                                    String::new(),
+                                                    FormSecrets::default(),
                                                     "",
                                                     cx,
                                                 );
@@ -888,25 +1034,36 @@ impl Welcome {
                     ),
                 )
             }
-            Sheet::Password { connection, input } => {
+            Sheet::Password { connection, inputs } => {
                 let c = connection.clone();
-                let input = input.clone();
+                let fields: Vec<_> = inputs.clone();
                 Some(
                     backdrop().child(
                         sheet(
-                            360.,
+                            380.,
                             format!(
-                                "Password for {}",
+                                "Connect to {}",
                                 if c.name.is_empty() { &c.user } else { &c.name }
                             ),
                         )
-                        .child(input_box(&input, false, false))
+                        .children(fields.iter().map(|(asked, input)| {
+                            div()
+                                .mb(px(10.))
+                                .child(
+                                    div()
+                                        .mb(px(4.))
+                                        .text_size(px(11.5))
+                                        .text_color(rgb(telecat_theme::TEXT_SECONDARY))
+                                        .child(asked.label()),
+                                )
+                                .child(input_box(input, false, false))
+                        }))
                         .child(
                             div()
                                 .flex()
                                 .justify_end()
                                 .gap(px(8.))
-                                .mt(px(16.))
+                                .mt(px(6.))
                                 .child(button("pw-cancel", "Cancel", false, false).on_click(
                                     cx.listener(|this, _, _, cx| {
                                         this.sheet = None;
@@ -915,11 +1072,131 @@ impl Welcome {
                                 ))
                                 .child(button("pw-ok", "OK", true, false).on_click(cx.listener(
                                     move |this, _, window, cx| {
-                                        let pw = input.read(cx).value().to_string();
-                                        this.connect(c.clone(), Some(pw), window, cx);
+                                        let typed = answers(&fields, cx);
+                                        this.connect(c.clone(), Some(typed), window, cx);
                                     },
                                 ))),
                         ),
+                    ),
+                )
+            }
+            Sheet::HostKey(pending) => {
+                let prompt = host_key_prompt(&pending.problem);
+                let mut buttons = div().mt(px(16.)).flex().justify_end().gap(px(8.));
+                if let Some(trust) = prompt.trust {
+                    buttons = buttons.child(
+                        button("host-key-trust", trust, !prompt.warning, false)
+                            .when(prompt.warning, |d| d.text_color(rgb(0xff8a80)))
+                            .on_click(
+                                cx.listener(|this, _, window, cx| this.trust_host_key(window, cx)),
+                            ),
+                    );
+                }
+                buttons = buttons.child(
+                    button(
+                        "host-key-cancel",
+                        if prompt.trust.is_some() {
+                            "Cancel"
+                        } else {
+                            "OK"
+                        },
+                        prompt.warning,
+                        false,
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.sheet = None;
+                        cx.notify();
+                    })),
+                );
+                Some(backdrop().child(host_key_sheet(&prompt).child(buttons)))
+            }
+            Sheet::CopyUrl(c) => {
+                let (with, without) = (c.clone(), c.clone());
+                Some(
+                    backdrop().child(
+                        sheet(
+                            440.,
+                            format!(
+                                "Copy the URL of {}?",
+                                if c.name.is_empty() { "Untitled" } else { &c.name }
+                            ),
+                        )
+                        .child(
+                            div()
+                                .text_color(rgb(telecat_theme::TEXT_SECONDARY))
+                                .text_size(px(12.))
+                                .line_height(px(16.))
+                                .child("The URL includes the saved database and SSH passwords in plain text. Anyone who sees it, or anything that reads your clipboard, can use them."),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .justify_end()
+                                .gap(px(8.))
+                                .mt(px(16.))
+                                .child(button("url-cancel", "Cancel", false, false).on_click(
+                                    cx.listener(|this, _, _, cx| {
+                                        this.sheet = None;
+                                        cx.notify();
+                                    }),
+                                ))
+                                .child(
+                                    button("url-copy-plain", "Copy Without Passwords", false, false)
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.copy_url(without.clone(), false, cx)
+                                        })),
+                                )
+                                .child(button("url-copy", "Copy with Passwords", true, false).on_click(
+                                    cx.listener(move |this, _, _, cx| {
+                                        this.copy_url(with.clone(), true, cx)
+                                    }),
+                                )),
+                        ),
+                    ),
+                )
+            }
+            Sheet::ImportUrl { input, error } => {
+                let input = input.clone();
+                Some(
+                    backdrop().child(
+                        sheet(480., "Import from URL")
+                            .child(
+                                div()
+                                    .mb(px(8.))
+                                    .text_size(px(11.5))
+                                    .line_height(px(15.))
+                                    .text_color(rgb(telecat_theme::TEXT_SECONDARY))
+                                    .child("mysql://, mariadb://, postgres:// or postgresql:// — add +ssh for driver+ssh://ssh_user@ssh_host/user@host/database. It opens a new connection form; nothing is saved or connected until you choose to."),
+                            )
+                            .child(input_box(&input, false, true).when(error.is_some(), |d| {
+                                d.border_color(rgb(0xff8a80))
+                            }))
+                            .when_some(error.clone(), |d, e| {
+                                d.child(
+                                    div()
+                                        .id("url-error")
+                                        .mt(px(6.))
+                                        .text_size(px(11.5))
+                                        .text_color(rgb(0xff8a80))
+                                        .child(e),
+                                )
+                            })
+                            .child(
+                                div()
+                                    .flex()
+                                    .justify_end()
+                                    .gap(px(8.))
+                                    .mt(px(16.))
+                                    .child(button("import-url-cancel", "Cancel", false, false).on_click(
+                                        cx.listener(|this, _, _, cx| {
+                                            this.sheet = None;
+                                            cx.notify();
+                                        }),
+                                    ))
+                                    .child(button("import-url-ok", "Import", true, false).on_click(
+                                        cx.listener(|this, _, _, cx| this.import_url(cx)),
+                                    )),
+                            ),
                     ),
                 )
             }
@@ -996,6 +1273,19 @@ impl Welcome {
         }
     }
 }
+/// The answers typed in the "Ask every time" sheet.
+fn answers(inputs: &[(Asked, Entity<InputState>)], cx: &App) -> Typed {
+    let mut typed = Typed::default();
+    for (asked, input) in inputs {
+        let value = Some(input.read(cx).value().to_string());
+        match asked {
+            Asked::Password => typed.password = value,
+            Asked::SshPassword => typed.ssh_password = value,
+            Asked::Passphrase => typed.passphrase = value,
+        }
+    }
+    typed
+}
 impl Welcome {
     /// When the focused field went away with its sheet (the password sheet closed and an error
     /// took its place), keys would reach nothing: focus the open sheet's field, else the window
@@ -1005,7 +1295,12 @@ impl Welcome {
             return;
         }
         match &self.sheet {
-            Some(Sheet::Password { input, .. } | Sheet::Group { input, .. }) => {
+            Some(Sheet::Password { inputs, .. }) => {
+                if let Some((_, input)) = inputs.first() {
+                    input.update(cx, |s, cx| s.focus(window, cx))
+                }
+            }
+            Some(Sheet::Group { input, .. } | Sheet::ImportUrl { input, .. }) => {
                 input.update(cx, |s, cx| s.focus(window, cx))
             }
             Some(_) => window.focus(&self.focus, cx),
@@ -1171,21 +1466,40 @@ mod tests {
     use telecat_core::types::*;
 
     fn open(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<Welcome>) {
+        let mut ask = empty_connection(Driver::Mysql);
+        ask.id = "ask".into();
+        ask.name = "Asks".into();
+        ask.password_mode = PasswordMode::Ask;
+        open_with(cx, vec![ask], true).0
+    }
+    /// `scenario`: no database is ever opened (connecting ends in an error sheet). Off, opening
+    /// a form window works as in the app.
+    fn open_with(
+        cx: &mut TestAppContext,
+        connections: Vec<ConnectionConfig>,
+        scenario: bool,
+    ) -> ((AnyWindowHandle, Entity<Welcome>), Services) {
         cx.update(|cx| {
             gpui_kit::init(cx);
             let root = std::env::temp_dir()
                 .join("telecat-ui-profiles")
                 .join(uuid::Uuid::new_v4().to_string());
             std::fs::create_dir_all(&root).unwrap();
-            let mut ask = empty_connection(Driver::Mysql);
-            ask.id = "ask".into();
-            ask.name = "Asks".into();
-            ask.password_mode = PasswordMode::Ask;
+            let mut profile = telecat_app::store::Profile::new(
+                root.clone(),
+                Arc::new(telecat_app::credentials::MemoryKeychain::default()),
+            );
+            // Never the real ~/.ssh.
+            profile.ssh_env = telecat_db::ssh::SshEnv::isolated(&root);
+            let profile = Arc::new(profile);
+            profile
+                .seed(&StoreSnapshot {
+                    connections: connections.clone(),
+                    groups: vec![],
+                })
+                .unwrap();
             let services = Services {
-                profile: Arc::new(telecat_app::store::Profile::new(
-                    root,
-                    Arc::new(telecat_app::credentials::MemoryKeychain::default()),
-                )),
+                profile,
                 runtime: Arc::new(
                     tokio::runtime::Builder::new_multi_thread()
                         .worker_threads(1)
@@ -1197,19 +1511,206 @@ mod tests {
                 model: cx.new(|_| crate::Model {
                     import_error: None,
                     snapshot: StoreSnapshot {
-                        connections: vec![ask],
+                        connections,
                         groups: vec![],
                     },
                 }),
-                // No database is ever opened: connecting ends in an error sheet.
-                scenario: true,
+                scenario,
             };
+            let window_services = services.clone();
             let (w, view) = gpui_kit::open_window(Default::default(), cx, |window, cx| {
-                cx.new(|cx| Welcome::new(services, "", window, cx))
+                cx.new(|cx| Welcome::new(window_services, "", window, cx))
             })
             .unwrap();
-            (w, view)
+            ((w, view), services)
         })
+    }
+    /// The connection form windows that are open.
+    fn forms(cx: &mut TestAppContext) -> Vec<Entity<crate::form_view::ConnectionForm>> {
+        cx.update(|cx| {
+            cx.windows()
+                .into_iter()
+                .filter_map(|handle| {
+                    handle
+                        .update(cx, |_, window, cx| {
+                            let root = window.root::<gpui_kit::base::Root>().flatten()?;
+                            root.read(cx)
+                                .view()
+                                .clone()
+                                .downcast::<crate::form_view::ConnectionForm>()
+                                .ok()
+                        })
+                        .ok()
+                        .flatten()
+                })
+                .collect()
+        })
+    }
+    fn wait_idle(cx: &mut TestAppContext, view: &Entity<Welcome>) {
+        for _ in 0..200 {
+            cx.executor().allow_parking();
+            cx.run_until_parked();
+            if !view.read_with(cx, |v, _| v.busy) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+    #[gpui::test]
+    fn import_from_url_fills_a_new_form_and_never_repeats_a_bad_url(cx: &mut TestAppContext) {
+        let ((w, view), services) = open_with(cx, vec![], false);
+        cx.update_window(w, |_, window, cx| {
+            view.update(cx, |v, cx| v.show_import_url(window, cx))
+        })
+        .unwrap();
+        paint(cx, w);
+        cx.simulate_input(w, "mysql://root:hunter2@db:99999/zixma");
+        cx.simulate_keystrokes(w, "enter");
+        paint(cx, w);
+        view.read_with(cx, |v, _| match &v.sheet {
+            Some(Sheet::ImportUrl { error: Some(e), .. }) => {
+                assert!(e.contains("port") && !e.contains("hunter2"), "{e}")
+            }
+            _ => panic!("the error is shown in the sheet"),
+        });
+        assert!(forms(cx).is_empty());
+        cx.update_window(w, |_, window, cx| {
+            view.update(cx, |v, cx| {
+                if let Some(Sheet::ImportUrl { input, .. }) = &v.sheet {
+                    input.update(cx, |s, cx| {
+                        s.set_value(
+                            "postgresql+ssh://ops:s%40sh@bastion:2200/app:p%40ss@10.0.0.5:5433/main?name=Prod&env=production",
+                            window,
+                            cx,
+                        )
+                    });
+                }
+            })
+        })
+        .unwrap();
+        cx.simulate_keystrokes(w, "enter");
+        cx.run_until_parked();
+        assert!(view.read_with(cx, |v, _| v.sheet.is_none()));
+        let forms = forms(cx);
+        assert_eq!(forms.len(), 1, "a form opened");
+        forms[0].read_with(cx, |f, cx| {
+            let c = f.connection();
+            assert_eq!((c.name.as_str(), c.tag.as_str()), ("Prod", "production"));
+            assert_eq!(
+                (c.host.as_str(), c.port, c.user.as_str()),
+                ("10.0.0.5", 5433, "app")
+            );
+            assert!(c.ssh.enabled);
+            assert_eq!((c.ssh.host.as_str(), c.ssh.port), ("bastion", 2200));
+            assert!(c.id.is_empty(), "not saved");
+            assert_eq!(f.field_value("password", cx), "p@ss");
+            assert_eq!(f.field_value("ssh_password", cx), "s@sh");
+        });
+        assert!(
+            services.profile.snapshot().connections.is_empty(),
+            "nothing saved"
+        );
+    }
+    #[gpui::test]
+    fn copy_as_url_asks_first_and_includes_passwords_only_when_chosen(cx: &mut TestAppContext) {
+        let mut c = empty_connection(Driver::Mysql);
+        c.id = "c1".into();
+        c.name = "Prod".into();
+        c.host = "db".into();
+        c.user = "root".into();
+        c.ssh.enabled = true;
+        c.ssh.host = "bastion".into();
+        c.ssh.user = "ops".into();
+        let ((w, view), services) = open_with(cx, vec![c.clone()], true);
+        services
+            .profile
+            .save_connection_with(
+                c.clone(),
+                telecat_app::store::Secrets {
+                    password: Some("db pw"),
+                    ssh_password: Some("ssh/pw"),
+                    passphrase: None,
+                },
+            )
+            .unwrap();
+        view.update(cx, |v, cx| {
+            v.sheet = Some(Sheet::CopyUrl(c.clone()));
+            cx.notify();
+        });
+        paint(cx, w);
+        assert!(
+            cx.read_from_clipboard().is_none(),
+            "nothing copied before confirming"
+        );
+        // Esc cancels.
+        cx.simulate_keystrokes(w, "escape");
+        assert!(view.read_with(cx, |v, _| v.sheet.is_none()));
+        assert!(cx.read_from_clipboard().is_none());
+        view.update(cx, |v, cx| v.copy_url(c.clone(), false, cx));
+        wait_idle(cx, &view);
+        let url = cx
+            .read_from_clipboard()
+            .and_then(|i| i.text())
+            .unwrap_or_default();
+        assert!(
+            url.starts_with("mysql+ssh://ops@bastion/root@db:3306/"),
+            "{url}"
+        );
+        view.update(cx, |v, cx| {
+            v.sheet = Some(Sheet::CopyUrl(c.clone()));
+            cx.notify();
+        });
+        paint(cx, w);
+        cx.simulate_keystrokes(w, "enter");
+        let mut url = String::new();
+        for _ in 0..100 {
+            cx.executor().allow_parking();
+            cx.run_until_parked();
+            url = cx
+                .read_from_clipboard()
+                .and_then(|i| i.text())
+                .unwrap_or_default();
+            if url.contains("db%20pw") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(
+            url.starts_with("mysql+ssh://ops:ssh%2Fpw@bastion/root:db%20pw@db:3306/"),
+            "{url}"
+        );
+    }
+    #[gpui::test]
+    fn each_secret_set_to_ask_gets_its_own_field(cx: &mut TestAppContext) {
+        let mut c = empty_connection(Driver::Postgres);
+        c.id = "ssh-ask".into();
+        c.name = "Bastion".into();
+        c.password_mode = PasswordMode::Ask;
+        c.ssh.enabled = true;
+        c.ssh.host = "bastion".into();
+        c.ssh.password_mode = PasswordMode::Ask;
+        let ((w, view), _) = open_with(cx, vec![c.clone()], true);
+        cx.update_window(w, |_, window, cx| {
+            view.update(cx, |v, cx| v.connect(c.clone(), None, window, cx))
+        })
+        .unwrap();
+        paint(cx, w);
+        view.read_with(cx, |v, _| match &v.sheet {
+            Some(Sheet::Password { inputs, .. }) => {
+                let asked: Vec<_> = inputs.iter().map(|(a, _)| *a).collect();
+                assert_eq!(
+                    asked,
+                    [
+                        telecat_app::credentials::Asked::Password,
+                        telecat_app::credentials::Asked::SshPassword
+                    ]
+                );
+            }
+            _ => panic!("asks for both"),
+        });
+        cx.simulate_keystrokes(w, "enter");
+        wait_idle(cx, &view);
+        view.read_with(cx, |v, _| assert!(matches!(v.sheet, Some(Sheet::Error(_)))));
     }
     fn paint(cx: &mut TestAppContext, w: AnyWindowHandle) {
         cx.update_window(w, |_, w, cx| {

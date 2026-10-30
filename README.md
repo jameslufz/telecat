@@ -22,10 +22,19 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
 
 - **Connections:** a welcome list with groups and drag-and-drop, a driver picker, and a connection form.
   - Safe Mode levels and SSL modes.
-  - Password storage in the macOS Keychain, Ask on connect, or None.
+  - Password storage in the macOS Keychain, Ask on connect, a command that prints it, or None.
   - Test the connection before you save it.
   - ↑ / ↓ select a connection and Enter connects (also to the only search match).
-  - Deleting a connection or a group asks first. Deleting a connection removes its Keychain password too.
+  - Deleting a connection or a group asks first. Deleting a connection removes its Keychain passwords too.
+  - **Import from URL…** (right-click the list, or in the driver picker) fills a new connection form from a `mysql://`, `mariadb://`, `postgres://` or `postgresql://` URL, `+ssh` URLs included, in TablePlus's format. Nothing is saved or connected until you choose to.
+  - **Copy as URL…** (right-click a connection) asks first, because the URL includes the saved passwords; you can also copy it without them.
+- **SSH tunnels** ("Over SSH" in the connection form), pure Rust, for MySQL and PostgreSQL:
+  - log in with a password (Keychain, Ask every time, Command Line or none), a private key (ed25519, RSA, ECDSA; OpenSSH or PEM, encrypted or not), ssh-agent, or the settings in `~/.ssh/config` (`Host` aliases, `HostName`, `User`, `Port`, `IdentityFile`, `IdentitiesOnly`, `IdentityAgent`). `ProxyJump` / `ProxyCommand` aren't supported and say so;
+  - host keys are checked against `~/.ssh/known_hosts` (read only). A new server shows its SHA256 fingerprint to trust; a changed key is a hard warning that defaults to Cancel. Keys you trust are kept in Telecat's own `known_hosts`;
+  - every connection Telecat opens (editor, saves, table reads, autocomplete, Running Queries, export, import) goes through the tunnel, and TLS to the database still works through it;
+  - a dropped SSH link shows in the status pill and reconnects like any other drop: SSH first, then the database. Errors say which side failed (`SSH: …` or `Database: …`).
+- **Startup SQL:** per-connection `SET` / `RESET` / read-only `SELECT` statements run on every new database connection, reconnects included. An error stops the connection.
+- **PostgreSQL options:** Disable channel binding, and Load system schemas (lists the tables and views of `pg_catalog` and `information_schema`).
 - **SQL editor:**
   - syntax highlighting, multi-cursor and comment toggle;
   - autocomplete with keywords, tables and column names. Columns are read in the background, table by table. They follow aliases (`FROM users u … u.`) and list the columns of the statement's own tables first;
@@ -83,7 +92,7 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
 
 You need macOS 11 or later on Apple Silicon (arm64).
 
-Settings and connections are stored in `~/Library/Application Support/Telecat Native`, and saved passwords are kept in the macOS Keychain.
+Settings and connections are stored in `~/Library/Application Support/Telecat Native`, and saved passwords (database, SSH and key passphrases) are kept in the macOS Keychain. Telecat 0.7 keeps a copy of the connections file as earlier versions wrote it, `connections.before-0.7.json`, before it first changes it.
 
 ## Build from source
 
@@ -131,6 +140,8 @@ The live-database tests expect throwaway containers:
 | PostgreSQL | `127.0.0.1:5434` | `postgres` / `secret` | `main_db` |
 
 `TELECAT_TEST_DB_ONLY=1` makes the app refuse to connect anywhere else.
+
+The SSH tests (`db/tests/ssh.rs`, and one workspace test) need a test SSH server next to those containers. `native/scripts/test-ssh-env.sh` creates it: a Docker network joining both databases, an OpenSSH container on `127.0.0.1:2222` that only forwards to them, and generated test keys outside the source tree. Over SSH the fence only admits that server and, through it, only the two test databases.
 
 To launch the app in a deterministic UI state built from fixtures, use scenario mode, for example `./scripts/scenario.sh 20-welcome-list`. It needs no database.
 

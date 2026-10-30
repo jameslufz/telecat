@@ -1,7 +1,8 @@
 //! A TCP proxy in front of the local test servers, for tests that need the network to fail: it
 //! can cut every link (and refuse new ones), blackhole them (accept and hold, forward nothing,
-//! like a VPN that went away) and restore them. It only ever forwards to 127.0.0.1:3307 or
-//! 127.0.0.1:5434, and the endpoint fence admits only live proxies in front of those.
+//! like a VPN that went away) and restore them. It only ever forwards to the test servers,
+//! 127.0.0.1:3307 and 127.0.0.1:5434, or the test SSH server, 127.0.0.1:2222, and the
+//! endpoint fence admits only live proxies in front of those.
 use anyhow::{Result, bail};
 use std::{
     collections::BTreeMap,
@@ -51,8 +52,10 @@ pub struct TestProxy {
 impl TestProxy {
     /// Starts a proxy on a free loopback port in front of 127.0.0.1:`upstream`.
     pub async fn start(upstream: u16) -> Result<Self> {
-        if !matches!(upstream, 3307 | 5434) {
-            bail!("Test safety: the proxy only forwards to 127.0.0.1:3307 or 127.0.0.1:5434");
+        if !matches!(upstream, 3307 | 5434 | crate::wire::TEST_SSH_PORT) {
+            bail!(
+                "Test safety: the proxy only forwards to 127.0.0.1:3307, 127.0.0.1:5434 or the test SSH server 127.0.0.1:2222"
+            );
         }
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let port = listener.local_addr()?.port();

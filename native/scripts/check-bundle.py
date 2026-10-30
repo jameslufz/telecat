@@ -14,8 +14,8 @@ assert info["CFBundleDisplayName"] == "Telecat"
 # These internal names stay stable to preserve the installed app's identity.
 assert info["CFBundleIdentifier"] == "dev.telecat.native"
 assert info["CFBundleExecutable"] == "telecat-native"
-assert info["CFBundleShortVersionString"] == "0.6.0"
-assert info["CFBundleVersion"] == "10"
+assert info["CFBundleShortVersionString"] == "0.7.0"
+assert info["CFBundleVersion"] == "11"
 binary = contents / "MacOS" / info["CFBundleExecutable"]
 assert binary.stat().st_size > 1_000_000
 assert subprocess.check_output(["lipo", "-archs", str(binary)], text=True).strip() == "arm64"

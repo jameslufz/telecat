@@ -297,6 +297,7 @@ impl Workspace {
             Sheet::ReconnectPassword => self.reconnect_password_sheet(cx),
             Sheet::CommitUnknown => self.commit_unknown_sheet(cx),
             Sheet::Triggers => self.triggers_sheet(cx),
+            Sheet::HostKey(problem) => self.host_key_sheet(problem, cx),
             Sheet::Error(message) => sheet(560., "Telecat")
                 .child(div().text_color(rgb(0xff8a80)).child(message.clone()))
                 .child(div().mt(px(16.)).flex().justify_end().child(close())),

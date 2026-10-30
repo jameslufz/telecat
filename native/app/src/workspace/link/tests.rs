@@ -93,14 +93,26 @@ pub(in crate::workspace) fn live(
     .unwrap();
     let profile = std::env::temp_dir().join(format!("telecat-link-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&profile).unwrap();
+    mount(cx, runtime, proxy, session, c, keychain, profile)
+}
+/// A workspace window on `session`, with a profile in `profile` (its own SSH setup, never the
+/// real ~/.ssh) and `keychain`.
+fn mount(
+    cx: &mut TestAppContext,
+    runtime: tokio::runtime::Runtime,
+    proxy: TestProxy,
+    session: telecat_db::Session,
+    c: ConnectionConfig,
+    keychain: telecat_app::credentials::MemoryKeychain,
+    profile: std::path::PathBuf,
+) -> Live {
     let services = cx.update(|cx| {
         gpui_kit::init(cx);
         telecat_editor::init(cx);
+        let mut store = telecat_app::store::Profile::new(profile.clone(), Arc::new(keychain));
+        store.ssh_env = telecat_db::ssh::SshEnv::isolated(&profile);
         Services {
-            profile: Arc::new(telecat_app::store::Profile::new(
-                profile.clone(),
-                Arc::new(keychain),
-            )),
+            profile: Arc::new(store),
             runtime: Arc::new(runtime.into()),
             model: cx.new(|_| crate::Model {
                 import_error: None,
@@ -1037,4 +1049,140 @@ fn result_edits_staged_before_a_reconnect_are_rechecked_before_saving(cx: &mut T
     );
     assert_eq!(stored(d, name).as_deref(), Some("new"));
     db(d, &format!("DROP TABLE {name}"));
+}
+
+/// A workspace whose connections go through the test SSH server (scripts/test-ssh-env.sh),
+/// behind a proxy that can cut the SSH link. Its SSH host key is trusted the way a user does.
+fn live_over_ssh(cx: &mut TestAppContext, d: Driver) -> Live {
+    use telecat_db::ssh::SshSecrets;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .unwrap();
+    let proxy = runtime.block_on(TestProxy::start(2222)).unwrap();
+    let mut c = config(d, 0);
+    let mysql = d == Driver::Mysql;
+    c.host = if mysql {
+        "telecat-test-mysql"
+    } else {
+        "telecat-test-pg"
+    }
+    .into();
+    c.port = if mysql { 3306 } else { 5432 };
+    c.ssh = SshConfig {
+        enabled: true,
+        host: "127.0.0.1".into(),
+        port: proxy.port(),
+        user: "tpass".into(),
+        ..SshConfig::default()
+    };
+    let profile = std::env::temp_dir().join(format!("telecat-link-ssh-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&profile).unwrap();
+    let env = telecat_db::ssh::SshEnv::isolated(&profile);
+    let credentials = telecat_db::Credentials {
+        password: "secret".into(),
+        ssh: SshSecrets::new(Some("sshsecret".into()), None),
+    };
+    let connect = || {
+        runtime.block_on(telecat_db::Session::connect_test_with(
+            &c,
+            credentials.clone(),
+            Some(&env),
+        ))
+    };
+    if let Err(e) = connect() {
+        let problem = telecat_app::connect::host_key_problem(&e)
+            .unwrap_or_else(|| panic!("the test SSH server (tunnel 2222 to the test box?): {e:#}"));
+        telecat_db::ssh::trust_host_key(&env, &problem).unwrap();
+    }
+    let session = connect().expect("the test database through the test SSH server");
+    let keychain = telecat_app::credentials::MemoryKeychain::default();
+    for (account, secret) in [
+        (c.id.clone(), "secret"),
+        (
+            telecat_app::credentials::ssh_password_account(&c.id),
+            "sshsecret",
+        ),
+    ] {
+        telecat_app::credentials::Keychain::set(
+            &keychain,
+            telecat_app::credentials::NATIVE_SERVICE,
+            &account,
+            secret.as_bytes(),
+        )
+        .unwrap();
+    }
+    mount(cx, runtime, proxy, session, c, keychain, profile)
+}
+#[gpui::test]
+fn over_ssh_a_dropped_link_reconnects_and_a_changed_host_key_waits_for_the_user(
+    cx: &mut TestAppContext,
+) {
+    over_ssh(cx);
+}
+fn over_ssh(cx: &mut TestAppContext) {
+    let l = live_over_ssh(cx, Driver::Mysql);
+    let first = l.s.read_with(cx, |s, _| s.session.clone().unwrap());
+    assert!(first.tunnel_port().is_some());
+    // The SSH link drops: noticed, and back once the network is.
+    l.proxy.cut();
+    wait_disconnected(cx, &l);
+    l.proxy.restore();
+    cx.update_window(l.w, |_, window, cx| {
+        l.s.update(cx, |s, cx| s.reconnect(window, cx))
+    })
+    .unwrap();
+    wait_connected(cx, &l);
+    let second = l.s.read_with(cx, |s, _| s.session.clone().unwrap());
+    assert!(!Arc::ptr_eq(&first, &second));
+    drop((first, second));
+
+    // The server now presents a key other than the one on record: no automatic retry trusts it.
+    std::fs::write(
+        l.profile.join("telecat_known_hosts"),
+        format!(
+            "[127.0.0.1]:{} ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGe1jPeDE1Ru7ZyD/cBffYTsNInjZkQ4AzOampxcenhS\n",
+            l.proxy.port()
+        ),
+    )
+    .unwrap();
+    l.proxy.cut();
+    wait_disconnected(cx, &l);
+    l.proxy.restore();
+    wait(
+        cx,
+        &l,
+        "the host key warning",
+        Duration::from_millis(500),
+        Duration::from_secs(40),
+        |s| matches!(&s.sheet, Some(Sheet::HostKey(p)) if p.kind == telecat_db::ssh::HostKeyKind::Changed),
+    );
+    l.s.read_with(cx, |s, _| {
+        assert!(matches!(
+            s.link.link,
+            Link::Disconnected { retry_at: None, .. }
+        ));
+    });
+    // Enter is Cancel for a changed key.
+    cx.simulate_keystrokes(l.w, "enter");
+    settle(cx, l.w);
+    l.s.read_with(cx, |s, _| assert!(s.sheet.is_none() && !s.connected()));
+    // ⌘⇧R asks again; trusting the new key reconnects.
+    cx.update_window(l.w, |_, window, cx| {
+        l.s.update(cx, |s, cx| s.reconnect(window, cx))
+    })
+    .unwrap();
+    wait(
+        cx,
+        &l,
+        "the host key warning again",
+        Duration::ZERO,
+        Duration::from_secs(30),
+        |s| matches!(s.sheet, Some(Sheet::HostKey(_))),
+    );
+    l.s.update(cx, |s, cx| s.trust_host_key(cx));
+    wait_connected(cx, &l);
+    let recorded = std::fs::read_to_string(l.profile.join("telecat_known_hosts")).unwrap();
+    assert!(!recorded.contains("AAAAIGe1jPeDE1Ru7ZyD"), "{recorded}");
 }

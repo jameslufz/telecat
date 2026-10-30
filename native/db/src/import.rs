@@ -230,7 +230,7 @@ impl Session {
         };
         let mut config = self.config.clone();
         config.database = target.to_owned();
-        let mut conn = Wire::connect(&config, &self.password)
+        let mut conn = Wire::connect(&self.route_for(&config))
             .await
             .map_err(|e| fail(0, format!("Can't connect to {target}: {e:#}")))?;
         let backend = self

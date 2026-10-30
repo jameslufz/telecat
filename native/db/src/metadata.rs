@@ -82,8 +82,17 @@ impl Session {
                 out.push(DbObject::new(named(&r), kind));
             }
         } else {
-            let sql = "SELECT n.nspname, c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r','p','v','m','f') AND n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND NOT c.relispartition ORDER BY n.nspname <> 'public', n.nspname, c.relname";
-            for r in self.query(sql).await?.rows {
+            // "Load system schemas" lists pg_catalog's and information_schema's tables and views
+            // too; their thousands of built-in functions stay out of the list.
+            let system = if self.config().load_system_schemas {
+                ""
+            } else {
+                " AND n.nspname NOT IN ('pg_catalog','information_schema')"
+            };
+            let sql = format!(
+                "SELECT n.nspname, c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r','p','v','m','f'){system} AND n.nspname NOT LIKE 'pg_toast%' AND NOT c.relispartition ORDER BY n.nspname <> 'public', n.nspname IN ('pg_catalog','information_schema'), n.nspname, c.relname"
+            );
+            for r in self.query(&sql).await?.rows {
                 let table = TableRef {
                     schema: r[0].clone().unwrap_or_default(),
                     name: r[1].clone().unwrap_or_default(),

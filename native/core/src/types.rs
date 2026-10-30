@@ -15,6 +15,7 @@ string_enum!(SafeMode { Silent=>"silent", Alert1=>"alert1", Alert2=>"alert2", Sa
 string_enum!(PasswordMode { Keychain=>"keychain", Ask=>"ask", Command=>"command", None=>"none" });
 string_enum!(SslMode { Preferred=>"PREFERRED", Disabled=>"DISABLED", Required=>"REQUIRED", Allow=>"ALLOW", VerifyCa=>"VERIFY-CA", VerifyFull=>"VERIFY-FULL" });
 string_enum!(Negotiation { Postgres=>"POSTGRES", Direct=>"DIRECT" });
+string_enum!(PassphraseMode { Keychain=>"keychain", Ask=>"ask" });
 string_enum!(ObjectKind { Table=>"table", View=>"view", MaterializedView=>"materialized view", Function=>"function", Procedure=>"procedure" });
 impl ObjectKind {
     /// Tables and views of any kind: objects with rows that open in a table tab.
@@ -94,6 +95,82 @@ pub struct ConnectionConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssl_ca: Option<String>,
     pub group_id: Option<String>,
+    /// Older profiles have none of the fields below; each defaults to off.
+    #[serde(default, skip_serializing_if = "SshConfig::is_unset")]
+    pub ssh: SshConfig,
+    /// SQL run on every new database connection, right after it opens (see `startup`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub startup_sql: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub disable_channel_binding: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub load_system_schemas: bool,
+}
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+/// Reaching the database through an SSH server. The database host and port are then as the SSH
+/// server sees them. Secrets are never stored here: they live in the Keychain.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SshConfig {
+    pub enabled: bool,
+    /// A host name, an address, or a `Host` alias from ~/.ssh/config.
+    pub host: String,
+    /// 0: from ~/.ssh/config, else 22.
+    pub port: u16,
+    /// Empty: from ~/.ssh/config, else the local user name.
+    pub user: String,
+    pub password_mode: PasswordMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_command: Option<String>,
+    pub use_key: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_path: Option<String>,
+    pub passphrase_mode: PassphraseMode,
+}
+impl Default for SshConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: String::new(),
+            port: 0,
+            user: String::new(),
+            password_mode: PasswordMode::Keychain,
+            password_command: None,
+            use_key: false,
+            key_path: None,
+            passphrase_mode: PassphraseMode::Keychain,
+        }
+    }
+}
+impl SshConfig {
+    pub fn is_unset(&self) -> bool {
+        *self == Self::default()
+    }
+    /// The private key file chosen in the form, when "Use SSH key" is on.
+    pub fn key_file(&self) -> Option<&str> {
+        self.key_path
+            .as_deref()
+            .filter(|p| self.use_key && !p.is_empty())
+    }
+}
+/// Why `host` can't be an SSH server name, if it can't. known_hosts files read `* ? , !` as
+/// patterns, `[ ]` and `|` as syntax and whitespace as a field break, so a name with any of
+/// them could stand for other hosts once recorded; none of them occurs in a real host name or
+/// address. (IPv6 addresses are written without brackets here.)
+pub fn ssh_host_problem(host: &str) -> Option<&'static str> {
+    if host.is_empty() {
+        Some("is empty")
+    } else if host.len() > 255 {
+        Some("is too long")
+    } else if host.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        Some("can't contain spaces or control characters")
+    } else if host.contains(['*', '?', ',', '!', '[', ']', '|', '#', '@', '/']) {
+        Some("can't contain * ? , ! [ ] | # @ or /")
+    } else {
+        None
+    }
 }
 pub fn default_port(d: Driver) -> u16 {
     if d == Driver::Mysql { 3306 } else { 5432 }
@@ -118,6 +195,10 @@ pub fn empty_connection(d: Driver) -> ConnectionConfig {
         ssl_cert: None,
         ssl_ca: None,
         group_id: None,
+        ssh: SshConfig::default(),
+        startup_sql: String::new(),
+        disable_channel_binding: false,
+        load_system_schemas: false,
     }
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -400,16 +400,27 @@ impl Workspace {
             match credentials {
                 Credentials::Session => old.reopen().await,
                 Credentials::Source(typed) => {
-                    // Same server, database, user and TLS settings; only the password is read
-                    // again, so a changed keychain entry or password command is picked up.
+                    // Same server, database, user, TLS and SSH settings; only the secrets are
+                    // read again, so a changed keychain entry or password command is picked
+                    // up. SSH secrets asked for every time keep this session's answers.
                     let config = old.config().clone();
-                    let password = telecat_app::credentials::resolve_password(
+                    let kept = old.ssh_secrets();
+                    let typed = telecat_app::credentials::Typed {
+                        password: typed,
+                        ssh_password: (config.ssh.password_mode == PasswordMode::Ask)
+                            .then(|| kept.password.as_ref().map(|p| p.to_string()))
+                            .flatten(),
+                        passphrase: (config.ssh.passphrase_mode == PassphraseMode::Ask)
+                            .then(|| kept.passphrase.as_ref().map(|p| p.to_string()))
+                            .flatten(),
+                    };
+                    let credentials = telecat_app::credentials::resolve_credentials(
                         &config,
-                        typed.as_deref(),
+                        &typed,
                         keychain.as_ref(),
                     )
                     .await?;
-                    Session::connect(&config, &password).await
+                    old.reopen_with(credentials).await
                 }
             }
         });
@@ -439,6 +450,17 @@ impl Workspace {
                 self.link.attempts
             ),
         });
+        if let Some(problem) = telecat_app::connect::host_key_problem(&e) {
+            // Never trusted automatically: the user decides, then reconnects.
+            self.link.from_healthy = false;
+            self.link.link = Link::Disconnected {
+                error,
+                retry_at: None,
+            };
+            self.sheet = Some(Sheet::HostKey(Box::new(problem)));
+            cx.notify();
+            return;
+        }
         if self.link.from_healthy {
             // The session it started from still works: keep using it.
             self.link.from_healthy = false;
@@ -954,6 +976,49 @@ impl Workspace {
                 )
                 .child(progress_bar()),
         }
+    }
+    /// Trusts the SSH host key the last reconnect stopped at, and reconnects.
+    pub(super) fn trust_host_key(&mut self, cx: &mut Context<Self>) {
+        let Some(Sheet::HostKey(problem)) = self.sheet.take() else {
+            return;
+        };
+        match telecat_db::ssh::trust_host_key(&self.services.profile.ssh_env, &problem) {
+            Ok(()) => {
+                self.link.attempts = 0;
+                self.attempt(Credentials::Session, cx);
+            }
+            Err(e) => self.show_hint(format!("SSH: {e}"), cx),
+        }
+        cx.notify();
+    }
+    pub(super) fn host_key_sheet(
+        &self,
+        problem: &telecat_db::ssh::HostKeyProblem,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let prompt = telecat_app::connect::host_key_prompt(problem);
+        let mut buttons = div().mt(px(16.)).flex().justify_end().gap(px(8.));
+        if let Some(trust) = prompt.trust {
+            buttons = buttons.child(
+                button("host-key-trust", trust, !prompt.warning, false)
+                    .when(prompt.warning, |d| d.text_color(rgb(0xff8a80)))
+                    .on_click(cx.listener(|this, _, _, cx| this.trust_host_key(cx))),
+            );
+        }
+        buttons = buttons.child(
+            button(
+                "host-key-cancel",
+                if prompt.trust.is_some() {
+                    "Cancel"
+                } else {
+                    "OK"
+                },
+                prompt.warning,
+                false,
+            )
+            .on_click(cx.listener(|this, _, _, cx| this.cancel_sheet(cx))),
+        );
+        crate::ui::host_key_sheet(&prompt).child(buttons)
     }
     pub(super) fn reconnect_password_sheet(&self, cx: &mut Context<Self>) -> Div {
         sheet(380., "Reconnect")

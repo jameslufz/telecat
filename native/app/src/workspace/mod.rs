@@ -100,6 +100,8 @@ enum Sheet {
     CommitUnknown,
     /// The current table's triggers (see `triggers.rs`).
     Triggers,
+    /// A reconnect stopped at an SSH host key the user has to decide on.
+    HostKey(Box<telecat_db::ssh::HostKeyProblem>),
 }
 pub struct Workspace {
     services: Services,
@@ -945,6 +947,18 @@ impl Workspace {
             self.cancel_sheet(cx);
             cx.stop_propagation();
             cx.notify();
+            return;
+        }
+        if key == "enter"
+            && let Some(Sheet::HostKey(p)) = &self.sheet
+        {
+            // Enter trusts an unknown key; a changed one defaults to Cancel.
+            if p.kind == telecat_db::ssh::HostKeyKind::Unknown {
+                self.trust_host_key(cx);
+            } else {
+                self.cancel_sheet(cx);
+            }
+            cx.stop_propagation();
             return;
         }
         if key == "enter" && matches!(self.sheet, Some(Sheet::ReconnectPassword)) {

@@ -1,10 +1,27 @@
 use anyhow::{Context, Result, bail};
 use std::{collections::BTreeMap, sync::Mutex, time::Duration};
-use telecat_core::types::{ConnectionConfig, PasswordMode};
+use telecat_core::types::{ConnectionConfig, PassphraseMode, PasswordMode};
+use telecat_db::{Credentials, ssh::SshSecrets};
 // Keep the original service name so the Telecat rename preserves saved passwords.
 pub const NATIVE_SERVICE: &str = "Telecat Native";
 pub const ELECTRON_SERVICE: &str = "Telecat Safe Storage";
 pub const ELECTRON_ACCOUNT: &str = "Telecat Key";
+/// Keychain account of a connection's SSH password (same service as its database password).
+pub fn ssh_password_account(id: &str) -> String {
+    format!("{id}:ssh")
+}
+/// Keychain account of the passphrase of a connection's SSH private key.
+pub fn ssh_passphrase_account(id: &str) -> String {
+    format!("{id}:ssh-passphrase")
+}
+/// Every Keychain account a connection may have.
+pub fn accounts(id: &str) -> [String; 3] {
+    [
+        id.to_owned(),
+        ssh_password_account(id),
+        ssh_passphrase_account(id),
+    ]
+}
 pub trait Keychain: Send + Sync {
     fn get(&self, service: &str, account: &str) -> Result<Option<Vec<u8>>>;
     fn set(&self, service: &str, account: &str, value: &[u8]) -> Result<()>;
@@ -172,4 +189,139 @@ pub async fn resolve_password(
                 .unwrap_or_default(),
         },
     })
+}
+
+/// Secrets typed for one connect (a form's fields, or answers to "Ask every time").
+#[derive(Clone, Default)]
+pub struct Typed {
+    pub password: Option<String>,
+    pub ssh_password: Option<String>,
+    pub passphrase: Option<String>,
+}
+impl std::fmt::Debug for Typed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let shown = |s: &Option<String>| s.as_ref().map(|_| "…");
+        f.debug_struct("Typed")
+            .field("password", &shown(&self.password))
+            .field("ssh_password", &shown(&self.ssh_password))
+            .field("passphrase", &shown(&self.passphrase))
+            .finish()
+    }
+}
+
+/// A secret that is asked for on every connect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Asked {
+    Password,
+    SshPassword,
+    Passphrase,
+}
+impl Asked {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Password => "Database password",
+            Self::SshPassword => "SSH password",
+            Self::Passphrase => "SSH key passphrase",
+        }
+    }
+}
+
+/// The secrets set to "Ask every time" that connecting to `c` needs. A key passphrase is only
+/// asked for when the chosen key is encrypted.
+pub fn asked_secrets(c: &ConnectionConfig) -> Vec<Asked> {
+    let mut out = vec![];
+    if c.password_mode == PasswordMode::Ask {
+        out.push(Asked::Password);
+    }
+    if c.ssh.enabled {
+        if c.ssh.password_mode == PasswordMode::Ask {
+            out.push(Asked::SshPassword);
+        }
+        if c.ssh.passphrase_mode == PassphraseMode::Ask
+            && c.ssh.key_file().is_some_and(|path| {
+                let home = std::env::var_os("HOME").unwrap_or_default();
+                let path = telecat_db::ssh::config::expand_tilde(path, std::path::Path::new(&home));
+                telecat_db::ssh::key_is_encrypted(std::path::Path::new(&path)).unwrap_or(false)
+            })
+        {
+            out.push(Asked::Passphrase);
+        }
+    }
+    out
+}
+
+fn keychain_text(keychain: &dyn Keychain, account: &str) -> Result<Option<String>> {
+    Ok(keychain
+        .get(NATIVE_SERVICE, account)?
+        .map(String::from_utf8)
+        .transpose()?)
+}
+
+/// Every secret connecting to `c` needs: typed ones first, then each one's source (Keychain,
+/// password command).
+pub async fn resolve_credentials(
+    c: &ConnectionConfig,
+    typed: &Typed,
+    keychain: &dyn Keychain,
+) -> Result<Credentials> {
+    let password = resolve_password(c, typed.password.as_deref(), keychain).await?;
+    if !c.ssh.enabled {
+        return Ok(Credentials::password(password));
+    }
+    let ssh_password = match c.ssh.password_mode {
+        PasswordMode::None => None,
+        PasswordMode::Ask => typed.ssh_password.clone(),
+        PasswordMode::Command => Some(
+            run_password_command(c.ssh.password_command.as_deref().unwrap_or(""))
+                .await
+                .map_err(|e| anyhow::anyhow!("SSH: {e}"))?,
+        ),
+        PasswordMode::Keychain => match &typed.ssh_password {
+            Some(v) => Some(v.clone()),
+            None => keychain_text(keychain, &ssh_password_account(&c.id))?,
+        },
+    };
+    let passphrase = match (&typed.passphrase, c.ssh.passphrase_mode) {
+        (Some(v), _) => Some(v.clone()),
+        (None, PassphraseMode::Ask) => None,
+        (None, PassphraseMode::Keychain) => {
+            keychain_text(keychain, &ssh_passphrase_account(&c.id))?
+        }
+    };
+    Ok(Credentials {
+        password,
+        ssh: SshSecrets::new(ssh_password, passphrase),
+    })
+}
+
+/// `typed` with the Keychain secrets `c` uses filled in where nothing was typed, so the connect
+/// that follows doesn't touch the Keychain. Blocking: call it off the UI thread.
+pub fn with_keychain_secrets(
+    c: &ConnectionConfig,
+    mut typed: Typed,
+    keychain: &dyn Keychain,
+) -> Result<Typed> {
+    if typed.password.is_none() && c.password_mode == PasswordMode::Keychain {
+        typed.password = keychain_text(keychain, &c.id)?;
+    }
+    if c.ssh.enabled {
+        if typed.ssh_password.is_none() && c.ssh.password_mode == PasswordMode::Keychain {
+            typed.ssh_password = keychain_text(keychain, &ssh_password_account(&c.id))?;
+        }
+        if typed.passphrase.is_none() && c.ssh.passphrase_mode == PassphraseMode::Keychain {
+            typed.passphrase = keychain_text(keychain, &ssh_passphrase_account(&c.id))?;
+        }
+    }
+    Ok(typed)
+}
+
+/// A connect error as the user sees it: over SSH, which side failed ("SSH: …" or
+/// "Database: …").
+pub fn connect_error_message(c: &ConnectionConfig, e: &anyhow::Error) -> String {
+    let text = e.to_string();
+    if c.ssh.enabled && telecat_db::ssh::ssh_error(e).is_none() && !text.starts_with("SSH: ") {
+        format!("Database: {text}")
+    } else {
+        text
+    }
 }

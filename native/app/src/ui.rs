@@ -249,3 +249,84 @@ pub fn text_tooltip(
     let text = text.into();
     move |_, cx| cx.new(|_| TextTooltip(text.clone())).into()
 }
+/// A checkbox and its label. The caller handles the click.
+pub fn checkbox(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    on: bool,
+    disabled: bool,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .gap(px(7.))
+        .flex_shrink_0()
+        .text_size(px(12.5))
+        .opacity(if disabled { 0.45 } else { 1. })
+        .child(
+            div()
+                .size(px(15.))
+                .flex_shrink_0()
+                .rounded(px(4.))
+                .border_1()
+                .border_color(rgb(if on { 0x2f6fed } else { 0x5a5a5a }))
+                .bg(rgb(if on { 0x2f6fed } else { telecat_theme::INPUT }))
+                .flex()
+                .items_center()
+                .justify_center()
+                .when(on, |d| d.child(icon("Check.svg", 12., 0xffffff))),
+        )
+        .child(label.into())
+        .when(!disabled, |d| {
+            d.tab_index(0)
+                .cursor_pointer()
+                .focus_visible(|s| s.text_color(rgb(telecat_theme::ACCENT)))
+        })
+}
+/// The body of the sheet asking about an SSH server's host key; the caller adds the buttons.
+pub fn host_key_sheet(p: &telecat_app::connect::HostKeyPrompt) -> Div {
+    let mut d = sheet(500., p.title.clone())
+        .child(
+            div()
+                .text_size(px(12.))
+                .line_height(px(16.))
+                .text_color(rgb(if p.warning {
+                    0xffb4ae
+                } else {
+                    telecat_theme::TEXT_SECONDARY
+                }))
+                .child(p.detail.clone()),
+        )
+        .child(
+            div()
+                .id("host-key-fingerprint")
+                .mt(px(12.))
+                .px(px(10.))
+                .py(px(8.))
+                .rounded(px(7.))
+                .bg(rgb(telecat_theme::INPUT))
+                .font(telecat_theme::mono())
+                .text_size(px(11.5))
+                .child(p.presented.clone()),
+        );
+    if !p.recorded.is_empty() {
+        d = d
+            .child(
+                div()
+                    .mt(px(10.))
+                    .text_size(px(11.5))
+                    .text_color(rgb(telecat_theme::MUTED))
+                    .child("On record:"),
+            )
+            .children(p.recorded.iter().map(|r| {
+                div()
+                    .mt(px(3.))
+                    .font(telecat_theme::mono())
+                    .text_size(px(11.))
+                    .text_color(rgb(telecat_theme::TEXT_SECONDARY))
+                    .child(r.clone())
+            }));
+    }
+    d
+}

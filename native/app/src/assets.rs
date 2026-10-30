@@ -5,6 +5,7 @@ impl AssetSource for Assets {
     fn load(&self, path: &str) -> gpui_kit::Result<Option<Cow<'static, [u8]>>> {
         Ok(match path {
             "spinner.svg" => Some(Cow::Borrowed(include_bytes!("../assets/spinner.svg"))),
+            "Check.svg" => Some(Cow::Borrowed(include_bytes!("../assets/Check.svg"))),
             "ChevronDown.svg" => Some(Cow::Borrowed(include_bytes!("../assets/ChevronDown.svg"))),
             "ChevronUp.svg" => Some(Cow::Borrowed(include_bytes!("../assets/ChevronUp.svg"))),
             "ChevronLeft.svg" => Some(Cow::Borrowed(include_bytes!("../assets/ChevronLeft.svg"))),

@@ -201,8 +201,9 @@ fn validation_and_search_match_electron() -> Result<()> {
     );
     assert_eq!(menu[0]["label"], "Connect");
     assert_eq!(menu[1]["label"], "Edit…");
-    assert_eq!(menu[4]["label"], "Move to Group");
-    assert_eq!(menu[6]["label"], "Delete");
+    assert_eq!(menu[3]["label"], "Copy as URL…");
+    assert_eq!(menu[5]["label"], "Move to Group");
+    assert_eq!(menu[7]["label"], "Delete");
     Ok(())
 }
 #[tokio::test]

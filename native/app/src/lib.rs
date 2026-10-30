@@ -1,4 +1,5 @@
 pub mod commit;
+pub mod connect;
 pub mod credentials;
 pub mod form;
 pub mod import;

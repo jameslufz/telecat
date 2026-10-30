@@ -1,4 +1,6 @@
-use crate::credentials::{Keychain, NATIVE_SERVICE};
+use crate::credentials::{
+    Keychain, NATIVE_SERVICE, accounts, ssh_passphrase_account, ssh_password_account,
+};
 use anyhow::{Context, Result, bail};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -12,9 +14,19 @@ use std::{
 };
 use telecat_core::types::*;
 use uuid::Uuid;
+/// The secrets saved with a connection; `None` keeps what the Keychain already has.
+#[derive(Clone, Copy, Default)]
+pub struct Secrets<'a> {
+    pub password: Option<&'a str>,
+    pub ssh_password: Option<&'a str>,
+    pub passphrase: Option<&'a str>,
+}
 pub struct Profile {
     pub root: PathBuf,
     pub keychain: Arc<dyn Keychain>,
+    /// Where SSH settings, keys and known hosts come from; Telecat's own known_hosts file is
+    /// in the profile.
+    pub ssh_env: telecat_db::ssh::SshEnv,
     // Guards serialize atomic file operations; no mutable in-memory state is protected.
     // After a worker panic, recovering the guard re-reads the last complete JSON file.
     gate: Mutex<()>,
@@ -23,6 +35,7 @@ pub struct Profile {
 impl Profile {
     pub fn new(root: PathBuf, keychain: Arc<dyn Keychain>) -> Self {
         Self {
+            ssh_env: telecat_db::ssh::SshEnv::system(root.join("known_hosts")),
             root,
             keychain,
             gate: Mutex::new(()),
@@ -53,15 +66,40 @@ impl Profile {
             groups: vec![],
         })
     }
+    /// Changes the saved connections. When the file exists but can't be read (damaged, or
+    /// written by a newer Telecat), nothing is written: an empty list must never replace it.
     fn edit<T>(&self, f: impl FnOnce(&mut StoreSnapshot) -> Result<T>) -> Result<T> {
         let _lock = self
             .gate
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut s = self.snapshot_unlocked();
+        let path = self.root.join("connections.json");
+        let mut s = if path.exists() {
+            read_json(&path).map_err(|e| {
+                anyhow::anyhow!(
+                    "Telecat couldn't read its saved connections ({e}), so nothing was changed. The file is {}.",
+                    path.display()
+                )
+            })?
+        } else {
+            StoreSnapshot {
+                connections: vec![],
+                groups: vec![],
+            }
+        };
         let value = f(&mut s)?;
-        atomic_json(&self.root.join("connections.json"), &s)?;
+        self.keep_backup(&path)?;
+        atomic_json(&path, &s)?;
         Ok(value)
+    }
+    /// Before this version first changes the connections file, a copy of it as older
+    /// versions wrote it.
+    fn keep_backup(&self, path: &Path) -> Result<()> {
+        let backup = self.root.join(BACKUP_FILE);
+        if path.exists() && !backup.exists() {
+            atomic_write(&backup, &fs::read(path)?)?;
+        }
+        Ok(())
     }
     pub fn seed(&self, s: &StoreSnapshot) -> Result<()> {
         let _lock = self
@@ -75,8 +113,23 @@ impl Profile {
     }
     pub fn save_connection(
         &self,
-        mut c: ConnectionConfig,
+        c: ConnectionConfig,
         password: Option<&str>,
+    ) -> Result<ConnectionConfig> {
+        self.save_connection_with(
+            c,
+            Secrets {
+                password,
+                ..Secrets::default()
+            },
+        )
+    }
+    /// Saves `c`. Each secret is stored in the Keychain when its mode keeps it there (and a value
+    /// is given), and removed from it when its mode doesn't.
+    pub fn save_connection_with(
+        &self,
+        mut c: ConnectionConfig,
+        secrets: Secrets<'_>,
     ) -> Result<ConnectionConfig> {
         let _secret_lock = self
             .secret_gate
@@ -85,12 +138,28 @@ impl Profile {
         if c.id.is_empty() {
             c.id = Uuid::new_v4().to_string();
         }
-        if c.password_mode == PasswordMode::Keychain {
-            if let Some(p) = password {
-                self.keychain.set(NATIVE_SERVICE, &c.id, p.as_bytes())?;
+        for (account, keep, value) in [
+            (
+                c.id.clone(),
+                c.password_mode == PasswordMode::Keychain,
+                secrets.password,
+            ),
+            (
+                ssh_password_account(&c.id),
+                c.ssh.password_mode == PasswordMode::Keychain,
+                secrets.ssh_password,
+            ),
+            (
+                ssh_passphrase_account(&c.id),
+                c.ssh.passphrase_mode == PassphraseMode::Keychain,
+                secrets.passphrase,
+            ),
+        ] {
+            match (keep, value) {
+                (true, Some(v)) => self.keychain.set(NATIVE_SERVICE, &account, v.as_bytes())?,
+                (true, None) => {}
+                (false, _) => self.keychain.delete(NATIVE_SERVICE, &account)?,
             }
-        } else {
-            self.keychain.delete(NATIVE_SERVICE, &c.id)?;
         }
         self.edit(|s| {
             if let Some(old) = s.connections.iter_mut().find(|v| v.id == c.id) {
@@ -121,7 +190,10 @@ impl Profile {
             s.connections.retain(|c| c.id != id);
             Ok(())
         })?;
-        self.keychain.delete(NATIVE_SERVICE, id)
+        for account in accounts(id) {
+            self.keychain.delete(NATIVE_SERVICE, &account)?;
+        }
+        Ok(())
     }
     /// Mode-only edits must not resolve or modify the stored credential.
     pub fn set_safe_mode(&self, id: &str, mode: SafeMode) -> Result<()> {
@@ -137,14 +209,38 @@ impl Profile {
     }
     pub fn duplicate_connection(&self, id: &str) -> Result<ConnectionConfig> {
         let mut c = self.connection(id).context("Connection not found")?;
-        let password = self
-            .keychain
-            .get(NATIVE_SERVICE, id)?
-            .map(String::from_utf8)
-            .transpose()?;
+        let read = |account: &str| -> Result<Option<String>> {
+            Ok(self
+                .keychain
+                .get(NATIVE_SERVICE, account)?
+                .map(String::from_utf8)
+                .transpose()?)
+        };
+        let password = read(id)?;
+        let ssh_password = read(&ssh_password_account(id))?;
+        let passphrase = read(&ssh_passphrase_account(id))?;
         c.id.clear();
         c.name.push_str(" copy");
-        self.save_connection(c, password.as_deref())
+        self.save_connection_with(
+            c,
+            Secrets {
+                password: password.as_deref(),
+                ssh_password: ssh_password.as_deref(),
+                passphrase: passphrase.as_deref(),
+            },
+        )
+    }
+    /// The saved secrets of a connection (each `None` when not in the Keychain), for its form.
+    pub fn saved_secrets(&self, id: &str) -> Result<[Option<String>; 3]> {
+        let mut out = [None, None, None];
+        for (slot, account) in out.iter_mut().zip(accounts(id)) {
+            *slot = self
+                .keychain
+                .get(NATIVE_SERVICE, &account)?
+                .map(String::from_utf8)
+                .transpose()?;
+        }
+        Ok(out)
     }
     pub fn save_group(&self, mut g: ConnectionGroup) -> Result<ConnectionGroup> {
         if g.id.is_empty() {
@@ -336,6 +432,8 @@ impl Profile {
         Ok(true)
     }
 }
+/// The connections file as it was before Telecat 0.7 first changed it.
+pub const BACKUP_FILE: &str = "connections.before-0.7.json";
 pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
     let meta = fs::metadata(path)?;
     if meta.len() > 32 * 1024 * 1024 {
@@ -440,8 +538,8 @@ pub fn delete_connection_prompt(c: &ConnectionConfig) -> (String, String) {
     };
     (
         format!("Delete the connection {name}?"),
-        if c.password_mode == PasswordMode::Keychain {
-            "Its saved password is removed from the macOS Keychain too. This can't be undone."
+        if c.password_mode == PasswordMode::Keychain || c.ssh.enabled {
+            "Its saved passwords (database and SSH) are removed from the macOS Keychain too. This can't be undone."
                 .into()
         } else {
             "Any password Telecat saved for it in the macOS Keychain is removed too. This can't be undone."
@@ -483,5 +581,5 @@ pub fn connection_menu(c: &ConnectionConfig, s: &StoreSnapshot) -> Value {
         json!({"type":"separator"}),
         json!({"id":"move-new","label":"New Group…"}),
     ]);
-    json!([{"id":"connect","label":"Connect"},{"id":"edit","label":"Edit…"},{"id":"duplicate","label":"Duplicate"},{"type":"separator"},{"label":"Move to Group","submenu":groups},{"type":"separator"},{"id":"delete","label":"Delete"}])
+    json!([{"id":"connect","label":"Connect"},{"id":"edit","label":"Edit…"},{"id":"duplicate","label":"Duplicate"},{"id":"copy-url","label":"Copy as URL…"},{"type":"separator"},{"label":"Move to Group","submenu":groups},{"type":"separator"},{"id":"delete","label":"Delete"}])
 }

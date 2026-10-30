@@ -4,6 +4,7 @@ mod import;
 mod metadata;
 mod objects;
 mod result_sources;
+pub mod ssh;
 mod tls;
 mod values;
 mod wire;
@@ -15,20 +16,24 @@ pub use import::{
 };
 pub use objects::{EXPORT_CHUNK, RoutineDefinition};
 use serde_json::Value;
+use ssh::{SshEnv, SshSecrets, Tunnel};
+use std::sync::Arc;
 use telecat_core::{
     changes::{NOT_UNIQUE, ROW_MISSING, Stmt},
     sql::{first_keyword, split_statements},
     types::*,
 };
 use tokio::sync::Mutex;
-use wire::Wire;
 pub use wire::{
     CONNECT_TIMEOUT, RowSink, ServerError, buffer_cell, format_bytes, is_auth_failure,
     is_connection_lost, validate_endpoint, validate_test_endpoint,
 };
+use wire::{Route, Wire};
+use zeroize::Zeroizing;
 #[cfg(feature = "test-support")]
 pub mod test_proxy;
 /// How long a whole [`Session::connect`] may take: three connections, TLS fallback included.
+/// Logging in to an SSH server comes before and has its own limits.
 const SESSION_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(25);
 /// How far the last commit call got. Readable while that call hangs on a dead connection or
 /// after it was abandoned, so an interrupted save can be judged honestly.
@@ -170,8 +175,9 @@ pub enum CommitVerdict {
 }
 
 /// The commit connection and its server id.
-async fn open_admin(config: &ConnectionConfig, password: &str) -> Result<(Wire, BackendIdentity)> {
-    let mut admin = Wire::connect(config, password).await?;
+async fn open_admin(route: &Route<'_>) -> Result<(Wire, BackendIdentity)> {
+    let config = route.config;
+    let mut admin = Wire::connect(route).await?;
     // Same timeout and best-effort behavior as Electron main/index.ts:admin.
     let _ = admin
         .run(
@@ -279,15 +285,14 @@ async fn backend_id(conn: &mut Wire, driver: Driver) -> Result<String> {
 /// The commit connection, reopened when an earlier failure had to close it.
 async fn take_admin(
     slot: &mut Option<Wire>,
-    config: &ConnectionConfig,
-    password: &str,
+    route: &Route<'_>,
     id: &std::sync::Mutex<Option<BackendIdentity>>,
 ) -> Result<Wire> {
     match slot.take() {
         Some(conn) if !conn.is_closed() => Ok(conn),
         _ => {
             // The cause stays in the chain, so a dropped network is still recognised as one.
-            let (conn, backend) = open_admin(config, password).await.map_err(|e| {
+            let (conn, backend) = open_admin(route).await.map_err(|e| {
                 let message =
                     format!("The commit connection was lost and could not be reopened: {e:#}");
                 e.context(message)
@@ -328,15 +333,7 @@ async fn swap_settings(
             OBJECT_SETTINGS.contains(&name.as_str()),
             "Unsupported session setting {name}"
         );
-        let old = conn
-            .run(&format!("SELECT @@SESSION.{name}"), &[])
-            .await?
-            .0
-            .rows
-            .into_iter()
-            .next()
-            .and_then(|r| r.into_iter().next().flatten())
-            .unwrap_or_default();
+        let old = session_value(conn, name).await?;
         conn.run(
             &format!("SET SESSION {name} = ?"),
             &[Value::String(value.clone())],
@@ -345,6 +342,18 @@ async fn swap_settings(
         previous.push((name.clone(), old));
     }
     Ok(previous)
+}
+/// The connection's own value of the MySQL session variable `name` (a fixed, known name).
+async fn session_value(conn: &mut Wire, name: &str) -> Result<String> {
+    Ok(conn
+        .run(&format!("SELECT @@SESSION.{name}"), &[])
+        .await?
+        .0
+        .rows
+        .into_iter()
+        .next()
+        .and_then(|r| r.into_iter().next().flatten())
+        .unwrap_or_default())
 }
 pub struct Session {
     pub driver: Driver,
@@ -367,24 +376,124 @@ pub struct Session {
     admin_backend: std::sync::Mutex<Option<BackendIdentity>>,
     commit: std::sync::Mutex<CommitProgress>,
     pub(crate) import: std::sync::Mutex<CommitProgress>,
-    password: String,
+    password: Zeroizing<String>,
     config: ConnectionConfig,
+    /// The SSH tunnel every connection goes through, shared with sessions reopened from this
+    /// one; taken out by `close`. It shuts down when no session holds it any more.
+    tunnel: std::sync::Mutex<Option<Arc<Tunnel>>>,
+    ssh: SshSecrets,
+    ssh_env: Option<SshEnv>,
+    /// The connection's startup SQL, split and checked.
+    startup: Vec<String>,
+    /// Opened by a test: every connection stays inside the test fence.
+    fenced: bool,
+}
+/// What a session logs in with: the database password and, over SSH, the SSH secrets.
+#[derive(Clone, Default)]
+pub struct Credentials {
+    pub password: String,
+    pub ssh: SshSecrets,
+}
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Credentials")
+            .field("password", &"…")
+            .field("ssh", &self.ssh)
+            .finish()
+    }
+}
+impl Credentials {
+    pub fn password(password: impl Into<String>) -> Self {
+        Self {
+            password: password.into(),
+            ssh: SshSecrets::default(),
+        }
+    }
+}
+/// Everything a session is opened from.
+struct Setup {
+    config: ConnectionConfig,
+    password: Zeroizing<String>,
+    ssh: SshSecrets,
+    ssh_env: Option<SshEnv>,
+    tunnel: Option<Arc<Tunnel>>,
+    startup: Vec<String>,
+    fenced: bool,
+}
+impl Setup {
+    fn route(&self) -> Route<'_> {
+        Route {
+            config: &self.config,
+            password: &self.password,
+            tunnel: self.tunnel.clone(),
+            startup: &self.startup,
+            fenced: self.fenced,
+        }
+    }
 }
 impl Session {
     /// Tests use this constructor, avoiding process-global env changes/races.
     pub async fn connect_test(config: &ConnectionConfig, password: &str) -> Result<Self> {
-        validate_test_endpoint(config)?;
-        Self::connect(config, password).await
+        Self::connect_test_with(config, Credentials::password(password), None).await
     }
-    /// Opens every connection, or fails within [`SESSION_CONNECT_TIMEOUT`].
+    /// [`Self::connect_with`] inside the test fence (see `validate_test_endpoint`).
+    pub async fn connect_test_with(
+        config: &ConnectionConfig,
+        credentials: Credentials,
+        ssh_env: Option<&SshEnv>,
+    ) -> Result<Self> {
+        validate_test_endpoint(config)?;
+        Self::establish(config, credentials, ssh_env, true).await
+    }
+    /// Opens every connection, or fails within [`SESSION_CONNECT_TIMEOUT`]. A connection over
+    /// SSH needs [`Self::connect_with`].
     pub async fn connect(config: &ConnectionConfig, password: &str) -> Result<Self> {
+        Self::connect_with(config, Credentials::password(password), None).await
+    }
+    /// Logs in to the SSH server first when the connection goes over SSH (`ssh_env` says where
+    /// its settings, keys and known hosts are), then opens every database connection.
+    pub async fn connect_with(
+        config: &ConnectionConfig,
+        credentials: Credentials,
+        ssh_env: Option<&SshEnv>,
+    ) -> Result<Self> {
+        Self::establish(config, credentials, ssh_env, false).await
+    }
+    async fn establish(
+        config: &ConnectionConfig,
+        credentials: Credentials,
+        ssh_env: Option<&SshEnv>,
+        fenced: bool,
+    ) -> Result<Self> {
         validate_endpoint(config)?;
-        tokio::time::timeout(SESSION_CONNECT_TIMEOUT, Self::open(config, password))
+        let startup =
+            telecat_core::startup::startup_statements(&config.startup_sql, config.driver)?;
+        let tunnel = if config.ssh.enabled {
+            let env = ssh_env.context("SSH settings are unavailable for this connection")?;
+            Some(Tunnel::open(config, credentials.ssh.clone(), env, fenced).await?)
+        } else {
+            None
+        };
+        Self::open(Setup {
+            config: config.clone(),
+            password: Zeroizing::new(credentials.password),
+            ssh: credentials.ssh,
+            ssh_env: ssh_env.cloned(),
+            tunnel,
+            startup,
+            fenced,
+        })
+        .await
+    }
+    async fn open(setup: Setup) -> Result<Self> {
+        tokio::time::timeout(SESSION_CONNECT_TIMEOUT, Self::open_connections(setup))
             .await
             .context("Connection timeout")?
     }
-    async fn open(config: &ConnectionConfig, password: &str) -> Result<Self> {
-        let mut data = Wire::connect(config, password).await?;
+    async fn open_connections(setup: Setup) -> Result<Self> {
+        let route = setup.route();
+        let config = &setup.config;
+        let mut data = Wire::connect(&route).await?;
         let pg = config.driver == Driver::Postgres;
         let version = data
             .run(
@@ -435,8 +544,9 @@ impl Session {
                     .flatten()
             })
             .filter(|s| !s.is_empty());
-        let (admin, admin_backend) = open_admin(config, password).await?;
-        let control = Wire::connect(config, password).await?;
+        let (admin, admin_backend) = open_admin(&route).await?;
+        let control = Wire::connect(&route).await?;
+        drop(route);
         Ok(Self {
             driver: config.driver,
             backend_id: row[2].clone().unwrap_or_default(),
@@ -457,23 +567,107 @@ impl Session {
             admin_backend: std::sync::Mutex::new(Some(admin_backend)),
             commit: Default::default(),
             import: Default::default(),
-            password: password.into(),
-            config: config.clone(),
+            password: setup.password,
+            config: setup.config,
+            tunnel: std::sync::Mutex::new(setup.tunnel),
+            ssh: setup.ssh,
+            ssh_env: setup.ssh_env,
+            startup: setup.startup,
+            fenced: setup.fenced,
         })
+    }
+    /// How this session's connections are opened: through its tunnel, with its startup SQL.
+    pub(crate) fn route(&self) -> Route<'_> {
+        self.route_for(&self.config)
+    }
+    /// [`Self::route`] with other settings of the same server (another database).
+    pub(crate) fn route_for<'a>(&'a self, config: &'a ConnectionConfig) -> Route<'a> {
+        Route {
+            config,
+            password: &self.password,
+            tunnel: self.tunnel(),
+            startup: &self.startup,
+            fenced: self.fenced,
+        }
+    }
+    fn tunnel(&self) -> Option<Arc<Tunnel>> {
+        self.tunnel
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+    /// A session like this one for `config`, logging in with `credentials` when given (else
+    /// with this session's). Over SSH it shares this session's tunnel, logging in to the SSH
+    /// server again first when that connection dropped.
+    async fn successor(
+        &self,
+        config: ConnectionConfig,
+        credentials: Option<Credentials>,
+    ) -> Result<Self> {
+        validate_endpoint(&config)?;
+        if self.fenced {
+            validate_test_endpoint(&config)?;
+        }
+        let (password, ssh) = match credentials {
+            Some(c) => (Zeroizing::new(c.password), c.ssh),
+            None => (self.password.clone(), self.ssh.clone()),
+        };
+        let tunnel = if config.ssh.enabled {
+            Some(match self.tunnel() {
+                Some(tunnel) => {
+                    tunnel.set_secrets(ssh.clone());
+                    tunnel.refresh().await?;
+                    tunnel
+                }
+                None => {
+                    let env = self
+                        .ssh_env
+                        .as_ref()
+                        .context("SSH settings are unavailable for this connection")?;
+                    Tunnel::open(&config, ssh.clone(), env, self.fenced).await?
+                }
+            })
+        } else {
+            None
+        };
+        Self::open(Setup {
+            config,
+            password,
+            ssh,
+            ssh_env: self.ssh_env.clone(),
+            tunnel,
+            startup: self.startup.clone(),
+            fenced: self.fenced,
+        })
+        .await
     }
     /// Reconnect all workers before replacing the caller's session. Failure leaves
     /// the original session usable; credentials remain in memory, never re-read.
     pub async fn with_database(&self, database: &str) -> Result<Self> {
         let mut config = self.config.clone();
         config.database = database.to_owned();
-        Self::connect(&config, &self.password).await
+        self.successor(config, None).await
     }
     /// A new session to the same server, database and user with the same password and TLS
     /// settings: every connection reopened, with the session setup Telecat applies itself.
     /// Nothing the user ran in the old session (variables, temporary tables, transactions)
-    /// carries over.
+    /// carries over. Over SSH, the SSH connection is checked and re-established first.
     pub async fn reopen(&self) -> Result<Self> {
-        Self::connect(&self.config, &self.password).await
+        self.successor(self.config.clone(), None).await
+    }
+    /// [`Self::reopen`] with credentials read again from their source.
+    pub async fn reopen_with(&self, credentials: Credentials) -> Result<Self> {
+        self.successor(self.config.clone(), Some(credentials)).await
+    }
+    /// The local port of this session's SSH tunnel.
+    #[cfg(feature = "test-support")]
+    pub fn tunnel_port(&self) -> Option<u16> {
+        self.tunnel().map(|t| t.port())
+    }
+    /// The SSH secrets this session logged in with, for a reconnect that only re-reads the
+    /// database password.
+    pub fn ssh_secrets(&self) -> SshSecrets {
+        self.ssh.clone()
     }
     /// The settings this session was opened with (its current database included).
     pub fn config(&self) -> &ConnectionConfig {
@@ -501,6 +695,11 @@ impl Session {
     /// plus PostgreSQL's own closed flag on the other connections. A connection whose ping
     /// timed out is discarded, since its replies may still arrive.
     pub async fn ping(&self, timeout: std::time::Duration) -> Result<()> {
+        if self.tunnel().is_some_and(|t| t.is_down()) {
+            return Err(
+                ssh::SshError::Lost("the connection to the SSH server dropped.".into()).into(),
+            );
+        }
         for slot in [&self.data, &self.admin, &self.reader] {
             if let Ok(guard) = slot.try_lock() {
                 if guard.as_ref().is_some_and(Wire::is_closed) {
@@ -513,7 +712,7 @@ impl Session {
         };
         let result = tokio::time::timeout(timeout, async {
             if slot.is_none() {
-                *slot = Some(Wire::connect(&self.config, &self.password).await?);
+                *slot = Some(Wire::connect(&self.route()).await?);
             }
             slot.as_mut().context("Connection is closed")?.ping().await
         })
@@ -571,8 +770,7 @@ impl Session {
     /// Inspect engine requirements before presenting the confirmation. Revalidated at execution.
     pub async fn review_commit(&self, stmts: &[Stmt]) -> Result<CommitReview> {
         let mut slot = self.admin.lock().await;
-        let mut conn =
-            take_admin(&mut slot, &self.config, &self.password, &self.admin_backend).await?;
+        let mut conn = take_admin(&mut slot, &self.route(), &self.admin_backend).await?;
         let review = guards::review(&mut conn, self.driver, &self.database, stmts).await;
         *slot = Some(conn);
         review
@@ -687,8 +885,7 @@ impl Session {
             }
         });
         let mut slot = self.admin.lock().await;
-        let mut conn =
-            take_admin(&mut slot, &self.config, &self.password, &self.admin_backend).await?;
+        let mut conn = take_admin(&mut slot, &self.route(), &self.admin_backend).await?;
         let identity = self
             .admin_backend
             .lock()
@@ -715,6 +912,23 @@ impl Session {
                 }
             }
         };
+        // A MySQL transaction that runs under a result's time_zone puts back the commit
+        // connection's own zone afterwards: the one its startup SQL set, not the server default,
+        // or later saves would read and write TIMESTAMPs in another zone than the table reads.
+        let mut own_settings = vec![];
+        if tx && self.driver == Driver::Mysql {
+            for (name, _) in settings.iter().filter(|(n, _)| n == "time_zone") {
+                match session_value(&mut conn, name).await {
+                    Ok(value) => own_settings.push((name.clone(), value)),
+                    Err(e) => {
+                        // Its state is unknown now: the next save opens a fresh connection.
+                        conn.close().await;
+                        self.note_commit(|p| p.finished = true);
+                        return Err(e.context("Couldn't read the commit connection's time zone"));
+                    }
+                }
+            }
+        }
         let mut nontransactional_started = false;
         let result = async {
             let review = if tx { guards::review(&mut conn, self.driver, &self.database, stmts).await? } else { CommitReview::default() };
@@ -736,7 +950,7 @@ impl Session {
                 }
                 for (name, value) in settings {
                     match self.driver {
-                        // Reset to the global value after this transaction (see below).
+                        // Put back after this transaction (`own_settings`).
                         Driver::Mysql if name == "time_zone" => conn.run("SET SESSION time_zone = ?", &[Value::String(value.clone())]).await?,
                         Driver::Mysql => bail!("Unsupported MySQL session setting {name}"),
                         // `true`: for this transaction only.
@@ -828,8 +1042,12 @@ impl Session {
             if let Err(e) = async {
                 conn.run("UNLOCK TABLES", &[]).await?;
                 conn.run("SET autocommit=1", &[]).await?;
-                if !settings.is_empty() {
-                    conn.run("SET SESSION time_zone = DEFAULT", &[]).await?;
+                for (name, value) in &own_settings {
+                    conn.run(
+                        &format!("SET SESSION {name} = ?"),
+                        &[Value::String(value.clone())],
+                    )
+                    .await?;
                 }
                 Ok::<_, anyhow::Error>(())
             }
@@ -888,7 +1106,7 @@ impl Session {
     async fn control_run(&self, sql: &str) -> Result<QueryResult> {
         let mut slot = self.control.lock().await;
         if slot.as_ref().is_none_or(Wire::is_closed) {
-            *slot = Some(Wire::connect(&self.config, &self.password).await?);
+            *slot = Some(Wire::connect(&self.route()).await?);
         }
         let result = slot
             .as_mut()
@@ -953,7 +1171,7 @@ impl Session {
     /// Lock timeouts only: a table the editor's own transaction holds locked fails the read after
     /// 15 s instead of hanging every later table load. They don't change how values render.
     pub(crate) async fn open_reader(&self) -> Result<Wire> {
-        let mut reader = Wire::connect(&self.config, &self.password).await?;
+        let mut reader = Wire::connect(&self.route()).await?;
         reader
             .run(
                 if self.driver == Driver::Postgres {
@@ -995,6 +1213,8 @@ impl Session {
             })
             .await;
         }
+        // The tunnel closes once no other session (one reopened from this) holds it.
+        self.tunnel.lock().unwrap_or_else(|e| e.into_inner()).take();
     }
     /// After a reconnect, whether the commit that `progress` (read from the old session)
     /// describes reached the database. `checks` are the MySQL row checks of its statements
@@ -1055,9 +1275,7 @@ impl Session {
             }
             Driver::Mysql => {
                 let mut slot = self.admin.lock().await;
-                let mut conn =
-                    take_admin(&mut slot, &self.config, &self.password, &self.admin_backend)
-                        .await?;
+                let mut conn = take_admin(&mut slot, &self.route(), &self.admin_backend).await?;
                 let mut holds = async |check: &Option<telecat_core::changes::Check>| {
                     Ok::<_, anyhow::Error>(match check {
                         Some(c) => {
