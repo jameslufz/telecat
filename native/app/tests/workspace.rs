@@ -250,10 +250,11 @@ async fn live(driver: Driver) -> Result<()> {
             value2: None,
         }],
         combine: Combine::And,
-        order_by: Some(OrderBy {
+        order_by: vec![OrderBy {
             column: "id".into(),
             dir: Direction::Desc,
-        }),
+        }],
+        estimate: false,
         limit: 2,
         offset: 2,
     };

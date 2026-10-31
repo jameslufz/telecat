@@ -102,6 +102,7 @@ pub fn state(name: &str) -> WorkspaceState {
         let data = TableDataResult {
             result: s.current().grid.result.clone(),
             total: 500,
+            estimated: false,
             primary_key: vec!["id".into()],
             row_ids: None,
         };
@@ -139,6 +140,7 @@ pub fn state(name: &str) -> WorkspaceState {
             t.show_filters = true;
             t.filters = if name.starts_with("08") {
                 vec![Filter {
+                    op: FilterOp::Contains,
                     value: "KBZ".into(),
                     ..new_filter()
                 }]

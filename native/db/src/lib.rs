@@ -1,4 +1,5 @@
 //! Pure Rust drivers. Integration tests explicitly enable the test endpoint fence.
+mod columns;
 mod guards;
 mod import;
 mod metadata;

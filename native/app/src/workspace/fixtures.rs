@@ -561,6 +561,7 @@ pub fn state(name: &str) -> WorkspaceState {
             t.load_data(&TableDataResult {
                 result: tab.grid.result.clone(),
                 total: tab.total,
+                estimated: false,
                 primary_key: match t.table.name.as_str() {
                     "user_bindings" => vec![],
                     "members" => vec!["MEMBER_ID".into()],

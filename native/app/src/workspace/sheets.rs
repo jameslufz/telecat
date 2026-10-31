@@ -8,55 +8,14 @@ impl Workspace {
             }))
         };
         let content = match s {
-            Sheet::QuickLook { title, value } => {
-                let pretty = if value.trim_start().starts_with(['[', '{']) {
-                    serde_json::from_str::<serde_json::Value>(value)
-                        .ok()
-                        .and_then(|v| serde_json::to_string_pretty(&v).ok())
-                        .unwrap_or_else(|| value.clone())
-                } else {
-                    value.clone()
-                };
-                let copy = value.clone();
-                sheet(640., title.clone())
-                    .child(
-                        div()
-                            .relative()
-                            .child(
-                                div()
-                                    .id("quick-look")
-                                    .max_h(px(self.viewport_height * 0.6))
-                                    .overflow_y_scroll()
-                                    .track_scroll(&self.detail_scroll)
-                                    .font(mono())
-                                    .text_size(px(11.5))
-                                    .line_height(px(13.5))
-                                    .p(px(10.))
-                                    .border_1()
-                                    .border_color(rgb(telecat_theme::BORDER))
-                                    .rounded(px(8.))
-                                    .bg(rgb(telecat_theme::INPUT))
-                                    .child(pretty),
-                            )
-                            .child(super::layout::scrollbar(&self.detail_scroll, cx)),
-                    )
-                    .child(
-                        div()
-                            .mt(px(16.))
-                            .flex()
-                            .justify_end()
-                            .gap(px(8.))
-                            .child(small_button("copy-quicklook", "Copy").on_click(cx.listener(
-                                move |_, _, _, cx| {
-                                    cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()))
-                                },
-                            )))
-                            .child(
-                                button("close-quicklook", "Close", true, false)
-                                    .on_click(cx.listener(|this, _, _, cx| this.cancel_sheet(cx))),
-                            ),
-                    )
-            }
+            Sheet::QuickLook { view, .. } => div()
+                .w(px(760.))
+                .bg(rgb(telecat_theme::CARD))
+                .border_1()
+                .border_color(rgb(0x484848))
+                .rounded(px(12.))
+                .p(px(16.))
+                .child(view.clone()),
             Sheet::Shortcuts => sheet(720., "Keyboard Shortcuts")
                 .line_height(px(15.5))
                 .child(

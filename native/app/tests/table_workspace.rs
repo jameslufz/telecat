@@ -164,7 +164,8 @@ async fn live(d: Driver) -> Result<()> {
         table: table.clone(),
         filters: vec![],
         combine: Combine::And,
-        order_by: None,
+        order_by: vec![],
+        estimate: false,
         limit: 1000,
         offset: 0,
     };

@@ -42,7 +42,8 @@ async fn load(s: &Session, table: &str) -> Result<(TableRef, TableMeta, Vec<Edit
             table: tr.clone(),
             filters: vec![],
             combine: Combine::And,
-            order_by: None,
+            order_by: vec![],
+            estimate: false,
             limit: 1000,
             offset: 0,
         })

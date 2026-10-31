@@ -4,6 +4,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     ops::Range,
 };
+use telecat_core::copy::tsv_block;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Column {
@@ -12,6 +13,8 @@ pub struct Column {
     pub editable: bool,
     pub hidden: bool,
     pub chevron: bool,
+    /// Part of a foreign key: non-NULL cells show an arrow that opens the referenced row.
+    pub foreign_key: bool,
 }
 impl Column {
     pub fn new(name: impl Into<String>) -> Self {
@@ -21,6 +24,7 @@ impl Column {
             editable: false,
             hidden: false,
             chevron: false,
+            foreign_key: false,
         }
     }
 }
@@ -93,6 +97,14 @@ pub struct Hooks {
     pub popup: bool,
     /// Parent will handle Escape (e.g. discard staged edits), preserving selection.
     pub escape: bool,
+    /// ⌘← / ⌘→ ask the host for the previous / next page.
+    pub paging: bool,
+    /// ⌥↩ and ⌥-click ask the host for the Set Value menu.
+    pub set_value: bool,
+    /// Right-clicking a column header asks the host for its menu.
+    pub header_menu: bool,
+    /// Column headers can be dragged to another position.
+    pub reorder: bool,
 }
 #[derive(Clone, Debug)]
 pub struct Options {
@@ -103,6 +115,9 @@ pub struct Options {
     pub row_text_offset: f32,
     pub empty_text: String,
     pub hooks: Hooks,
+    /// What the rows are (`zixma.users`, `query result`), named when a paste of rows copied
+    /// from here can't be matched.
+    pub source: String,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -113,6 +128,7 @@ impl Default for Options {
             row_text_offset: 0.,
             empty_text: String::new(),
             hooks: Hooks::default(),
+            source: String::new(),
         }
     }
 }
@@ -142,6 +158,30 @@ pub enum GridEvent {
         width: f32,
     },
     Paste(Vec<Vec<String>>),
+    /// Paste to Selected Cells (⇧⌘V): the clipboard's rows of values.
+    PasteCells(Vec<Vec<String>>),
+    /// A column header was right-clicked.
+    HeaderMenu {
+        column: usize,
+        bounds: Rect,
+    },
+    /// Columns were dragged into a new display order (data column indices, left to right).
+    Reorder(Vec<usize>),
+    /// Every column's width changed at once (Expand columns to fit the content).
+    ColumnsFitted,
+    /// ⌥↩ or ⌥-click: the Set Value menu for the cell.
+    SetValue {
+        cell: Cell,
+        bounds: Rect,
+        key: Option<String>,
+    },
+    /// The arrow of a foreign-key cell was clicked.
+    ForeignKey {
+        cell: Cell,
+        key: Option<String>,
+    },
+    /// ⌘← (-1) / ⌘→ (+1): the previous or next page.
+    Page(i8),
     ContextMenu {
         cell: Cell,
         bounds: Rect,
@@ -224,7 +264,14 @@ pub struct GridModel {
     pub options: Options,
     pub selection: Selection,
     pub selected_column: Option<usize>,
-    pub sort: Option<Sort>,
+    /// Where a range of columns was started (shift-click, shift-arrow or a drag); the range
+    /// runs from here to `selected_column` in display order.
+    pub column_anchor: Option<usize>,
+    /// The sorted columns, first sort key first.
+    pub sort: Vec<Sort>,
+    /// The columns' display order as data column indices; empty for the data's own order.
+    /// Data columns are never reordered: events and edits always use data indices.
+    pub order: Vec<usize>,
     pub editing: Option<Editing>,
     pub widths: Vec<f32>,
     pub scroll_x: f32,
@@ -244,7 +291,9 @@ impl GridModel {
             options: Options::default(),
             selection: Selection::default(),
             selected_column: None,
-            sort: None,
+            column_anchor: None,
+            sort: vec![],
+            order: vec![],
             editing: None,
             scroll_x: 0.,
             scroll_y: 0.,
@@ -276,6 +325,7 @@ impl GridModel {
         };
         if names(&columns) != names(&self.columns) {
             self.widths = arena_widths(&columns, &rows);
+            self.order.clear();
         }
         self.columns = columns;
         self.rows = rows;
@@ -292,6 +342,12 @@ impl GridModel {
         {
             self.selected_column = None;
         }
+        if self.column_anchor.is_some_and(|c| c >= self.columns.len()) {
+            self.column_anchor = None;
+        }
+        if !self.order.is_empty() && !is_permutation(&self.order, self.columns.len()) {
+            self.order.clear();
+        }
         if self
             .editing
             .as_ref()
@@ -304,12 +360,53 @@ impl GridModel {
         }
         self.clamp_scroll();
     }
+    /// Every column (hidden ones too) in display order.
+    pub fn display_columns(&self) -> Vec<usize> {
+        if is_permutation(&self.order, self.columns.len()) {
+            self.order.clone()
+        } else {
+            (0..self.columns.len()).collect()
+        }
+    }
+    /// The shown columns in display order.
     pub fn visible_columns(&self) -> impl Iterator<Item = usize> + '_ {
-        self.columns
+        self.display_columns()
+            .into_iter()
+            .filter(|&i| !self.columns[i].hidden)
+    }
+    /// Sets the display order, given as data column indices left to right. Anything that isn't
+    /// an order of every column resets it to the data's own order.
+    pub fn set_order(&mut self, order: Vec<usize>) {
+        let natural = order.iter().copied().eq(0..self.columns.len());
+        self.order = if is_permutation(&order, self.columns.len()) && !natural {
+            order
+        } else {
+            vec![]
+        };
+    }
+    /// The selected columns, left to right: from `column_anchor` to `selected_column` in display
+    /// order, hidden ones left out.
+    pub fn selected_columns(&self) -> Vec<usize> {
+        let Some(head) = self.selected_column.filter(|&c| c < self.columns.len()) else {
+            return vec![];
+        };
+        let order = self.display_columns();
+        let at = |c: usize| order.iter().position(|&x| x == c);
+        let (Some(a), Some(b)) = (
+            at(self.column_anchor.unwrap_or(head)).or(at(head)),
+            at(head),
+        ) else {
+            return vec![];
+        };
+        order[a.min(b)..=a.max(b)]
             .iter()
-            .enumerate()
-            .filter(|(_, c)| !c.hidden)
-            .map(|(i, _)| i)
+            .copied()
+            .filter(|&c| !self.columns[c].hidden)
+            .collect()
+    }
+    /// Whether `cell` is inside the selected block of cells.
+    pub fn cell_selected(&self, cell: Cell) -> bool {
+        self.selection.rows.contains(&cell.row) && self.selected_columns().contains(&cell.col)
     }
     pub fn number_width(&self) -> f32 {
         if self.options.show_row_numbers {
@@ -392,11 +489,13 @@ impl GridModel {
     }
     /// Where column `col` starts; a hidden column has no width and sits where it would be.
     pub fn column_left(&self, col: usize) -> f32 {
+        let order = self.display_columns();
+        let position = order.iter().position(|&c| c == col).unwrap_or(order.len());
         self.number_width()
-            + self
-                .visible_columns()
-                .filter(|&i| i < col)
-                .map(|i| self.widths[i])
+            + order[..position]
+                .iter()
+                .filter(|&&i| !self.columns[i].hidden)
+                .map(|&i| self.widths[i])
                 .sum::<f32>()
     }
     fn is_visible(&self, col: usize) -> bool {
@@ -493,6 +592,9 @@ impl GridModel {
         self.selection.select(row, m.shift, m.meta);
         // Row-number clicks preserve selCol, just as the DOM row handler does.
         if let Some(c) = col {
+            if !m.shift || self.column_anchor.is_none() {
+                self.column_anchor = Some(c);
+            }
             self.selected_column = Some(c);
         }
         vec![self.selection_event()]
@@ -501,10 +603,13 @@ impl GridModel {
         if cell.row >= self.rows.len() || cell.col >= self.columns.len() {
             return vec![];
         }
-        if !self.selection.rows.contains(&cell.row) {
-            self.selection = Selection::single(cell.row);
+        if !self.cell_selected(cell) {
+            if !self.selection.rows.contains(&cell.row) {
+                self.selection = Selection::single(cell.row);
+            }
+            self.column_anchor = Some(cell.col);
+            self.selected_column = Some(cell.col);
         }
-        self.selected_column = Some(cell.col);
         vec![
             self.selection_event(),
             GridEvent::ContextMenu {
@@ -519,17 +624,21 @@ impl GridModel {
             return vec![];
         }
         let name = &self.columns[col].name;
-        let next = match &self.sort {
-            Some(s) if &s.column == name && s.direction == Direction::Desc => None,
-            Some(s) if &s.column == name => Some(Sort {
-                column: name.clone(),
-                direction: Direction::Desc,
-            }),
-            _ => Some(Sort {
-                column: name.clone(),
-                direction: Direction::Asc,
-            }),
-        };
+        // TablePlus: descending, then ascending, then unsorted.
+        let current = self
+            .sort
+            .iter()
+            .find(|s| &s.column == name)
+            .map(|s| s.direction);
+        let next = match current {
+            None => Some(Direction::Desc),
+            Some(Direction::Desc) => Some(Direction::Asc),
+            Some(Direction::Asc) => None,
+        }
+        .map(|direction| Sort {
+            column: name.clone(),
+            direction,
+        });
         // Caller controls sort; a guarded/rejected request must not change the indicator.
         vec![GridEvent::Sort(next)]
     }
@@ -579,6 +688,7 @@ impl GridModel {
         }
         self.selection = Selection::single(cell.row);
         self.selected_column = Some(cell.col);
+        self.column_anchor = Some(cell.col);
         self.scroll_to_cell(cell);
         self.open_editor(cell);
         vec![self.selection_event()]
@@ -616,6 +726,7 @@ impl GridModel {
                         col,
                     };
                     self.selected_column = Some(col);
+                    self.column_anchor = Some(col);
                     self.open_editor(cell);
                     self.scroll_to_cell(cell);
                     events.push(self.selection_event());
@@ -682,19 +793,29 @@ impl GridModel {
                 self.selection.select(row, true, false);
             } else {
                 self.selection = Selection::single(row);
+                self.column_anchor = self.selected_column;
             }
             self.scroll_to_row(row);
             return vec![self.selection_event()];
         }
         match key {
-            Key::Left => {
+            Key::Left | Key::Right => {
+                // Arrows step through every column in display order, hidden ones included,
+                // as Electron's did.
                 if let Some(c) = self.selected_column {
-                    self.selected_column = Some(c.saturating_sub(1));
-                }
-            }
-            Key::Right => {
-                if let Some(c) = self.selected_column {
-                    self.selected_column = Some((c + 1).min(self.columns.len().saturating_sub(1)));
+                    let order = self.display_columns();
+                    let at = order.iter().position(|&x| x == c).unwrap_or(0);
+                    let next = if key == Key::Left {
+                        at.saturating_sub(1)
+                    } else {
+                        (at + 1).min(order.len().saturating_sub(1))
+                    };
+                    if !m.shift {
+                        self.column_anchor = Some(order[next]);
+                    } else if self.column_anchor.is_none() {
+                        self.column_anchor = Some(c);
+                    }
+                    self.selected_column = Some(order[next]);
                 }
             }
             Key::Enter => {
@@ -723,6 +844,7 @@ impl GridModel {
                     (Some(i), false) => (cur, (i + 1).min(cols.len() - 1)),
                 };
                 self.selected_column = Some(cols[i]);
+                self.column_anchor = Some(cols[i]);
                 self.selection = Selection::single(row);
                 self.scroll_to_cell(Cell { row, col: cols[i] });
             }
@@ -735,6 +857,90 @@ impl GridModel {
             .map(|col| self.cell_text(Cell { row, col }))
             .collect::<Vec<_>>()
             .join("\t")
+    }
+    /// Copy Rows (⌘C): the selected rows as shown (visible columns, in display order), tab
+    /// separated and quoted where needed, so ⌘V and ⇧⌘V put every value back in its column.
+    pub fn selected_rows_tsv(&self) -> String {
+        let columns: Vec<usize> = self.visible_columns().collect();
+        self.block_tsv(&columns)
+    }
+    /// Copy Selected Cells (⇧⌘C): the selected block, columns as shown, tab separated and
+    /// quoted where needed.
+    pub fn selected_cells_tsv(&self) -> String {
+        self.block_tsv(&self.selected_columns())
+    }
+    fn block_tsv(&self, columns: &[usize]) -> String {
+        let rows: Vec<Vec<&str>> = self
+            .selection
+            .rows
+            .iter()
+            .filter(|&&r| r < self.rows.len())
+            .map(|&row| {
+                columns
+                    .iter()
+                    .map(|&col| self.cell_text(Cell { row, col }))
+                    .collect()
+            })
+            .collect();
+        tsv_block(&rows)
+    }
+    /// The names of the columns Copy Rows (⌘C) copies, in its order.
+    pub fn copied_row_columns(&self) -> Vec<String> {
+        self.visible_columns()
+            .map(|c| self.columns[c].name.clone())
+            .collect()
+    }
+    /// The names of the columns Copy Selected Cells (⇧⌘C) copies, in its order.
+    pub fn copied_cell_columns(&self) -> Vec<String> {
+        self.selected_columns()
+            .into_iter()
+            .map(|c| self.columns[c].name.clone())
+            .collect()
+    }
+    /// Moves column `col` to display position `to` (among all columns, hidden ones included).
+    pub fn move_column(&mut self, col: usize, to: usize) -> Vec<GridEvent> {
+        let mut order = self.display_columns();
+        let Some(from) = order.iter().position(|&c| c == col) else {
+            return vec![];
+        };
+        order.remove(from);
+        order.insert(to.min(order.len()), col);
+        if order == self.display_columns() {
+            return vec![];
+        }
+        self.set_order(order.clone());
+        self.clamp_scroll();
+        vec![GridEvent::Reorder(order)]
+    }
+    /// Expand columns to fit the content: every column as wide as its widest loaded value (up
+    /// to a limit), measured like the first-load widths.
+    pub fn fit_columns(&mut self) -> Vec<GridEvent> {
+        self.widths = self
+            .columns
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                let widest = (0..self.rows.len().min(FIT_SAMPLE_ROWS))
+                    .filter_map(|r| self.rows.cell(r, i))
+                    .map(|v| {
+                        v.split(['\n', '\r'])
+                            .next()
+                            .unwrap_or("")
+                            .encode_utf16()
+                            .take(FIT_MAX_CHARS)
+                            .count()
+                    })
+                    .max()
+                    .unwrap_or(4)
+                    .max(c.name.encode_utf16().count() + 2);
+                let extra = if c.chevron || c.foreign_key { 16. } else { 0. };
+                (widest as f32 * 7.6 + 22. + extra)
+                    .round()
+                    .clamp(60., FIT_MAX_WIDTH)
+            })
+            .collect();
+        self.clamp_scroll();
+        vec![GridEvent::ColumnsFitted]
     }
     pub fn selected_tsv(&self) -> String {
         if self.selection.rows.len() == 1 {
@@ -828,6 +1034,19 @@ pub struct Layout {
     pub horizontal: bool,
     pub vertical: bool,
 }
+/// Expand columns to fit the content: how many rows are measured, how many characters of a
+/// value count, and the widest a column becomes.
+const FIT_SAMPLE_ROWS: usize = 2000;
+const FIT_MAX_CHARS: usize = 120;
+const FIT_MAX_WIDTH: f32 = 900.;
+fn is_permutation(order: &[usize], len: usize) -> bool {
+    order.len() == len && {
+        let mut seen = vec![false; len];
+        order
+            .iter()
+            .all(|&i| i < len && !std::mem::replace(&mut seen[i], true))
+    }
+}
 fn finite(v: f32) -> f32 {
     if v.is_finite() { v } else { 0. }
 }
@@ -854,12 +1073,9 @@ pub fn default_widths(columns: &[Column], rows: &[Vec<Option<String>>]) -> Vec<f
         .collect();
     columns.iter().map(|c| widths[c.name.as_str()]).collect()
 }
+/// Clipboard text as rows of values (see `telecat_core::copy::parse_tsv`).
 pub fn parse_tsv(text: &str) -> Vec<Vec<String>> {
-    let text = text.replace('\r', "");
-    let text = text.strip_suffix('\n').unwrap_or(&text);
-    text.split('\n')
-        .map(|l| l.split('\t').map(str::to_owned).collect())
-        .collect()
+    telecat_core::copy::parse_tsv(text)
 }
 pub fn filler_count(rows: usize, height: f32) -> usize {
     (((height - HEADER_HEIGHT).max(0.) / ROW_HEIGHT).ceil() as usize).saturating_sub(rows)

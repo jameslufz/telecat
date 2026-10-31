@@ -62,7 +62,7 @@ impl Direction {
         }
     }
 }
-string_enum!(FilterOp { Eq=>"=", Ne=>"<>", Lt=>"<", Gt=>">", Le=>"<=", Ge=>">=", In=>"in", NotIn=>"not in", IsNull=>"is null", IsNotNull=>"is not null", Between=>"between", NotBetween=>"not between", Like=>"like", Contains=>"contains", NotContains=>"not contains", ContainsCs=>"contains cs", NotContainsCs=>"not contains cs", Prefix=>"has prefix", Suffix=>"has suffix" });
+string_enum!(FilterOp { Eq=>"=", Ne=>"<>", Lt=>"<", Gt=>">", Le=>"<=", Ge=>">=", In=>"in", NotIn=>"not in", IsNull=>"is null", IsNotNull=>"is not null", Between=>"between", NotBetween=>"not between", Like=>"like", Ilike=>"ilike", Contains=>"contains", NotContains=>"not contains", ContainsCs=>"contains cs", NotContainsCs=>"not contains cs", ContainsCi=>"contains ci", NotContainsCi=>"not contains ci", Prefix=>"has prefix", Suffix=>"has suffix", PrefixCs=>"has prefix cs", SuffixCs=>"has suffix cs", PrefixCi=>"has prefix ci", SuffixCi=>"has suffix ci" });
 impl FilterOp {
     pub fn as_str(self) -> String {
         serde_json::to_value(self).unwrap().as_str().unwrap().into()
@@ -327,16 +327,42 @@ pub struct TableDataRequest {
     pub filters: Vec<Filter>,
     #[serde(default)]
     pub combine: Combine,
-    pub order_by: Option<OrderBy>,
+    /// The sort, first column first; empty for the table's default order (its primary key).
+    /// Reads the older single sort (`null` or one object) too.
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub order_by: Vec<OrderBy>,
     pub limit: u64,
     pub offset: u64,
+    /// Show the catalog's estimate instead of counting the rows when the table is larger than
+    /// [`ESTIMATE_COUNT_ABOVE`] (a COUNT(*) over millions of rows can load the server).
+    #[serde(default)]
+    pub estimate: bool,
 }
+fn one_or_many<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<OrderBy>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Sort {
+        Many(Vec<OrderBy>),
+        One(OrderBy),
+    }
+    Ok(match Option::<Sort>::deserialize(d)? {
+        None => vec![],
+        Some(Sort::One(o)) => vec![o],
+        Some(Sort::Many(v)) => v,
+    })
+}
+/// Tables with more rows than this (by the catalog's estimate) show an estimated row count
+/// rather than an exact COUNT(*).
+pub const ESTIMATE_COUNT_ABOVE: u64 = 500_000;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TableDataResult {
     #[serde(flatten)]
     pub result: QueryResult,
     pub total: u64,
+    /// `total` is the catalog's estimate, not a count.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub estimated: bool,
     pub primary_key: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub row_ids: Option<Vec<Vec<String>>>,
@@ -382,3 +408,25 @@ pub struct SqlDraft {
 }
 pub type SavedQueries = std::collections::BTreeMap<String, Vec<SavedQuery>>;
 pub type Drafts = std::collections::BTreeMap<String, Vec<SqlDraft>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn a_table_request_reads_one_sort_many_or_none() {
+        let read = |sort: &str| -> Vec<OrderBy> {
+            serde_json::from_str::<TableDataRequest>(&format!(
+                r#"{{"table":{{"schema":"s","name":"t"}},"filters":[],"limit":1,"offset":0{sort}}}"#
+            ))
+            .unwrap()
+            .order_by
+        };
+        assert!(read("").is_empty());
+        assert!(read(r#","orderBy":null"#).is_empty());
+        assert_eq!(read(r#","orderBy":{"column":"a","dir":"DESC"}"#).len(), 1);
+        assert_eq!(
+            read(r#","orderBy":[{"column":"a","dir":"ASC"},{"column":"b","dir":"DESC"}]"#).len(),
+            2
+        );
+    }
+}

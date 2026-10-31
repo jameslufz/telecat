@@ -488,6 +488,33 @@ impl Workspace {
                             .ml(px(10.))
                             .flex_1()
                             .min_w_0(),
+                    )
+                    .child(
+                        div()
+                            .id("field-search-options")
+                            .size(px(24.))
+                            .flex_shrink_0()
+                            .rounded(px(6.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .hover(|d| d.bg(rgb(telecat_theme::INPUT_2)))
+                            .tooltip(text_tooltip("Options"))
+                            .child(icon("Sliders.svg", 13., 0xb8b8b8))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                                    let fuzzy = this.field_fuzzy;
+                                    let items = json!([{"label":"Matching strategy","submenu":[
+                                        {"id":"fuzzy","label":"Fuzzy - default","checked":fuzzy},
+                                        {"id":"contains","label":"Contains","checked":!fuzzy}
+                                    ]}]);
+                                    native_menu::choose(items, e.position, window, cx, |this, id, _, cx| {
+                                        this.field_fuzzy = id == "fuzzy";
+                                        cx.notify();
+                                    });
+                                }),
+                            ),
                     ),
             )
             .when(empty, |d| {
@@ -526,7 +553,12 @@ impl Workspace {
                                         fields
                                             .into_iter()
                                             .filter(|(label, _)| {
-                                                label.to_lowercase().contains(&query)
+                                                query.is_empty()
+                                                    || if self.field_fuzzy {
+                                                        fuzzy_match(&query, label).is_some()
+                                                    } else {
+                                                        label.to_lowercase().contains(&query)
+                                                    }
                                             })
                                             .map(|(label, value)| {
                                                 let muted =

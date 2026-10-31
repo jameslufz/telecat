@@ -74,7 +74,7 @@ pub(in crate::workspace) fn setup_with(
         .unwrap()
     })
 }
-fn paint(cx: &mut TestAppContext, w: AnyWindowHandle) {
+pub(in crate::workspace) fn paint(cx: &mut TestAppContext, w: AnyWindowHandle) {
     cx.update_window(w.into(), |_, w, cx| {
         w.draw(cx).clear(cx);
     })
@@ -623,7 +623,11 @@ fn cmd_z_shortcut_undoes_typing_in_the_focused_sql_editor(cx: &mut TestAppContex
     cx.simulate_keystrokes(w.into(), "cmd-z");
     assert_eq!(editor.read_with(cx, |e, cx| e.text(cx)), "");
 }
-fn install_shortcuts(cx: &mut TestAppContext, w: AnyWindowHandle, s: &Entity<Workspace>) {
+pub(in crate::workspace) fn install_shortcuts(
+    cx: &mut TestAppContext,
+    w: AnyWindowHandle,
+    s: &Entity<Workspace>,
+) {
     let services = s.read_with(cx, |s, _| s.services.clone());
     cx.update(|cx| crate::install_menus(services, cx));
     cx.update_window(w, |_, window, _| window.activate_window())
@@ -952,7 +956,7 @@ fn open_tabs_bar_scrolls(cx: &mut TestAppContext) {
     }
     assert_eq!(s.read_with(cx, |s, _| s.tab_scroll.offset().x), px(0.));
 }
-fn live_config(driver: Driver) -> telecat_core::types::ConnectionConfig {
+pub(in crate::workspace) fn live_config(driver: Driver) -> telecat_core::types::ConnectionConfig {
     let mut c = telecat_core::types::empty_connection(driver);
     c.id = "telecat-ui-live".into();
     c.host = "127.0.0.1".into();
@@ -963,7 +967,7 @@ fn live_config(driver: Driver) -> telecat_core::types::ConnectionConfig {
     c
 }
 /// A workspace connected to the local test database with `table` open and loaded.
-fn live_table(
+pub(in crate::workspace) fn live_table(
     cx: &mut TestAppContext,
     driver: Driver,
     ddl: &[&str],
@@ -1019,7 +1023,10 @@ fn live_table(
     }
     panic!("{table:?} did not load");
 }
-fn current_grid(cx: &mut TestAppContext, s: &Entity<Workspace>) -> Entity<telecat_grid::DataGrid> {
+pub(in crate::workspace) fn current_grid(
+    cx: &mut TestAppContext,
+    s: &Entity<Workspace>,
+) -> Entity<telecat_grid::DataGrid> {
     s.read_with(cx, |s, _| {
         s.components.grids[&key(s.state.current())].view.clone()
     })
@@ -1336,7 +1343,7 @@ fn row_inspector_respects_read_only_rules(cx: &mut TestAppContext) {
         "binary columns are shown, not edited"
     );
     s.update(cx, |s, cx| {
-        s.stage_inspector_text(s.state.active, "missing", 1, "x".into(), cx)
+        s.stage_inspector_text(s.state.active, &["missing".to_owned()], 1, "x".into(), cx)
     });
     let key = s.read_with(cx, |s, _| {
         s.state.current().table.as_ref().unwrap().data.rows[0]
@@ -1345,7 +1352,13 @@ fn row_inspector_respects_read_only_rules(cx: &mut TestAppContext) {
     });
     let before = data_cell(cx, &s, 0, 2);
     s.update(cx, |s, cx| {
-        s.stage_inspector_text(s.state.active, &key, 2, "x".into(), cx)
+        s.stage_inspector_text(
+            s.state.active,
+            std::slice::from_ref(&key),
+            2,
+            "x".into(),
+            cx,
+        )
     });
     assert_eq!(
         data_cell(cx, &s, 0, 2),
@@ -1407,7 +1420,11 @@ fn row_inspector_enter_then_cmd_z_undoes_the_staged_edit(cx: &mut TestAppContext
     assert_eq!(inspector_value(cx, &s, 3), original.value().unwrap_or(""));
     assert!(!s.read_with(cx, |s, _| s.state.has_changes()));
 }
-fn focus_grid(cx: &mut TestAppContext, w: AnyWindowHandle, s: &Entity<Workspace>) {
+pub(in crate::workspace) fn focus_grid(
+    cx: &mut TestAppContext,
+    w: AnyWindowHandle,
+    s: &Entity<Workspace>,
+) {
     let g = current_grid(cx, s);
     cx.update_window(w, |_, window, cx| {
         let h = gpui_kit::Focusable::focus_handle(g.read(cx), cx);
@@ -1909,7 +1926,11 @@ fn save_keeps_the_selection_on_live_tables(cx: &mut TestAppContext) {
         });
     }
 }
-fn save_and_wait(cx: &mut TestAppContext, w: AnyWindowHandle, s: &Entity<Workspace>) {
+pub(in crate::workspace) fn save_and_wait(
+    cx: &mut TestAppContext,
+    w: AnyWindowHandle,
+    s: &Entity<Workspace>,
+) {
     cx.update_window(w, |_, window, cx| {
         s.update(cx, |s, cx| s.request_commit(window, cx))
     })
@@ -2118,7 +2139,7 @@ fn badge(cx: &mut TestAppContext, s: &Entity<Workspace>) -> String {
         s.state.current().result_edit.as_ref().unwrap().plan.badge()
     })
 }
-fn hint(cx: &mut TestAppContext, s: &Entity<Workspace>) -> Option<String> {
+pub(in crate::workspace) fn hint(cx: &mut TestAppContext, s: &Entity<Workspace>) -> Option<String> {
     s.read_with(cx, |s, _| s.hint.as_ref().map(|h| h.0.to_string()))
 }
 fn result_cells(cx: &mut TestAppContext, s: &Entity<Workspace>, col: usize) -> Vec<Value> {
@@ -2135,7 +2156,7 @@ fn result_cells(cx: &mut TestAppContext, s: &Entity<Workspace>, col: usize) -> V
             .collect()
     })
 }
-fn db_rows(driver: Driver, sql: &str) -> Vec<Vec<Option<String>>> {
+pub(in crate::workspace) fn db_rows(driver: Driver, sql: &str) -> Vec<Vec<Option<String>>> {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
         let s = telecat_db::Session::connect_test(&live_config(driver), "secret")
@@ -2328,7 +2349,7 @@ fn save_and_wait_query(cx: &mut TestAppContext, w: AnyWindowHandle, s: &Entity<W
     }
     panic!("save did not finish");
 }
-fn drop_table(driver: Driver, name: &str) {
+pub(in crate::workspace) fn drop_table(driver: Driver, name: &str) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
         let s = telecat_db::Session::connect_test(&live_config(driver), "secret")

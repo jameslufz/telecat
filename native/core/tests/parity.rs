@@ -254,6 +254,17 @@ fn indexes_parity() {
 #[test]
 fn filters_parity() {
     for (i, c) in fixture("filters").iter().enumerate() {
+        let mut expected = c["out"].clone();
+        // Electron's PostgreSQL Contains / Has prefix / Has suffix were ILIKE. Telecat 0.8 follows
+        // TablePlus: those are a case-sensitive LIKE, and the "Case insensitive" variants (not in
+        // these fixtures) use ILIKE. Nothing else in the SQL differs.
+        if c["d"] == "postgres" {
+            let sql = expected["sql"]
+                .as_str()
+                .unwrap()
+                .replace(" ILIKE ", " LIKE ");
+            expected["sql"] = json!(sql);
+        }
         assert_eq!(
             json!(build_where(
                 &de::<Vec<Filter>>(&c["filters"]),
@@ -261,7 +272,7 @@ fn filters_parity() {
                 de(&c["d"]),
                 de(&c["combine"])
             )),
-            c["out"],
+            expected,
             "filters {i}"
         );
     }

@@ -45,7 +45,8 @@ async fn load(db: &Session, t: &TableRef, raw_filter: Option<&str>) -> Result<Ta
             .into_iter()
             .collect(),
         combine: Combine::And,
-        order_by: None,
+        order_by: vec![],
+        estimate: false,
         limit: 1000,
         offset: 0,
     })

@@ -403,7 +403,13 @@ fn real_dispatch_edit_tab_enter_escape_and_clipboard(cx: &mut TestAppContext) {
             .iter()
             .any(|e| matches!(e,GridEvent::Edit{value,..} if value=="confirmed"))
     );
+    // ⌘C is TablePlus's Copy Rows: the whole row. ⇧⌘C copies the selected cell.
     cx.simulate_keystrokes(w.into(), "cmd-c");
+    assert_eq!(
+        cx.update(|cx| cx.read_from_clipboard().unwrap().text().unwrap()),
+        "0\tธนาคาร😺\tNULL"
+    );
+    cx.simulate_keystrokes(w.into(), "cmd-shift-c");
     assert_eq!(
         cx.update(|cx| cx.read_from_clipboard().unwrap().text().unwrap()),
         "ธนาคาร😺"
@@ -569,9 +575,10 @@ fn cell_input_ime_unicode_and_native_edit_menu(cx: &mut TestAppContext) {
         w.dispatch_action(Box::new(gpui_kit::base::input::Copy), cx)
     })
     .unwrap();
+    // Edit ▸ Copy is Copy Rows, like ⌘C.
     assert_eq!(
         cx.update(|cx| cx.read_from_clipboard().unwrap().text().unwrap()),
-        "0"
+        "0\tธนาคาร😺\tNULL"
     );
     update(cx, w, &g, |g, _, cx| {
         g.update_model(
@@ -887,4 +894,217 @@ fn hidden_columns_never_get_an_editor(cx: &mut TestAppContext) {
     });
     assert!(g.read_with(cx, |g, _| g.model().editing.is_none()
         && g.editor_state().is_none()));
+}
+fn drag_header(cx: &mut TestAppContext, w: AnyWindowHandle, from: f32, to: f32) {
+    cx.update_window(w.into(), |_, w, cx| {
+        for event in [
+            MouseDownEvent {
+                position: point(px(from), px(12.)),
+                button: MouseButton::Left,
+                click_count: 1,
+                ..Default::default()
+            }
+            .to_platform_input(),
+            MouseMoveEvent {
+                position: point(px(to), px(12.)),
+                pressed_button: Some(MouseButton::Left),
+                ..Default::default()
+            }
+            .to_platform_input(),
+            MouseUpEvent {
+                position: point(px(to), px(12.)),
+                button: MouseButton::Left,
+                ..Default::default()
+            }
+            .to_platform_input(),
+        ] {
+            w.dispatch_event(event, cx);
+        }
+    })
+    .unwrap();
+    paint(cx, w);
+}
+#[gpui::test]
+fn header_clicks_sort_drags_reorder_and_right_clicks_ask_for_the_menu(cx: &mut TestAppContext) {
+    let (w, g, events) = setup(cx);
+    update(cx, w, &g, |g, _, cx| {
+        g.update_model(
+            |m| {
+                m.options.hooks.reorder = true;
+                m.options.hooks.header_menu = true;
+            },
+            cx,
+        )
+    });
+    paint(cx, w);
+    let (left0, left2, width2) = update(cx, w, &g, |g, _, _| {
+        let m = g.model();
+        (m.column_left(0), m.column_left(2), m.widths[2])
+    });
+    // A click (no movement) sorts, on release.
+    click(cx, w, left0 + 10., 12., 1, MouseButton::Left);
+    assert!(
+        events
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, GridEvent::Sort(Some(_))))
+    );
+    events.borrow_mut().clear();
+    // Dragging the first header past the last moves it there, without sorting.
+    drag_header(cx, w, left0 + 10., left2 + width2 - 5.);
+    let reordered = events.borrow().iter().find_map(|e| match e {
+        GridEvent::Reorder(order) => Some(order.clone()),
+        _ => None,
+    });
+    assert_eq!(reordered, Some(vec![1, 2, 0]));
+    assert!(
+        !events
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, GridEvent::Sort(_)))
+    );
+    assert_eq!(
+        update(cx, w, &g, |g, _, _| g.model().display_columns()),
+        [1, 2, 0]
+    );
+    // Right-click on the header now shown first names data column 1.
+    let first = update(cx, w, &g, |g, _, _| g.model().column_left(1));
+    click(cx, w, first + 10., 12., 1, MouseButton::Right);
+    assert!(
+        events
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, GridEvent::HeaderMenu { column: 1, .. }))
+    );
+    // The corner above the row numbers fits the columns.
+    click(cx, w, 5., 12., 1, MouseButton::Left);
+    assert!(
+        events
+            .borrow()
+            .iter()
+            .any(|e| *e == GridEvent::ColumnsFitted)
+    );
+}
+#[gpui::test]
+fn foreign_key_arrows_and_option_click_ask_the_host(cx: &mut TestAppContext) {
+    let (w, g, events) = setup(cx);
+    update(cx, w, &g, |g, _, cx| {
+        g.update_model(
+            |m| {
+                m.columns[0].foreign_key = true;
+                m.options.hooks.set_value = true;
+            },
+            cx,
+        )
+    });
+    paint(cx, w);
+    let (left, width) = update(cx, w, &g, |g, _, _| {
+        (g.model().column_left(0), g.model().widths[0])
+    });
+    // Row 0 (y 43): the arrow at the cell's right edge.
+    click(cx, w, left + width - 6., 43., 1, MouseButton::Left);
+    assert!(events.borrow().iter().any(|e| matches!(
+        e,
+        GridEvent::ForeignKey {
+            cell: Cell { row: 0, col: 0 },
+            ..
+        }
+    )));
+    // Elsewhere in the cell it is a plain click.
+    events.borrow_mut().clear();
+    click(cx, w, left + 8., 43., 1, MouseButton::Left);
+    assert!(
+        !events
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, GridEvent::ForeignKey { .. }))
+    );
+    // A NULL cell (column 2 holds NULLs) has no arrow.
+    update(cx, w, &g, |g, _, cx| {
+        g.update_model(|m| m.columns[2].foreign_key = true, cx)
+    });
+    let (left2, width2) = update(cx, w, &g, |g, _, _| {
+        (g.model().column_left(2), g.model().widths[2])
+    });
+    click(cx, w, left2 + width2 - 6., 43., 1, MouseButton::Left);
+    assert!(
+        !events
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, GridEvent::ForeignKey { .. }))
+    );
+    // ⌥-click opens Set Value, not the context menu.
+    cx.update_window(w.into(), |_, w, cx| {
+        let position = point(px(left + 8.), px(69.));
+        let modifiers = gpui::Modifiers {
+            alt: true,
+            ..Default::default()
+        };
+        w.dispatch_event(
+            MouseDownEvent {
+                position,
+                button: MouseButton::Left,
+                click_count: 1,
+                modifiers,
+                ..Default::default()
+            }
+            .to_platform_input(),
+            cx,
+        );
+        w.dispatch_event(
+            MouseUpEvent {
+                position,
+                button: MouseButton::Left,
+                modifiers,
+                ..Default::default()
+            }
+            .to_platform_input(),
+            cx,
+        );
+    })
+    .unwrap();
+    assert!(events.borrow().iter().any(|e| matches!(
+        e,
+        GridEvent::SetValue {
+            cell: Cell { row: 1, col: 0 },
+            ..
+        }
+    )));
+    assert!(
+        !events
+            .borrow()
+            .iter()
+            .any(|e| matches!(e, GridEvent::ContextMenu { .. }))
+    );
+}
+#[gpui::test]
+fn a_telecat_copy_carries_its_column_names_to_the_paste(cx: &mut TestAppContext) {
+    let (w, g, _) = setup(cx);
+    update(cx, w, &g, |g, _, cx| {
+        g.update_model(
+            |m| {
+                m.set_order(vec![2, 0, 1]);
+                m.options.source = "MySQL zixma.t".into();
+                m.click(0, Some(0), telecat_grid::Modifiers::default());
+            },
+            cx,
+        )
+    });
+    update(cx, w, &g, |g, _, cx| g.copy_selection(cx));
+    update(cx, w, &g, |g, _, cx| g.paste_clipboard(cx));
+    let from = update(cx, w, &g, |g, _, _| g.pasted_from().cloned()).expect("Telecat's own copy");
+    assert_eq!(from.columns, ["value", "id", "name"]);
+    assert!(from.whole_rows);
+    assert_eq!(from.source, "MySQL zixma.t");
+    // ⇧⌘C records a block.
+    update(cx, w, &g, |g, _, cx| g.copy_cells(cx));
+    update(cx, w, &g, |g, _, cx| g.paste_cells(cx));
+    let from = update(cx, w, &g, |g, _, _| g.pasted_from().cloned()).unwrap();
+    assert!(!from.whole_rows);
+    assert_eq!(from.columns, ["id"]);
+    // Any other text (even one byte different) has no record: it maps by layout.
+    let text = cx.update(|cx| cx.read_from_clipboard().unwrap().text().unwrap());
+    cx.update(|cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(format!("{text} "))));
+    update(cx, w, &g, |g, _, cx| g.paste_clipboard(cx));
+    assert!(update(cx, w, &g, |g, _, _| g.pasted_from().is_none()));
 }

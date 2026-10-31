@@ -2,9 +2,12 @@
 use crate::table_model::{EditBuffer, Part, TableEditor};
 use std::time::{Duration, Instant};
 use telecat_core::changes::{RowVerify, Stmt, table_op_statement};
+use telecat_core::filters::DEFAULT_PAGE_ROWS;
+use telecat_core::history::History;
 use telecat_core::objects::{CreateSettings, routine_save, trigger_saves};
 use telecat_core::position::{self, Location};
 use telecat_core::result_edit::ResultEditPlan;
+use telecat_core::table_state::TableView;
 use telecat_core::{sql, types::*};
 
 /// How long a load runs before its indicator appears, so fast loads never flicker.
@@ -271,6 +274,8 @@ pub struct Tab {
     pub shown: usize,
     pub message: bool,
     pub total: u64,
+    /// `total` is the catalog's estimate (a large table), not a count.
+    pub estimated: bool,
     pub offset: u64,
     pub limit: u64,
     pub info: Option<TableInfo>,
@@ -340,6 +345,21 @@ impl ResultEditor {
             .apply(|rows| result = plan.stage(rows, row, col, value));
         result
     }
+    /// Stages several cells as one undo step, or none of them if any can't take its value.
+    pub fn stage_cells(
+        &mut self,
+        cells: Vec<(usize, usize, telecat_core::changes::Cell)>,
+    ) -> Result<(), String> {
+        let mut trial = self.data.rows.clone();
+        for (row, col, value) in cells {
+            if let Some(r) = self.plan.cell_reason(&trial, row, col) {
+                return Err(r);
+            }
+            self.plan.stage(&mut trial, row, col, value)?;
+        }
+        self.data.apply(|rows| *rows = trial);
+        Ok(())
+    }
     pub fn delete(&mut self, rows: &[usize]) -> Result<(), String> {
         self.plan.delete.clone()?;
         let plan = &self.plan;
@@ -370,6 +390,7 @@ impl Tab {
             shown: 0,
             message: false,
             total: 0,
+            estimated: false,
             offset: 0,
             limit: 1000,
             info: None,
@@ -542,8 +563,8 @@ pub struct WorkspaceState {
     /// SQL from closed query tabs, oldest first. A new SQL Query tab reopens the first one.
     pub closed_queries: Vec<SqlDraft>,
     next_id: u64,
-    navigation: Vec<u64>,
-    nav_pos: usize,
+    /// Go Back / Go Forward: the tabs visited, each with the table view it showed.
+    history: History<Option<TableView>>,
 }
 impl WorkspaceState {
     pub fn new(connection: ConnectionConfig) -> Self {
@@ -561,8 +582,7 @@ impl WorkspaceState {
             operations: vec![],
             closed_queries: vec![],
             next_id: 2,
-            navigation: vec![1],
-            nav_pos: 0,
+            history: History::new(1, None),
         }
     }
     pub fn current(&self) -> &Tab {
@@ -726,25 +746,45 @@ impl WorkspaceState {
         if self.active == id || !self.tabs.iter().any(|t| t.id == id) {
             return;
         }
+        self.remember_current_view();
         self.active = id;
-        self.navigation.truncate(self.nav_pos + 1);
-        self.navigation.push(id);
-        self.nav_pos = self.navigation.len() - 1;
+        self.visit_current_view();
+    }
+    /// The view a table tab shows (filters, sort, page); `None` for other tabs.
+    pub fn tab_view(&self, id: u64) -> Option<TableView> {
+        let tab = self.tabs.iter().find(|t| t.id == id)?;
+        tab.table.as_ref().map(|t| t.view(tab.offset))
+    }
+    /// Records how the current tab looks now, so a step back returns to exactly this.
+    pub fn remember_current_view(&mut self) {
+        let view = self.tab_view(self.active);
+        self.history.update_current(view);
+    }
+    /// Records the current tab as a new step, e.g. after a foreign key changed its filters.
+    pub fn visit_current_view(&mut self) {
+        let view = self.tab_view(self.active);
+        self.history.visit(self.active, view);
     }
     pub fn can_back(&self) -> bool {
-        self.nav_pos > 0
+        self.history.can_back()
     }
     pub fn can_forward(&self) -> bool {
-        self.nav_pos + 1 < self.navigation.len()
+        self.history.can_forward()
     }
-    pub fn navigate(&mut self, forward: bool) {
-        if forward && self.can_forward() {
-            self.nav_pos += 1;
+    /// Go Back / Go Forward. Returns the table view to show again when it differs from what
+    /// that tab shows now (its rows then have to be read again).
+    pub fn navigate(&mut self, forward: bool) -> Option<TableView> {
+        self.remember_current_view();
+        let (tab, view) = if forward {
+            self.history.forward()?
+        } else {
+            self.history.back()?
+        };
+        if !self.tabs.iter().any(|t| t.id == tab) {
+            return None;
         }
-        if !forward && self.can_back() {
-            self.nav_pos -= 1;
-        }
-        self.active = self.navigation[self.nav_pos];
+        self.active = tab;
+        view.filter(|v| Some(v) != self.tab_view(tab).as_ref())
     }
     pub fn step(&mut self, delta: isize) {
         let index = self
@@ -790,7 +830,10 @@ impl WorkspaceState {
             display_name(&table, self.connection.driver),
             TabKind::Table(table),
         );
-        self.current_mut().table = Some(editor);
+        let tab = self.current_mut();
+        tab.table = Some(editor);
+        tab.limit = DEFAULT_PAGE_ROWS;
+        self.history.update_current(self.tab_view(id));
         id
     }
     /// Opens a function or procedure in its own tab, or switches to it when it is open.
@@ -843,15 +886,14 @@ impl WorkspaceState {
             let over = self.closed_queries.len().saturating_sub(MAX_CLOSED_QUERIES);
             self.closed_queries.drain(..over);
         }
-        self.navigation.retain(|x| *x != id);
         if self.active == id {
             self.active = self.tabs[index.min(self.tabs.len() - 1)].id;
         }
-        self.nav_pos = self
-            .navigation
-            .iter()
-            .rposition(|x| *x == self.active)
-            .unwrap_or(0);
+        let fallback = (self.active, self.tab_view(self.active));
+        self.history.remove_tab(id, fallback);
+        if self.history.current().0 != self.active {
+            self.visit_current_view();
+        }
         true
     }
     /// Opens a new SQL Query tab with the SQL of the earliest closed query tab, if any.
@@ -881,14 +923,12 @@ impl WorkspaceState {
             return;
         }
         self.tabs.clear();
-        self.navigation.clear();
         self.active = 0;
         for d in drafts {
             self.open_query(&d.title, &d.sql);
         }
         self.active = self.tabs[0].id;
-        self.navigation = vec![self.active];
-        self.nav_pos = 0;
+        self.history = History::new(self.active, None);
     }
     pub fn status_text(&self) -> String {
         format!(

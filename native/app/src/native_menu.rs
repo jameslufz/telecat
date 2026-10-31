@@ -43,6 +43,13 @@ fn build(
             )
         };
         item.setEnabled(v["enabled"].as_bool().unwrap_or(true));
+        if let Some((key, mask)) = v["key"].as_str().and_then(key_equivalent) {
+            // SAFETY: plain NSMenuItem setters; the mask is an NSEventModifierFlags value.
+            unsafe {
+                let _: () = msg_send![&*item, setKeyEquivalent: &*NSString::from_str(&key)];
+                let _: () = msg_send![&*item, setKeyEquivalentModifierMask: mask];
+            }
+        }
         unsafe {
             let _: () = msg_send![&*item,setState:if v["checked"]==true {1isize}else{0isize}];
         }
@@ -63,6 +70,34 @@ fn build(
         menu.addItem(&item);
     }
     menu
+}
+/// A shortcut written as the menus show it (`⇧⌘V`, `⌥↩`, `⌫`) as AppKit's key equivalent and
+/// modifier mask, so the menu lists it at the right edge like TablePlus's.
+pub fn key_equivalent(text: &str) -> Option<(String, usize)> {
+    const SHIFT: usize = 1 << 17;
+    const CONTROL: usize = 1 << 18;
+    const OPTION: usize = 1 << 19;
+    const COMMAND: usize = 1 << 20;
+    let mut mask = 0;
+    let mut key = None;
+    for c in text.chars() {
+        match c {
+            '⇧' => mask |= SHIFT,
+            '⌃' => mask |= CONTROL,
+            '⌥' => mask |= OPTION,
+            '⌘' => mask |= COMMAND,
+            _ if key.is_some() => return None,
+            '↩' | '↵' => key = Some("\r".to_owned()),
+            '⌫' => key = Some("\u{8}".to_owned()),
+            '↑' => key = Some("\u{f700}".to_owned()),
+            '↓' => key = Some("\u{f701}".to_owned()),
+            '←' => key = Some("\u{f702}".to_owned()),
+            '→' => key = Some("\u{f703}".to_owned()),
+            c if c.is_ascii_graphic() => key = Some(c.to_ascii_lowercase().to_string()),
+            _ => return None,
+        }
+    }
+    key.map(|k| (k, mask))
 }
 /// Menu tracking runs on the foreground executor after all GPUI borrows have ended.
 /// AppKit pumps a nested event loop; keeping &mut App/Window across it would reenter GPUI.
@@ -172,4 +207,28 @@ fn menu_icon(kind: &str, hex: &str) -> Retained<NSImage> {
         let _: () = msg_send![&*image, unlockFocus];
     }
     image
+}
+
+#[cfg(test)]
+mod tests {
+    use super::key_equivalent;
+    #[test]
+    fn shortcuts_become_key_equivalents() {
+        assert_eq!(
+            key_equivalent("⇧⌘V"),
+            Some(("v".into(), (1 << 17) | (1 << 20)))
+        );
+        assert_eq!(
+            key_equivalent("⌥⌘R"),
+            Some(("r".into(), (1 << 19) | (1 << 20)))
+        );
+        assert_eq!(key_equivalent("⌘↩"), Some(("\r".into(), 1 << 20)));
+        assert_eq!(key_equivalent("⌫"), Some(("\u{8}".into(), 0)));
+        assert_eq!(
+            key_equivalent("⌃⌘←"),
+            Some(("\u{f702}".into(), (1 << 18) | (1 << 20)))
+        );
+        assert_eq!(key_equivalent(""), None);
+        assert_eq!(key_equivalent("⌘AB"), None);
+    }
 }

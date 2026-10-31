@@ -46,8 +46,15 @@ Telecat is written in Rust. Its UI is custom-drawn and GPU-rendered with [gpui](
   - Data, Structure and Index views;
   - views and PostgreSQL materialized views open read-only. The DDL button shows their real definition;
   - Triggers (in Structure): list, add, edit and delete a table's triggers, saved with ⌘S like every other change;
-  - filters with AND/OR;
-  - column picker, paging and a row inspector.
+  - filters with AND/OR, TablePlus's operator lists (PostgreSQL `ILIKE` and case-insensitive variants, MySQL case-sensitive ones), ⌘B / ⌘← / ⌘→ in the filter bar, an "Applied" state, and rules remembered per table;
+  - column header menu: sort ascending / descending, sort by several columns, remove sort, copy the name, filter with the column, hide / show columns, expand columns to fit, reset positions. Headers drag to reorder; widths and order are remembered per table;
+  - cell menu: Quick Look, Set Value (EMPTY, NULL, DEFAULT, NOW(), a date picker, PRETTY / MINIFY for JSON), Paste to Selected Cells (⇧⌘V), Copy Rows / Copy Selected Cells (⇧⌘C) and Copy … As Plain Text, JSON, HTML, Markdown, CSV (with header) or INSERT, Copy All Column Values, and Quick Filter by the clicked value;
+  - enum, SET and boolean columns edit through a dropdown of their values; generated columns are read-only;
+  - foreign-key cells show an arrow that opens the referenced row (composite keys too); Go Back / Go Forward (⌃⌘← / ⌃⌘→) return to each tab with its filters;
+  - Quick Look (⌘↩ or middle-click): a JSON tree or raw JSON, text, images (PNG, JPEG, GIF, WebP) and a hex view, also in its own window. Edits are staged like grid edits;
+  - paging of 300 rows with a page-settings popover, ⌘← / ⌘→ for pages and ⌘↑ / ⌘↓ for the first / last row. Tables of more than 500,000 rows show the catalog's estimate (`~N rows`) until you ask for an exact count;
+  - a row inspector that edits one field of every selected row at once, with fuzzy field search;
+  - ⌃⌘[ / ⌃⌘] switch Data and Structure; ⌥⌘R reloads the current tab.
 - **Staged editing:**
   - Edits are colour-coded (modified / deleted / new). Make them in the grid or in the row inspector.
   - Commit with ⌘S, undo with ⌘Z and discard with Esc.

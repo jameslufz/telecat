@@ -111,13 +111,15 @@ async fn contract(d: Driver) -> Result<()> {
             ),
             _ => unreachable!(),
         };
-        assert_eq!(
-            normalize(got),
-            case["out"],
-            "{d:?} {} {:?}",
-            case["op"],
-            arg
-        );
+        let mut expected = case["out"].clone();
+        // Electron's PostgreSQL Contains was ILIKE; Telecat 0.8 follows TablePlus (case-sensitive
+        // LIKE, with "Case insensitive" variants for ILIKE). See core/tests/parity.rs.
+        if pg && case["op"] == "tableDataSql" {
+            if let Some(sql) = expected.as_str() {
+                expected = json!(sql.replace(" ILIKE ", " LIKE "));
+            }
+        }
+        assert_eq!(normalize(got), expected, "{d:?} {} {:?}", case["op"], arg);
     }
     assert!(db.list_databases().await?.contains(&config.database));
     let table = TableRef {
@@ -130,7 +132,8 @@ async fn contract(d: Driver) -> Result<()> {
         table: table.clone(),
         filters: vec![],
         combine: Combine::And,
-        order_by: None,
+        order_by: vec![],
+        estimate: false,
         limit: 100,
         offset: 0,
     };
@@ -489,7 +492,8 @@ async fn contract(d: Driver) -> Result<()> {
             table: t.clone(),
             filters: vec![],
             combine: Combine::And,
-            order_by: None,
+            order_by: vec![],
+            estimate: false,
             limit: 100,
             offset: 0,
         };

@@ -6713,7 +6713,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-app"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aes 0.8.4",
  "anyhow",
@@ -6748,7 +6748,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "regex",
@@ -6759,7 +6759,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-db"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -6785,7 +6785,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-editor"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "gpui-kit",
  "gpui-pre",
@@ -6828,7 +6828,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-grid"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "gpui-kit",
  "gpui-pre",
@@ -6844,7 +6844,7 @@ dependencies = [
 
 [[package]]
 name = "telecat-theme"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "gpui-kit",
  "gpui-pre-apple",

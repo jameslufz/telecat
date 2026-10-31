@@ -36,7 +36,8 @@ async fn load(db: &Session, t: &TableRef) -> Result<TableDataResult> {
         table: t.clone(),
         filters: vec![],
         combine: Combine::And,
-        order_by: None,
+        order_by: vec![],
+        estimate: false,
         limit: 1000,
         offset: 0,
     })
@@ -490,7 +491,8 @@ async fn qa_my_raw_filter_and_filter_values() -> Result<()> {
             value2: None,
         }],
         combine: Combine::Or,
-        order_by: None,
+        order_by: vec![],
+        estimate: false,
         limit: 100,
         offset: 0,
     };
@@ -810,7 +812,8 @@ async fn qa_pg_raw_filter_side_effects() -> Result<()> {
                 value2: None,
             }],
             combine: Combine::And,
-            order_by: None,
+            order_by: vec![],
+            estimate: false,
             limit: 10,
             offset: 0,
         })

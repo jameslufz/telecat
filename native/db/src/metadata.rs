@@ -5,7 +5,7 @@ use telecat_core::{
         IdentityKind, Stmt, inline_params, literal, mysql_identity_columns, mysql_row_id,
         qualified, quote_ident,
     },
-    filters::{Where, build_where},
+    filters::{Where, build_where, order_clause},
     types::*,
 };
 pub(crate) enum Identity {
@@ -19,7 +19,7 @@ pub(crate) enum Identity {
     },
 }
 impl Session {
-    fn table(&self, t: &TableRef) -> TableRef {
+    pub(crate) fn table(&self, t: &TableRef) -> TableRef {
         TableRef {
             schema: if t.schema.is_empty() {
                 if self.driver == Driver::Mysql {
@@ -167,19 +167,7 @@ impl Session {
         let columns = self.columns(&t).await?;
         let pk = self.primary_key(&t).await?;
         let w = build_where(&req.filters, &columns, d, req.combine);
-        let order = if let Some(o) = &req.order_by {
-            format!(" ORDER BY {} {}", quote_ident(d, &o.column), o.dir.as_str())
-        } else if !pk.is_empty() {
-            format!(
-                " ORDER BY {}",
-                pk.iter()
-                    .map(|s| quote_ident(d, s))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
-        } else {
-            String::new()
-        };
+        let order = order_clause(d, &req.order_by, &columns, &pk);
         Ok((t, rel, w, pk, order))
     }
     /// Every row the table tab's filters and sort select, without paging: the export query.
@@ -269,11 +257,10 @@ impl Session {
     /// those reads run in a read-only transaction that is always rolled back.
     async fn read_rows(
         &self,
-        page: &str,
-        count: &str,
+        queries: &[&str],
         params: &[serde_json::Value],
         raw: bool,
-    ) -> Result<(QueryResult, QueryResult)> {
+    ) -> Result<Vec<QueryResult>> {
         let mut slot = self.reader.lock().await;
         let mut conn = match slot.take() {
             Some(c) => c,
@@ -290,9 +277,11 @@ impl Session {
             if raw {
                 conn.run(begin, &[]).await?;
             }
-            let page = conn.run(page, params).await?.0;
-            let count = conn.run(count, params).await?.0;
-            Ok::<_, anyhow::Error>((page, count))
+            let mut results = vec![];
+            for sql in queries {
+                results.push(conn.run(sql, params).await?.0);
+            }
+            Ok::<_, anyhow::Error>(results)
         }
         .await;
         *self.reader_busy.lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -331,29 +320,91 @@ impl Session {
             }
         })
     }
+    fn count_sql(&self, rel: &str, filter: &str) -> String {
+        format!(
+            "SELECT COUNT(*) {}count FROM {rel}{filter};",
+            if self.driver == Driver::Mysql {
+                "as "
+            } else {
+                "AS "
+            }
+        )
+    }
+    /// The catalog's estimate of a base table's row count; `None` when it has none (a view, or a
+    /// PostgreSQL table never analyzed).
+    pub async fn estimated_rows(&self, t: &TableRef) -> Result<Option<u64>> {
+        let t = self.table(t);
+        let d = self.driver;
+        let rows = if d == Driver::Mysql {
+            self.catalog(
+                "SELECT table_rows FROM information_schema.tables WHERE table_schema = ? AND table_name = ? AND table_type = 'BASE TABLE'",
+                &[serde_json::json!(t.schema), serde_json::json!(t.name)],
+            )
+            .await?
+        } else {
+            self.catalog(
+                &format!(
+                    "SELECT reltuples::bigint::text FROM pg_class WHERE oid = {}::regclass AND relkind IN ('r', 'p')",
+                    literal(d, &qualified(d, &t))
+                ),
+                &[],
+            )
+            .await?
+        };
+        Ok(rows
+            .first()
+            .and_then(|r| r.first())
+            .and_then(|v| v.as_deref())
+            .and_then(|v| v.parse::<i64>().ok())
+            .and_then(|n| u64::try_from(n).ok()))
+    }
+    /// An exact COUNT(*) of the table, with the tab's filters when `filtered` (the Count popover).
+    /// Runs on the reader connection like a page load, in a read-only transaction when a raw SQL
+    /// filter takes part.
+    pub async fn count_rows(&self, req: &TableDataRequest, filtered: bool) -> Result<u64> {
+        let (_, rel, w, _, _) = self.filtered(req).await?;
+        let raw = filtered
+            && req
+                .filters
+                .iter()
+                .any(|f| f.enabled && f.column == RAW_SQL && !f.value.trim().is_empty());
+        let (filter, params) = if filtered {
+            (w.sql, w.params)
+        } else {
+            (String::new(), vec![])
+        };
+        let sql = self.count_sql(&rel, &filter);
+        let results = self.read_rows(&[&sql], &params, raw).await?;
+        parse_count(results.first())
+    }
     pub async fn table_data(&self, req: &TableDataRequest) -> Result<TableDataResult> {
         let (sql, w, pk, rel, identity) = self.select(req).await?;
         let raw = req
             .filters
             .iter()
             .any(|f| f.enabled && f.column == RAW_SQL && !f.value.trim().is_empty());
-        let count_sql = format!(
-            "SELECT COUNT(*) {}count FROM {rel}{};",
-            if self.driver == Driver::Mysql {
-                "as "
-            } else {
-                "AS "
-            },
-            w.sql
-        );
-        let (mut result, count) = self.read_rows(&sql, &count_sql, &w.params, raw).await?;
-        let total = count
-            .rows
-            .first()
-            .and_then(|r| r.first())
-            .and_then(|v| v.as_ref())
-            .context("Missing row count")?
-            .parse()?;
+        // A COUNT(*) over millions of rows can take long and load the server; such a table
+        // shows the catalog's estimate until the user asks for an exact count.
+        let estimate = if req.estimate {
+            self.estimated_rows(&req.table)
+                .await
+                .ok()
+                .flatten()
+                .filter(|n| *n > ESTIMATE_COUNT_ABOVE)
+        } else {
+            None
+        };
+        let count_sql = self.count_sql(&rel, &w.sql);
+        let mut queries = vec![sql.as_str()];
+        if estimate.is_none() {
+            queries.push(&count_sql);
+        }
+        let mut results = self.read_rows(&queries, &w.params, raw).await?;
+        let (total, estimated) = match estimate {
+            Some(n) => (n, true),
+            None => (parse_count(results.get(1))?, false),
+        };
+        let mut result = results.swap_remove(0);
         let hidden = match &identity {
             Identity::None => 0,
             Identity::Postgres => 2,
@@ -413,6 +464,7 @@ impl Session {
         Ok(TableDataResult {
             result,
             total,
+            estimated,
             primary_key: pk,
             row_ids,
         })
@@ -677,4 +729,13 @@ fn format_placeholders<'a>(
     }
     out.push_str(&sql[i..]);
     true
+}
+
+fn parse_count(result: Option<&QueryResult>) -> Result<u64> {
+    Ok(result
+        .and_then(|r| r.rows.first())
+        .and_then(|r| r.first())
+        .and_then(|v| v.as_ref())
+        .context("Missing row count")?
+        .parse()?)
 }

@@ -45,7 +45,8 @@ async fn loaded(s: &Session, tr: &TableRef, cur: Vec<Cell>) -> Result<(TableMeta
             table: tr.clone(),
             filters: vec![],
             combine: Default::default(),
-            order_by: None,
+            order_by: vec![],
+            estimate: false,
             limit: 100,
             offset: 0,
         })

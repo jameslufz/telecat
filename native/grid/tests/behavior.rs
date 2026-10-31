@@ -125,7 +125,14 @@ fn actual_electron_oracle() {
                 continue;
             }
             "paste" => {
-                let got = m.paste(i["text"].as_str().unwrap());
+                let text = i["text"].as_str().unwrap();
+                // Electron never read quotes; 0.8 reads a quoted field ("…") as one value
+                // (QA 0.8.0 BUG-002, covered by `copy::tests`). Only cases with a quoted field
+                // differ; every other case still matches Electron.
+                if text.contains('"') && *expected != json!(telecat_core::copy::parse_tsv(text)) {
+                    continue;
+                }
+                let got = m.paste(text);
                 let v = got.first().map_or(Value::Null, |e| {
                     if let GridEvent::Paste(rows) = e {
                         json!(rows)
@@ -273,7 +280,9 @@ fn tsv_is_deliberately_unquoted_and_hidden_columns_are_copied() {
         parse_tsv("a\r\nb\r\t\t\n\n"),
         vec![vec!["a"], vec!["b", "", ""], vec![""]]
     );
-    assert_eq!(parse_tsv("\"a\tb\""), vec![vec!["\"a", "b\""]]);
+    // 0.8: a quoted field is one value (Telecat's own copies quote tabs and line breaks).
+    assert_eq!(parse_tsv("\"a\tb\""), vec![vec!["a\tb"]]);
+    assert_eq!(parse_tsv("\"a\tb"), vec![vec!["\"a", "b"]]);
     assert_eq!(
         m.copy(CopyKind::AllTsv, Cell { row: 0, col: 0 }),
         format!("id\tname\tother\n{}", m.selected_tsv())
@@ -310,9 +319,9 @@ fn widths_sample_utf16_clamp_resize_and_reset() {
     assert_eq!(model(100000).number_width(), 76.);
 }
 #[test]
-fn sort_is_controlled_and_cycles_ascending_descending_none() {
+fn sort_is_controlled_and_cycles_descending_ascending_none_like_tableplus() {
     let mut m = model(1);
-    for direction in [Some(Direction::Asc), Some(Direction::Desc), None] {
+    for direction in [Some(Direction::Desc), Some(Direction::Asc), None] {
         let old = m.sort.clone();
         let events = m.click_header(1);
         assert_eq!(m.sort, old);
@@ -320,8 +329,118 @@ fn sort_is_controlled_and_cycles_ascending_descending_none() {
             panic!()
         };
         assert_eq!(next.as_ref().map(|s| s.direction), direction);
-        m.sort = next.clone();
+        m.sort = next.iter().cloned().collect();
     }
+    // A click on a column of a multi-column sort sorts by that column alone.
+    m.sort = vec![
+        Sort {
+            column: "id".into(),
+            direction: Direction::Asc,
+        },
+        Sort {
+            column: "name".into(),
+            direction: Direction::Desc,
+        },
+    ];
+    let GridEvent::Sort(Some(next)) = &m.click_header(1)[0] else {
+        panic!()
+    };
+    assert_eq!(
+        (next.column.as_str(), next.direction),
+        ("name", Direction::Asc)
+    );
+}
+#[test]
+fn display_order_never_changes_data_column_indices() {
+    let mut m = model(3);
+    m.set_order(vec![2, 0, 1]);
+    assert_eq!(m.visible_columns().collect::<Vec<_>>(), [2, 0, 1]);
+    assert_eq!(m.column_left(2), m.number_width());
+    assert_eq!(m.column_left(0), m.number_width() + m.widths[2]);
+    // Editing the cell shown first stages data column 2.
+    m.click(1, Some(2), Modifiers::default());
+    assert!(m.begin_edit(Cell { row: 1, col: 2 }));
+    m.editing.as_mut().unwrap().value = "x".into();
+    let events = m.finish_edit(true, 0);
+    assert!(matches!(
+        events[0],
+        GridEvent::Edit {
+            cell: Cell { row: 1, col: 2 },
+            ..
+        }
+    ));
+    // Arrows and Tab follow the display order.
+    m.click(0, Some(2), Modifiers::default());
+    m.navigate(Key::Right, Modifiers::default());
+    assert_eq!(m.selected_column, Some(0));
+    m.navigate(Key::Left, Modifiers::default());
+    assert_eq!(m.selected_column, Some(2));
+    m.navigate(Key::Tab, Modifiers::default());
+    assert_eq!(m.selected_column, Some(0));
+    // Not an order of every column: back to the data's own order.
+    m.set_order(vec![0, 0, 1]);
+    assert!(m.order.is_empty());
+    m.set_order(vec![0, 1, 2]);
+    assert!(m.order.is_empty());
+    m.order = vec![1, 0];
+    m.reconcile();
+    assert!(m.order.is_empty());
+}
+#[test]
+fn columns_move_by_display_position() {
+    let mut m = model(2);
+    let events = m.move_column(0, 2);
+    assert_eq!(events, [GridEvent::Reorder(vec![1, 2, 0])]);
+    assert_eq!(m.display_columns(), [1, 2, 0]);
+    assert!(m.move_column(0, 2).is_empty());
+    assert_eq!(m.move_column(0, 0), [GridEvent::Reorder(vec![0, 1, 2])]);
+    assert!(m.order.is_empty());
+}
+#[test]
+fn cell_blocks_select_copy_and_follow_the_display_order() {
+    let mut m = model(4);
+    m.click(1, Some(0), Modifiers::default());
+    m.click(2, Some(1), mods(true, false));
+    assert_eq!(m.selection.rows, [1, 2].into());
+    assert_eq!(m.selected_columns(), [0, 1]);
+    assert!(m.cell_selected(Cell { row: 2, col: 0 }));
+    assert!(!m.cell_selected(Cell { row: 2, col: 2 }));
+    assert_eq!(m.selected_cells_tsv(), "1\trow 1\n2\trow 2");
+    // ⌘C copies whole rows, every column in the table's order.
+    assert_eq!(m.selected_rows_tsv(), "1\trow 1\tNULL\n2\trow 2\tNULL");
+    // Shift + arrows widen the block; a plain arrow collapses it.
+    m.navigate(Key::Right, mods(true, false));
+    assert_eq!(m.selected_columns(), [0, 1, 2]);
+    m.navigate(Key::Down, Modifiers::default());
+    assert_eq!(m.selected_columns(), [2]);
+    // Hidden columns are never part of a block.
+    m.columns[1].hidden = true;
+    m.click(0, Some(0), Modifiers::default());
+    m.click(0, Some(2), mods(true, false));
+    assert_eq!(m.selected_columns(), [0, 2]);
+    m.columns[1].hidden = false;
+    // In display order.
+    m.set_order(vec![2, 1, 0]);
+    m.click(0, Some(2), Modifiers::default());
+    m.click(0, Some(1), mods(true, false));
+    assert_eq!(m.selected_columns(), [2, 1]);
+    assert_eq!(m.selected_cells_tsv(), "NULL\trow 0");
+    // A right-click inside the block keeps it.
+    m.context_menu(Cell { row: 0, col: 1 }, Rect::default());
+    assert_eq!(m.selected_columns(), [2, 1]);
+    m.context_menu(Cell { row: 3, col: 0 }, Rect::default());
+    assert_eq!(m.selected_columns(), [0]);
+}
+#[test]
+fn fitting_columns_measures_the_loaded_values() {
+    let mut m = GridModel::new(
+        vec![Column::new("id"), Column::new("long")],
+        vec![vec![Some("1".into()), Some("x".repeat(80))]],
+    );
+    let before = m.widths.clone();
+    assert_eq!(m.fit_columns(), [GridEvent::ColumnsFitted]);
+    assert_eq!(m.widths[0], 60.);
+    assert!(m.widths[1] > before[1] && m.widths[1] <= 900.);
 }
 #[test]
 fn virtualization_and_scroll_gutters_are_bounded() {

@@ -36,7 +36,8 @@ fn req(t: &TableRef, filters: Vec<Filter>) -> TableDataRequest {
         table: t.clone(),
         filters,
         combine: Combine::And,
-        order_by: None,
+        order_by: vec![],
+        estimate: false,
         limit: 1000,
         offset: 0,
     }

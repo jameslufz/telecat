@@ -1,6 +1,9 @@
 //! TableTab/useEditRows state, independent of the grid's rendering and input API.
 use anyhow::Result;
-use telecat_core::{changes::*, objects::TriggerEdit, types::*};
+use std::collections::BTreeMap;
+use telecat_core::{
+    changes::*, columns::TableColumns, objects::TriggerEdit, table_state::TableView, types::*,
+};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Part {
@@ -47,6 +50,22 @@ impl EditBuffer {
         if self.rows.get(row).is_some_and(|r| column < r.cur.len()) {
             self.apply(|rows| rows[row].cur[column] = value);
         }
+    }
+    /// Several cells as one edit: one ⌘Z undoes them all. Cells that don't exist are skipped;
+    /// nothing is recorded when none does.
+    pub fn set_cells(&mut self, cells: Vec<(usize, usize, Cell)>) {
+        let cells: Vec<_> = cells
+            .into_iter()
+            .filter(|(row, column, _)| self.rows.get(*row).is_some_and(|r| *column < r.cur.len()))
+            .collect();
+        if cells.is_empty() {
+            return;
+        }
+        self.apply(|rows| {
+            for (row, column, value) in cells {
+                rows[row].cur[column] = value;
+            }
+        });
     }
     pub fn delete(&mut self, selected: &[usize]) {
         self.apply(|rows| {
@@ -172,18 +191,26 @@ pub struct TableEditor {
     pub applied: Vec<Filter>,
     pub combine: Combine,
     pub show_filters: bool,
-    pub order_by: Option<OrderBy>,
+    /// The sort, first key first; empty for the table's default (primary key) order.
+    pub order_by: Vec<OrderBy>,
     pub hidden: std::collections::BTreeSet<String>,
+    /// Column names in the order the user dragged them into; empty for the table's own order.
+    pub column_order: Vec<String>,
+    /// Column widths the user set (by name), kept across reloads and launches.
+    pub column_widths: BTreeMap<String, f32>,
+    /// Each column's kind, allowed values and foreign keys, read with the rows.
+    pub columns: Option<TableColumns>,
     pub column_filter: Option<String>,
     pub show_ddl: bool,
     pub ddl: Option<String>,
     pub triggers: TriggerState,
 }
+/// A new filter rule: any column, TablePlus's default operator "=".
 pub fn new_filter() -> Filter {
     Filter {
         enabled: true,
         column: String::new(),
-        op: FilterOp::Contains,
+        op: FilterOp::Eq,
         value: String::new(),
         value2: None,
     }
@@ -237,8 +264,11 @@ impl TableEditor {
             applied: vec![],
             combine: Combine::And,
             show_filters: false,
-            order_by: None,
+            order_by: vec![],
             hidden: Default::default(),
+            column_order: vec![],
+            column_widths: BTreeMap::new(),
+            columns: None,
             column_filter: None,
             show_ddl: false,
             ddl: None,
@@ -305,6 +335,67 @@ impl TableEditor {
             || self.structure.dirty()
             || self.index.dirty()
             || self.triggers.dirty()
+    }
+    /// What the Data view shows now, for Go Back / Go Forward.
+    pub fn view(&self, offset: u64) -> TableView {
+        TableView {
+            filters: self.filters.clone(),
+            applied: self.applied.clone(),
+            combine: self.combine,
+            show_filters: self.show_filters,
+            order_by: self.order_by.clone(),
+            offset,
+        }
+    }
+    /// Shows `view` again (its rows still have to be read).
+    pub fn restore_view(&mut self, view: &TableView) {
+        self.filters = if view.filters.is_empty() {
+            vec![new_filter()]
+        } else {
+            view.filters.clone()
+        };
+        self.applied = view.applied.clone();
+        self.combine = view.combine;
+        self.show_filters = view.show_filters;
+        self.order_by = view.order_by.clone();
+    }
+    /// Whether column `col` of the Data rows can take a typed value: not a view's, not binary
+    /// (bytes never round-trip through text) and not computed by the server.
+    pub fn data_column_editable(&self, col: usize) -> bool {
+        let Some(name) = self.data.result.columns.get(col) else {
+            return false;
+        };
+        !self.read_only()
+            && !self
+                .data
+                .result
+                .binary
+                .as_ref()
+                .and_then(|b| b.get(col))
+                .copied()
+                .unwrap_or(false)
+            && !self
+                .columns
+                .as_ref()
+                .and_then(|c| c.get(name))
+                .is_some_and(|c| c.generated)
+    }
+    /// Why a Data cell can't be edited, in the words the grid's hint uses.
+    pub fn data_column_refusal(&self, col: usize) -> &'static str {
+        let generated = self
+            .data
+            .result
+            .columns
+            .get(col)
+            .and_then(|name| self.columns.as_ref()?.get(name))
+            .is_some_and(|c| c.generated);
+        if self.read_only() {
+            "This is a view: its rows can't be edited here."
+        } else if generated {
+            "This column is generated by the server: it can't be edited."
+        } else {
+            "This column can't be edited as text (binary data)."
+        }
     }
     pub fn load_data(&mut self, data: &TableDataResult) {
         self.primary_key = data.primary_key.clone();

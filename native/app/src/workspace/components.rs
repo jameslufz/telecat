@@ -2,11 +2,12 @@
 use super::*;
 use std::collections::BTreeMap;
 use telecat_app::table_model::Part;
-use telecat_core::changes::{Cell as Value, EditRow, cell_modified, is_modified, row_key};
+use telecat_core::changes::{Cell as Value, EditRow, cell_modified, row_key};
+use telecat_core::columns::ValueKind;
 use telecat_editor::{EditorEvent, EditorOptions, SqlEditor};
 use telecat_grid::{Cell, Column, DataGrid, Edits, GridEvent, GridModel, Hooks, RowState};
 
-type GridKey = (u64, u8);
+pub(super) type GridKey = (u64, u8);
 pub(super) type Rows = Vec<Vec<Option<String>>>;
 const HINT_FOR: std::time::Duration = std::time::Duration::from_secs(4);
 #[derive(Default)]
@@ -59,12 +60,22 @@ fn key_values(
         .collect::<Option<Vec<_>>>()
         .filter(|v| v.iter().all(Option::is_some))
 }
-struct GridBinding {
-    view: Entity<DataGrid>,
+pub(super) struct GridBinding {
+    pub(super) view: Entity<DataGrid>,
     loaded: bool,
     stamp: String,
-    rows: Vec<usize>,
+    /// Each shown row's index in the tab's rows.
+    pub(super) rows: Vec<usize>,
     _subscription: Subscription,
+}
+impl Components {
+    pub(super) fn grid(&self, k: GridKey) -> Option<&GridBinding> {
+        self.grids.get(&k)
+    }
+}
+/// The grid a tab shows now.
+pub(super) fn grid_key(tab: &Tab) -> Option<GridKey> {
+    Some(key(tab))
 }
 fn key(tab: &Tab) -> GridKey {
     (
@@ -179,13 +190,15 @@ impl Workspace {
         };
         let stamp = if let Some(t) = &tab.table {
             format!(
-                "{}:{}:{:?}:{:?}:{:?}:{}",
+                "{}:{}:{:?}:{:?}:{:?}:{}:{:?}:{}",
                 t.buffer().revision,
                 tab.offset,
                 t.hidden,
                 t.order_by,
                 t.column_filter,
-                search
+                search,
+                t.column_order,
+                t.columns.is_some()
             )
         } else {
             format!(
@@ -240,6 +253,7 @@ impl Workspace {
                 model.selection.anchor = model.selection.rows.first().copied();
             }
         }
+        let is_table = tab.table.is_some();
         let initial = !self.components.grids.contains_key(&k);
         if initial {
             if let Some(row) = tab.grid.selected_row {
@@ -267,6 +281,11 @@ impl Workspace {
                         old.edits = model.edits;
                         old.options = model.options;
                         old.sort = model.sort;
+                        // A table's column order is the tab's; a result's stays the grid's own
+                        // until its columns change.
+                        if is_table {
+                            old.set_order(model.order);
+                        }
                     },
                     cx,
                 )
@@ -541,6 +560,94 @@ impl Workspace {
                 self.grid_event(k, event, window, cx);
             }
         }
+    }
+    /// Whether grid `k` is a Data grid in TablePlus's sense: a table's rows or a query's results.
+    fn is_data_grid(&self, k: GridKey) -> bool {
+        self.state
+            .tabs
+            .iter()
+            .find(|t| t.id == k.0)
+            .is_some_and(|t| match &t.table {
+                Some(_) => k.1 == 0,
+                None => t.kind == TabKind::Query,
+            })
+    }
+    /// The Data grid's TablePlus actions (see `data.rs`); `false` for everything else.
+    fn data_grid_event(
+        &mut self,
+        k: GridKey,
+        event: &GridEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.is_data_grid(k) {
+            if matches!(
+                event,
+                GridEvent::Resize { .. } | GridEvent::Reorder(_) | GridEvent::ColumnsFitted
+            ) {
+                return true;
+            }
+            return false;
+        }
+        let table = self
+            .state
+            .tabs
+            .iter()
+            .find(|t| t.id == k.0)
+            .is_some_and(|t| t.table.is_some());
+        match event.clone() {
+            GridEvent::ContextMenu { cell, bounds, key } => {
+                self.data_cell_menu(k, cell, bounds, key, window, cx)
+            }
+            GridEvent::SetValue { cell, bounds, key } => {
+                self.set_value_menu(k, cell, bounds, key, window, cx)
+            }
+            GridEvent::HeaderMenu { column, bounds } => {
+                self.header_menu(k, column, bounds, window, cx)
+            }
+            GridEvent::PasteCells(copied) => {
+                let from = self
+                    .components
+                    .grid(k)
+                    .and_then(|g| g.view.read(cx).pasted_from().cloned());
+                self.paste_cells(k, copied, from, cx)
+            }
+            GridEvent::ForeignKey { cell, key } if table => {
+                self.follow_foreign_key(k, cell, key, window, cx)
+            }
+            GridEvent::Page(delta) if table => self.page_step(delta, window, cx),
+            GridEvent::Resize { .. } | GridEvent::Reorder(_) | GridEvent::ColumnsFitted => {
+                self.remember_layout(k, cx)
+            }
+            GridEvent::QuickLook(cell) => {
+                let key = self
+                    .components
+                    .grid(k)
+                    .and_then(|g| g.view.read(cx).model().row_key(cell.row).map(str::to_owned));
+                if let Some((row, col)) = self.locate_grid_cell(k, cell, key.as_deref(), cx) {
+                    self.open_quick_look(k, row, col, window, cx);
+                }
+            }
+            GridEvent::CellPopup { cell, bounds, key } if table => {
+                self.value_dropdown(k, cell, bounds, key, window, cx)
+            }
+            GridEvent::Sort(sort) if table => self.grid_sort(sort, window, cx),
+            GridEvent::EditRefused(cell) if table => {
+                let reason = self
+                    .state
+                    .tabs
+                    .iter()
+                    .find(|t| t.id == k.0)
+                    .and_then(|t| t.table.as_ref())
+                    .map_or("This cell can't be edited.", |t| {
+                        t.data_column_refusal(cell.col)
+                    });
+                self.show_hint(reason, cx);
+            }
+            _ => return false,
+        }
+        cx.notify();
+        true
     }
     /// Grid events of a query result mapped onto tables. `false` for events every grid handles
     /// the same way.
@@ -899,7 +1006,7 @@ impl Workspace {
         })
         .detach();
     }
-    fn grid_event(
+    pub(super) fn grid_event(
         &mut self,
         k: GridKey,
         event: GridEvent,
@@ -914,6 +1021,9 @@ impl Workspace {
         };
         let grid = binding.view.clone();
         let rows = binding.rows.clone();
+        if self.data_grid_event(k, &event, window, cx) {
+            return;
+        }
         if self.result_grid_event(k, &event, &grid, window, cx) {
             return;
         }
@@ -922,6 +1032,7 @@ impl Workspace {
         };
         // Events carry their originating tab/part, never the currently selected tab.
         let mut inserted = None;
+        let mut quick = None;
         let part = match k.1 {
             0 => Part::Data,
             1 => Part::Structure,
@@ -999,11 +1110,14 @@ impl Workspace {
             }
             GridEvent::ToggleDetail => self.panel = !self.panel,
             GridEvent::QuickLook(cell) => {
-                let model = grid.read(cx).model();
-                self.sheet = Some(Sheet::QuickLook {
-                    title: model.columns[cell.col].name.clone(),
-                    value: model.cell_value(cell).unwrap_or("NULL").to_owned(),
-                });
+                let real = match &mut tab.table {
+                    Some(t) => {
+                        let key = grid.read(cx).model().row_key(cell.row).map(str::to_owned);
+                        locate(t, key.as_deref())
+                    }
+                    None => rows.get(cell.row).copied(),
+                };
+                quick = real.map(|row| (row, cell.col));
             }
             GridEvent::InsertRow => {
                 self.add_grid_row(window, cx);
@@ -1021,33 +1135,31 @@ impl Workspace {
             }
             GridEvent::Paste(values) => {
                 if let Some(t) = &mut tab.table {
-                    if values
-                        .iter()
-                        .any(|r| r.len() != t.data.result.columns.len())
-                    {
-                        self.error("Cannot paste rows: clipboard columns must match the table. Copy whole tab-separated rows.",cx);
-                        return;
+                    // Rows or cells Telecat copied go into the columns of their names, whatever
+                    // either grid's layout; other text maps through this grid's shown columns.
+                    let from = grid.read(cx).pasted_from().cloned();
+                    let shown: Vec<usize> = grid.read(cx).model().visible_columns().collect();
+                    let mapped = match &from {
+                        Some(from) => telecat_core::paste::rows_by_names(
+                            &values,
+                            &from.columns,
+                            &t.data.result.columns,
+                            &from.source,
+                        ),
+                        _ => telecat_core::paste::rows_by_layout(
+                            &values,
+                            &shown,
+                            t.data.result.columns.len(),
+                        ),
+                    };
+                    match mapped {
+                        Ok(rows) => inserted = Some(insert_values(t, rows)),
+                        Err(message) => {
+                            self.error(message, cx);
+                            return;
+                        }
                     }
-                    inserted = Some(insert_values(
-                        t,
-                        values
-                            .into_iter()
-                            .map(|r| r.into_iter().map(Value::Text).collect())
-                            .collect(),
-                    ));
                 }
-            }
-            GridEvent::Sort(sort) => {
-                let sort = sort.map(|s| OrderBy {
-                    column: s.column,
-                    dir: if s.direction == telecat_grid::Direction::Asc {
-                        Direction::Asc
-                    } else {
-                        Direction::Desc
-                    },
-                });
-                self.navigate_table(TableNavigation::Sort(sort), window, cx);
-                return;
             }
             GridEvent::ContextMenu { cell, bounds, key } => {
                 let real = tab.table.as_mut().and_then(|t| locate(t, key.as_deref()));
@@ -1055,27 +1167,12 @@ impl Workspace {
                     return;
                 }
                 let mut items = vec![];
+                // A table's Data grid has TablePlus's menu (`data.rs`); this is Structure and
+                // Index, and the process list.
                 if let Some(t) = &tab.table {
                     let real = real.unwrap_or(cell.row);
-                    if part == Part::Data {
-                        items.extend([
-                            json!({"id":"null","label":"Set NULL"}),
-                            json!({"id":"empty","label":"Set EMPTY"}),
-                        ]);
-                        if t.data.rows.get(real).is_some_and(|r| r.orig.is_none()) {
-                            items.push(json!({"id":"default","label":"Set DEFAULT"}));
-                        }
-                        items.push(json!({"type":"separator"}));
-                    }
-                    items.push(json!({"id":"delete","label":if part==Part::Data {"Delete Row"} else {"Delete"}}));
-                    if part != Part::Data
-                        || t.data
-                            .rows
-                            .get(real)
-                            .is_some_and(|r| r.deleted || is_modified(r))
-                    {
-                        items.push(json!({"id":"revert","label":if part==Part::Data {"Revert Row"}else{"Revert"}}));
-                    }
+                    items.push(json!({"id":"delete","label":"Delete"}));
+                    items.push(json!({"id":"revert","label":"Revert"}));
                     if part == Part::Structure
                         && t.column_movable(self.state.connection.driver, real)
                     {
@@ -1158,7 +1255,16 @@ impl Workspace {
                 self.metadata_popup(k, key, cell, bounds, window, cx);
                 return;
             }
-            GridEvent::Resize { .. } => {}
+            // A Data grid's sort and these are handled by `data_grid_event`.
+            GridEvent::Sort(_)
+            | GridEvent::Resize { .. }
+            | GridEvent::PasteCells(_)
+            | GridEvent::HeaderMenu { .. }
+            | GridEvent::Reorder(_)
+            | GridEvent::ColumnsFitted
+            | GridEvent::SetValue { .. }
+            | GridEvent::ForeignKey { .. }
+            | GridEvent::Page(_) => {}
             GridEvent::EditRefused(cell) => {
                 let reason = match &tab.table {
                     Some(_) => "This column can't be edited as text (binary data).".to_owned(),
@@ -1195,6 +1301,9 @@ impl Workspace {
                     )
                 });
             }
+        }
+        if let Some((row, col)) = quick {
+            self.open_quick_look(k, row, col, window, cx);
         }
         cx.notify();
     }
@@ -1271,15 +1380,6 @@ pub(super) fn stage_cell(
     value: Value,
 ) {
     buffer(t, part).set_cell(row, col, value);
-}
-/// Whether a Data column can be edited as text: binary values never round-trip through text.
-pub(super) fn data_column_editable(result: &QueryResult, col: usize) -> bool {
-    !result
-        .binary
-        .as_ref()
-        .and_then(|b| b.get(col))
-        .copied()
-        .unwrap_or(false)
 }
 /// The context-menu items that place a new column: MySQL adds it with FIRST/AFTER the column
 /// above it, so its row position is its position in the table.
@@ -1432,9 +1532,11 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
                 .and_then(|n| n.get(i))
                 .copied()
                 .unwrap_or(false);
+            let data_table = tab.table.as_ref().filter(|t| t.part == Part::Data);
+            let detail = data_table.and_then(|t| t.columns.as_ref()?.get(name));
             c.editable = match part {
                 _ if read_only => false,
-                Some(Part::Data) => data_column_editable(result, i),
+                Some(Part::Data) => data_table.is_some_and(|t| t.data_column_editable(i)),
                 Some(Part::Structure) => {
                     matches!(
                         name.as_str(),
@@ -1459,8 +1561,21 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
                     name.as_str(),
                     "index_algorithm" | "is_unique" | "column_name"
                 ),
+                // Enum, SET and boolean values are picked from a list, like TablePlus's dropdowns.
+                Some(Part::Data) => {
+                    c.editable
+                        && detail.is_some_and(|d| {
+                            matches!(
+                                d.kind,
+                                ValueKind::Enum | ValueKind::Set | ValueKind::Boolean
+                            )
+                        })
+                }
                 _ => false,
             };
+            c.foreign_key = data_table
+                .and_then(|t| t.columns.as_ref())
+                .is_some_and(|d| d.foreign_key(name).is_some());
             c.hidden = tab.table.as_ref().is_some_and(|t| {
                 t.part == Part::Data
                     && (t.hidden.contains(name)
@@ -1523,6 +1638,7 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
     } else {
         0
     };
+    m.options.source = super::data::copy_source(tab, driver);
     m.options.empty_text = if tab.kind == TabKind::Query && result.columns.is_empty() {
         ""
     } else {
@@ -1531,6 +1647,7 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
     .into();
     let result_edit = tab.result_edit.as_ref();
     let writable = part.is_some() && !read_only;
+    let data_grid = part == Some(Part::Data) || (part.is_none() && tab.kind == TabKind::Query);
     m.options.hooks = Hooks {
         sort: part == Some(Part::Data),
         edit: writable || result_edit.is_some(),
@@ -1544,19 +1661,36 @@ fn make_grid(tab: &Tab, driver: Driver, search: &str) -> (GridModel, Vec<usize>)
         quick_look: true,
         popup: writable,
         escape: tab.table.as_ref().is_some_and(|t| t.buffer().dirty()) || tab.result_dirty(),
+        paging: part == Some(Part::Data),
+        set_value: (part == Some(Part::Data) && writable) || result_edit.is_some(),
+        header_menu: data_grid,
+        reorder: data_grid,
     };
-    m.sort = tab
-        .table
-        .as_ref()
-        .and_then(|t| t.order_by.as_ref())
-        .map(|s| telecat_grid::Sort {
-            column: s.column.clone(),
-            direction: if s.dir == Direction::Asc {
-                telecat_grid::Direction::Asc
-            } else {
-                telecat_grid::Direction::Desc
-            },
-        });
+    if let Some(t) = tab.table.as_ref().filter(|t| t.part == Part::Data) {
+        m.sort = t
+            .order_by
+            .iter()
+            .map(|s| telecat_grid::Sort {
+                column: s.column.clone(),
+                direction: if s.dir == Direction::Asc {
+                    telecat_grid::Direction::Asc
+                } else {
+                    telecat_grid::Direction::Desc
+                },
+            })
+            .collect();
+        let order: Vec<usize> = t
+            .column_order
+            .iter()
+            .filter_map(|name| result.columns.iter().position(|c| c == name))
+            .collect();
+        m.set_order(order);
+        for (i, name) in result.columns.iter().enumerate() {
+            if let (Some(width), Some(slot)) = (t.column_widths.get(name), m.widths.get_mut(i)) {
+                *slot = *width;
+            }
+        }
+    }
     (m, mapping)
 }
 fn scenario_grid(name: &str, tab: &Tab, m: &mut GridModel) {

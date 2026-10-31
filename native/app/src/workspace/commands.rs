@@ -32,6 +32,11 @@ pub const BINDINGS: &[(&str, &str)] = &[
     ("cmd-e", "open-sql-query"),
     ("cmd-w", "close-tab"),
     ("cmd-r", "refresh"),
+    ("alt-cmd-r", "reload-tab"),
+    ("ctrl-cmd-[", "show-data"),
+    ("ctrl-cmd-]", "show-structure"),
+    ("ctrl-cmd-left", "go-back"),
+    ("ctrl-cmd-right", "go-forward"),
     ("cmd-shift-r", "reconnect"),
     ("cmd-.", "running-queries"),
     ("cmd-0", "toggle-sidebar"),
@@ -63,6 +68,8 @@ pub fn install(cx: &mut App) {
             .iter()
             .map(|(key, name)| KeyBinding::new(key, Command::new(name), None)),
     );
+    // A focused grid keeps its ⇧⌘C and ⌘↩ (see `telecat_grid::install_keys`).
+    telecat_grid::install_keys(cx);
     cx.on_action(|command: &Command, cx| {
         let command = command.clone();
         // Key bindings dispatch this while GPUI is updating the active window, which
@@ -149,6 +156,11 @@ fn menu_label(name: &str) -> String {
         "switch-db" => "Switch Database",
         "running-queries" => "Running Queries",
         "refresh" => "Reload Workspace",
+        "reload-tab" => "Reload Current Tab",
+        "show-data" => "Show Data",
+        "show-structure" => "Show Structure",
+        "go-back" => "Go Back",
+        "go-forward" => "Go Forward",
         "reconnect" => "Reconnect",
         "toggle-sidebar" => "Toggle Sidebar",
         "toggle-panel" => "Toggle Right Panel",
@@ -241,6 +253,11 @@ impl Workspace {
             }
             "close-tab" => self.request_close_tab(self.state.active, window, cx),
             "refresh" => self.reload_workspace(window, cx),
+            "reload-tab" => self.reload_current_tab(window, cx),
+            "show-data" => self.show_part(telecat_app::table_model::Part::Data, cx),
+            "show-structure" => self.show_part(telecat_app::table_model::Part::Structure, cx),
+            "go-back" => self.go(false, window, cx),
+            "go-forward" => self.go(true, window, cx),
             "running-queries" => {
                 self.state.open_running();
                 self.refresh_tab(cx);

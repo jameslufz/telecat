@@ -780,7 +780,8 @@ async fn export_sql(
         table: tref(d, src),
         filters: req_filters,
         combine: Combine::And,
-        order_by: None,
+        order_by: vec![],
+        estimate: false,
         limit: 300,
         offset: 0,
     };
@@ -1091,7 +1092,8 @@ async fn qa060_export_stop_is_prompt_on_large_table() -> Result<()> {
             table: tref(d, "qa060_big"),
             filters: vec![],
             combine: Combine::And,
-            order_by: None,
+            order_by: vec![],
+            estimate: false,
             limit: 300,
             offset: 0,
         };
@@ -1331,7 +1333,8 @@ async fn qa060r1_mysql_json_exports_as_server_text() -> Result<()> {
         table: tref(d, "qa060_json"),
         filters: vec![],
         combine: Combine::And,
-        order_by: None,
+        order_by: vec![],
+        estimate: false,
         limit: 300,
         offset: 0,
     };

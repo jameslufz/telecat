@@ -397,6 +397,35 @@ impl Profile {
         }
         atomic_json(&self.root.join("drafts.json"), &all)
     }
+    /// A table tab's remembered filters and column layout (see `table_state::table_key`).
+    pub fn saved_table(&self, key: &str) -> Option<telecat_core::table_state::SavedTable> {
+        let _lock = self
+            .gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        read_json::<SavedTables>(&self.root.join(TABLES_FILE))
+            .ok()?
+            .remove(key)
+    }
+    pub fn save_table(
+        &self,
+        key: &str,
+        mut table: telecat_core::table_state::SavedTable,
+    ) -> Result<()> {
+        let _lock = self
+            .gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let path = self.root.join(TABLES_FILE);
+        // A damaged file is replaced rather than blocking every later save.
+        let mut all: SavedTables = read_json(&path).unwrap_or_default();
+        table.used = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        all.insert(key.to_owned(), table);
+        telecat_core::table_state::prune(&mut all);
+        atomic_json(&path, &all)
+    }
     /// Serialize import against Save/Delete without holding the JSON lock during Keychain I/O.
     pub(crate) fn import_secret(
         &self,
@@ -432,6 +461,9 @@ impl Profile {
         Ok(true)
     }
 }
+/// Table tabs' filters and column layouts, by `table_state::table_key`.
+pub const TABLES_FILE: &str = "tables.json";
+type SavedTables = std::collections::BTreeMap<String, telecat_core::table_state::SavedTable>;
 /// The connections file as it was before Telecat 0.7 first changed it.
 pub const BACKUP_FILE: &str = "connections.before-0.7.json";
 pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {

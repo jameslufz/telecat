@@ -148,7 +148,9 @@ fn main() {
                             },
                             cx,
                         ),
-                        GridEvent::Sort(sort) => g.update_model(|m| m.sort = sort.clone(), cx),
+                        GridEvent::Sort(sort) => {
+                            g.update_model(|m| m.sort = sort.iter().cloned().collect(), cx)
+                        }
                         _ => {}
                     });
                 });

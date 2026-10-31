@@ -170,6 +170,10 @@ mod tests {
         }
         out += &match key[0] {
             "enter" => "↵".to_owned(),
+            "left" => "←".to_owned(),
+            "right" => "→".to_owned(),
+            "up" => "↑".to_owned(),
+            "down" => "↓".to_owned(),
             "backspace" => "⌫".to_owned(),
             "space" => "Space".to_owned(),
             k => k.to_uppercase(),

@@ -56,6 +56,10 @@
         "Previous / next tab"
       ],
       [
+        "⌃⌘←  /  ⌃⌘→",
+        "Go back / forward (tabs and their filters)"
+      ],
+      [
         "⌘1 … ⌘9",
         "Go to tab 1–9"
       ],
@@ -134,6 +138,10 @@
       [
         "Esc",
         "Sidebar: cancel its pending delete or truncate"
+      ],
+      [
+        "⌥⌘R",
+        "Reload the current tab"
       ]
     ]
   },
@@ -202,8 +210,12 @@
         "Toggle row detail"
       ],
       [
-        "⌘C  /  ⌘V",
-        "Copy rows / paste rows"
+        "⌘C  /  ⇧⌘C",
+        "Copy rows / copy selected cells"
+      ],
+      [
+        "⌘V  /  ⇧⌘V",
+        "Paste rows / paste to selected cells"
       ],
       [
         "⌘D",
@@ -218,20 +230,36 @@
         "Delete selected rows"
       ],
       [
+        "⌥↩  /  ⌥ click",
+        "Set Value menu (EMPTY, NULL, DEFAULT, NOW(), date picker…)"
+      ],
+      [
+        "⌘↩  /  Middle click",
+        "Quick Look the cell"
+      ],
+      [
+        "⌘←  /  ⌘→",
+        "Previous / next page"
+      ],
+      [
+        "⌘↑  /  ⌘↓",
+        "First / last row"
+      ],
+      [
+        "⌃⌘[  /  ⌃⌘]",
+        "Show data / structure"
+      ],
+      [
+        "Shift click  /  drag",
+        "Select a block of cells"
+      ],
+      [
         "⌘F",
         "Filters"
       ],
       [
         "⌥⌘F",
         "Column filter"
-      ],
-      [
-        "⌥ click",
-        "Quick edit menu"
-      ],
-      [
-        "Middle click",
-        "Quick look at a cell"
       ],
       [
         "Esc",
@@ -252,11 +280,19 @@
       ],
       [
         "⌘I  /  ⇧⌘I",
-        "Insert / remove a filter rule"
+        "Clone / remove a filter rule"
       ],
       [
         "⌘↑  /  ⌘↓",
         "Previous / next filter rule"
+      ],
+      [
+        "⌘←  /  ⌘→",
+        "Open the rule's column / operator menu"
+      ],
+      [
+        "⌘B",
+        "Include / exclude the rule from Apply All"
       ],
       [
         "⌘I",

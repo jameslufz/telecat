@@ -22,7 +22,7 @@ enum Source {
 }
 /// `rows` (shown rows; `real[i]` is row i's index in the result) with each MySQL JSON cell
 /// replaced by the server's JSON text, except cells `edited(row, column)` says were changed.
-fn with_json_text(
+pub(super) fn with_json_text(
     mut rows: super::components::Rows,
     real: &[usize],
     json: &[(usize, Vec<Option<String>>)],
@@ -43,7 +43,7 @@ fn with_json_text(
     rows
 }
 /// The single table a query result's columns come from, when there is exactly one.
-fn single_source(tab: &Tab) -> Option<TableRef> {
+pub(super) fn single_source(tab: &Tab) -> Option<TableRef> {
     let plan = &tab.result_edit.as_ref()?.plan;
     let mut tables = plan.sources.tables.iter().map(|t| &t.table);
     let first = tables.next()?;
@@ -96,6 +96,7 @@ impl Workspace {
                     filters: t.applied.clone(),
                     combine: t.combine,
                     order_by: t.order_by.clone(),
+                    estimate: false,
                     limit: 0,
                     offset: 0,
                 }),

@@ -8,7 +8,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-gpui_kit::actions!(telecat_grid, [Copy, Paste, NextCell, PreviousCell]);
+gpui_kit::actions!(
+    telecat_grid,
+    [
+        Copy,
+        Paste,
+        NextCell,
+        PreviousCell,
+        CopyCells,
+        QuickLookCell
+    ]
+);
 struct GridBindings;
 impl Global for GridBindings {}
 fn init(cx: &mut App) {
@@ -21,8 +31,47 @@ fn init(cx: &mut App) {
         KeyBinding::new("tab", NextCell, Some("TelecatGrid")),
         KeyBinding::new("shift-tab", PreviousCell, Some("TelecatGrid")),
     ]);
+    install_keys(cx);
+}
+/// The grid's ⇧⌘C (Copy Selected Cells) and ⌘↩ (Quick Look). Key bindings are matched before
+/// key listeners, and a binding without a context ties with the focused grid's own context, the
+/// later one winning: an application installing its own ⇧⌘C / ⌘↩ (Toggle Console Log, Run
+/// Current) calls this afterwards so the grid keeps them while it has focus.
+pub fn install_keys(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("cmd-shift-c", CopyCells, Some("TelecatGrid")),
+        KeyBinding::new("cmd-enter", QuickLookCell, Some("TelecatGrid")),
+    ]);
 }
 
+/// What Telecat last put on the clipboard from a grid: the exact text and where its values
+/// came from. A paste of that same text maps values by column name (see `DataGrid::pasted_from`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CopiedFrom {
+    /// The copied columns' names, in the order of the values.
+    pub columns: Vec<String>,
+    /// Copy Rows (⌘C): whole rows, which paste into their own columns. Copy Selected Cells
+    /// (⇧⌘C) is a block that pastes where it's put.
+    pub whole_rows: bool,
+    /// The grid's `Options::source`.
+    pub source: String,
+}
+struct LastCopy {
+    text: String,
+    from: CopiedFrom,
+}
+impl Global for LastCopy {}
+/// Writes `text` to the clipboard and remembers where it came from.
+pub fn copy_to_clipboard(cx: &mut App, text: String, from: CopiedFrom) {
+    cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
+    cx.set_global(LastCopy { text, from });
+}
+/// Where `text` came from, if it is exactly (byte for byte) what Telecat last copied.
+pub fn copied_from(cx: &App, text: &str) -> Option<CopiedFrom> {
+    cx.try_global::<LastCopy>()
+        .filter(|last| last.text == text)
+        .map(|last| last.from.clone())
+}
 /// CPU time preparing and painting the grid, not GPU presentation latency.
 #[derive(Default, Debug)]
 pub struct FrameStats {
@@ -68,7 +117,22 @@ enum Drag {
         width: f32,
         height: f32,
     },
+    /// A press on a column header: a click sorts, a drag moves the column.
+    Header {
+        col: usize,
+        x: f32,
+        moved: bool,
+    },
+    /// Dragging across cells selects the block from where it started.
+    Select {
+        row: usize,
+        col: usize,
+    },
 }
+/// How far a header must be dragged before it moves instead of sorting.
+const HEADER_DRAG: f32 = 4.;
+/// The width of a foreign-key cell's arrow, at its right edge.
+const ARROW_WIDTH: f32 = 18.;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum HoverTarget {
     Header(usize),
@@ -90,8 +154,11 @@ pub struct DataGrid {
     editor_size: (f32, f32),
     hover_scrollbar: Option<bool>,
     hover_target: Option<HoverTarget>,
+    /// While a header is dragged: where the pointer is, to show where the column will land.
+    header_drop: Option<f32>,
     tooltip: Option<(SharedString, f32, f32)>,
     tooltip_task: Option<Task<()>>,
+    pasted_from: Option<CopiedFrom>,
     pub frame_stats: FrameStats,
 }
 impl EventEmitter<GridEvent> for DataGrid {}
@@ -112,8 +179,10 @@ impl DataGrid {
             editor_size: (320., 120.),
             hover_scrollbar: None,
             hover_target: None,
+            header_drop: None,
             tooltip: None,
             tooltip_task: None,
+            pasted_from: None,
             frame_stats: FrameStats::default(),
         }
     }
@@ -166,13 +235,54 @@ impl DataGrid {
         cx.notify();
     }
     /// Call from the application's Edit menu as well as keyboard shortcuts.
+    /// Copy Rows (⌘C).
     pub fn copy_selection(&mut self, cx: &mut Context<Self>) {
         if self.model.editing.is_none() && !self.model.selection.rows.is_empty() {
-            cx.write_to_clipboard(ClipboardItem::new_string(self.model.selected_tsv()));
+            let from = CopiedFrom {
+                columns: self.model.copied_row_columns(),
+                whole_rows: true,
+                source: self.model.options.source.clone(),
+            };
+            copy_to_clipboard(cx, self.model.selected_rows_tsv(), from);
         }
+    }
+    /// Copy Selected Cells (⇧⌘C).
+    pub fn copy_cells(&mut self, cx: &mut Context<Self>) {
+        if self.model.editing.is_none() && !self.model.selection.rows.is_empty() {
+            let from = CopiedFrom {
+                columns: self.model.copied_cell_columns(),
+                whole_rows: false,
+                source: self.model.options.source.clone(),
+            };
+            copy_to_clipboard(cx, self.model.selected_cells_tsv(), from);
+        }
+    }
+    /// Where the clipboard text of the last paste (⌘V / ⇧⌘V) came from, when Telecat copied it.
+    pub fn pasted_from(&self) -> Option<&CopiedFrom> {
+        self.pasted_from.as_ref()
+    }
+    /// Paste to Selected Cells (⇧⌘V): the host decides what may be written.
+    pub fn paste_cells(&mut self, cx: &mut Context<Self>) {
+        if !self.model.options.hooks.paste || self.model.editing.is_some() {
+            return;
+        }
+        if let Some(text) = cx.read_from_clipboard().and_then(|c| c.text())
+            && !text.is_empty()
+        {
+            self.pasted_from = copied_from(cx, &text);
+            cx.emit(GridEvent::PasteCells(parse_tsv(&text)));
+        }
+    }
+    /// The selected cell's bounds in window coordinates, for menus opened from the keyboard.
+    pub fn selected_cell(&self) -> Option<(Cell, Rect)> {
+        let row = self.model.selection.anchor?;
+        let col = self.model.selected_column?;
+        let cell = Cell { row, col };
+        Some((cell, self.absolute_cell_rect(cell)))
     }
     pub fn paste_clipboard(&mut self, cx: &mut Context<Self>) {
         if let Some(text) = cx.read_from_clipboard().and_then(|c| c.text()) {
+            self.pasted_from = copied_from(cx, &text);
             let events = self.model.paste(&text);
             self.emit(events, cx);
         }
@@ -339,14 +449,62 @@ impl DataGrid {
             return;
         }
         let command = mods.platform || mods.control;
-        if command && key.eq_ignore_ascii_case("c") {
-            self.copy_selection(cx);
+        if command && key.eq_ignore_ascii_case("c") && !mods.alt {
+            if mods.shift {
+                self.copy_cells(cx);
+            } else {
+                self.copy_selection(cx);
+            }
             cx.stop_propagation();
             return;
         }
-        if command && key.eq_ignore_ascii_case("v") && self.model.options.hooks.paste {
-            self.paste_clipboard(cx);
+        if command && key.eq_ignore_ascii_case("v") && self.model.options.hooks.paste && !mods.alt {
+            if mods.shift {
+                self.paste_cells(cx);
+            } else {
+                self.paste_clipboard(cx);
+            }
             cx.stop_propagation();
+            return;
+        }
+        let plain_command = mods.platform && !mods.shift && !mods.alt && !mods.control;
+        if plain_command && matches!(key, "left" | "right") {
+            if self.model.options.hooks.paging {
+                cx.emit(GridEvent::Page(if key == "left" { -1 } else { 1 }));
+            }
+            cx.stop_propagation();
+            return;
+        }
+        if plain_command && key == "enter" {
+            if let Some((cell, _)) = self.selected_cell()
+                && self.model.options.hooks.quick_look
+            {
+                cx.emit(GridEvent::QuickLook(cell));
+            }
+            cx.stop_propagation();
+            return;
+        }
+        if key == "enter" && mods.alt && !mods.platform && !mods.control {
+            if let Some((cell, bounds)) = self.selected_cell()
+                && self.model.options.hooks.set_value
+            {
+                cx.emit(GridEvent::SetValue {
+                    cell,
+                    bounds,
+                    key: self.model.row_key(cell.row).map(str::to_owned),
+                });
+            }
+            cx.stop_propagation();
+            return;
+        }
+        if mods.platform && !mods.alt && !mods.control && matches!(key, "up" | "down") {
+            let events = self.model.navigate(
+                if key == "up" { Key::Home } else { Key::End },
+                model_mods(mods),
+            );
+            self.emit(events, cx);
+            cx.stop_propagation();
+            cx.notify();
             return;
         }
         let key = match key {
@@ -470,12 +628,38 @@ impl DataGrid {
             }
         }
         if y < HEADER_HEIGHT {
-            if event.button == MouseButton::Left {
-                if let Some(col) = self.hit_column(x) {
-                    let events = self.model.click_header(col);
-                    self.emit(events, cx);
+            let col = self.hit_column(x);
+            let menu = event.button == MouseButton::Right
+                || (event.button == MouseButton::Left && event.modifiers.control);
+            if menu {
+                if let Some(col) = col.filter(|_| self.model.options.hooks.header_menu) {
+                    let mut bounds = self.absolute_cell_rect(Cell { row: 0, col });
+                    bounds.y = f32::from(self.bounds.origin.y);
+                    bounds.height = HEADER_HEIGHT;
+                    cx.emit(GridEvent::HeaderMenu {
+                        column: col,
+                        bounds,
+                    });
+                }
+            } else if event.button == MouseButton::Left {
+                match col {
+                    Some(col) => {
+                        self.drag = Some(Drag::Header {
+                            col,
+                            x,
+                            moved: false,
+                        })
+                    }
+                    // The corner above the row numbers: TablePlus's "Expand the columns to fit
+                    // the content".
+                    None if x < self.model.number_width() => {
+                        let events = self.model.fit_columns();
+                        self.emit(events, cx);
+                    }
+                    None => {}
                 }
             }
+            cx.notify();
             return;
         }
         if x >= l.width || y >= l.height {
@@ -497,7 +681,19 @@ impl DataGrid {
         if let Some(col) = col {
             let cell = Cell { row, col };
             let rect = self.absolute_cell_rect(cell);
-            if event.button == MouseButton::Right
+            let set_value = event.button == MouseButton::Left
+                && event.modifiers.alt
+                && !event.modifiers.control
+                && self.model.options.hooks.set_value;
+            if set_value {
+                let events = self.model.click(row, Some(col), GridModifiers::default());
+                self.emit(events, cx);
+                cx.emit(GridEvent::SetValue {
+                    cell,
+                    bounds: rect,
+                    key: self.model.row_key(row).map(str::to_owned),
+                });
+            } else if event.button == MouseButton::Right
                 || (event.button == MouseButton::Left
                     && (event.modifiers.alt || event.modifiers.control))
             {
@@ -505,12 +701,25 @@ impl DataGrid {
                 self.emit(events, cx);
             } else if event.button == MouseButton::Middle {
                 self.model.selected_column = Some(col);
+                self.model.column_anchor = Some(col);
                 if self.model.options.hooks.quick_look {
                     cx.emit(GridEvent::QuickLook(cell));
                 }
             } else if event.button == MouseButton::Left {
                 let local_rect = self.model.cell_rect(cell);
-                if self.model.columns[col].chevron
+                let on_arrow = self.model.columns[col].foreign_key
+                    && self.model.cell_value(cell).is_some()
+                    && !self.model.is_default(cell)
+                    && x >= local_rect.x + local_rect.width - ARROW_WIDTH;
+                if on_arrow && event.click_count == 1 {
+                    self.model.selection = Selection::single(row);
+                    let events = self.model.click(row, Some(col), GridModifiers::default());
+                    self.emit(events, cx);
+                    cx.emit(GridEvent::ForeignKey {
+                        cell,
+                        key: self.model.row_key(row).map(str::to_owned),
+                    });
+                } else if self.model.columns[col].chevron
                     && self.model.options.hooks.popup
                     && x >= local_rect.x + local_rect.width - 20.
                 {
@@ -527,6 +736,10 @@ impl DataGrid {
                         .model
                         .click(row, Some(col), model_mods(event.modifiers));
                     self.emit(events, cx);
+                    if event.click_count == 1 && !event.modifiers.shift && !event.modifiers.platform
+                    {
+                        self.drag = Some(Drag::Select { row, col });
+                    }
                     if event.click_count == 2 {
                         if self.model.begin_edit(cell) {
                             self.sync_editor(window, cx);
@@ -577,6 +790,25 @@ impl DataGrid {
                         (width + x - start_x).max(100.),
                         (height + y - start_y).max(40.),
                     );
+                }
+                Drag::Header {
+                    col,
+                    x: start,
+                    moved,
+                } => {
+                    let moved = moved
+                        || (self.model.options.hooks.reorder && (x - start).abs() > HEADER_DRAG);
+                    self.drag = Some(Drag::Header {
+                        col,
+                        x: start,
+                        moved,
+                    });
+                    self.header_drop = moved.then_some(x);
+                }
+                Drag::Select { row, col } => {
+                    if event.pressed_button == Some(MouseButton::Left) {
+                        self.extend_drag_selection(row, col, x, y, cx);
+                    }
                 }
             }
             cx.notify();
@@ -653,6 +885,78 @@ impl DataGrid {
                 }));
             }
         }
+    }
+    /// Selects the block from where a drag started to the cell under the pointer.
+    fn extend_drag_selection(
+        &mut self,
+        row: usize,
+        col: usize,
+        x: f32,
+        y: f32,
+        cx: &mut Context<Self>,
+    ) {
+        if self.model.rows.is_empty() {
+            return;
+        }
+        let last = self.model.rows.len() - 1;
+        let over_row = (((y - HEADER_HEIGHT + self.model.scroll_y) / ROW_HEIGHT)
+            .floor()
+            .max(0.) as usize)
+            .min(last);
+        let over_col = self
+            .hit_column(x.max(self.model.number_width()))
+            .unwrap_or(col);
+        let rows: std::collections::BTreeSet<usize> =
+            (row.min(over_row)..=row.max(over_row)).collect();
+        if rows == self.model.selection.rows && self.model.selected_column == Some(over_col) {
+            return;
+        }
+        self.model.selection.rows = rows;
+        self.model.selection.anchor = Some(row);
+        self.model.column_anchor = Some(col);
+        self.model.selected_column = Some(over_col);
+        cx.emit(GridEvent::Selection {
+            selection: self.model.selection.clone(),
+            column: self.model.selected_column,
+        });
+        cx.notify();
+    }
+    /// Ends a press: a header click sorts, a header drag moves the column.
+    fn mouse_up(&mut self, event: &MouseUpEvent, cx: &mut Context<Self>) {
+        self.header_drop = None;
+        let Some(drag) = self.drag.take() else {
+            return;
+        };
+        if let Drag::Header { col, moved, .. } = drag {
+            let events = if moved {
+                let (x, _) = self.local(event.position);
+                let to = self.drop_position(col, x);
+                self.model.move_column(col, to)
+            } else {
+                self.model.click_header(col)
+            };
+            self.emit(events, cx);
+        }
+        cx.notify();
+    }
+    /// Where a dragged column lands when dropped at `x`: its new display position.
+    fn drop_position(&self, col: usize, x: f32) -> usize {
+        let order: Vec<usize> = self
+            .model
+            .display_columns()
+            .into_iter()
+            .filter(|&c| c != col)
+            .collect();
+        for (i, &c) in order.iter().enumerate() {
+            if self.model.columns[c].hidden {
+                continue;
+            }
+            let left = self.model.column_left(c) - self.model.scroll_x;
+            if x < left + self.model.widths[c] / 2. {
+                return i;
+            }
+        }
+        order.len()
     }
     fn clear_tooltip(&mut self, cx: &mut Context<Self>) {
         self.tooltip_task = None;
@@ -787,6 +1091,15 @@ impl Render for DataGrid {
                     cx.propagate();
                 }
             }))
+            .on_action(cx.listener(|this, _: &CopyCells, _, cx| this.copy_cells(cx)))
+            .on_action(cx.listener(|this, _: &QuickLookCell, _, cx| {
+                if this.model.editing.is_none()
+                    && this.model.options.hooks.quick_look
+                    && let Some((cell, _)) = this.selected_cell()
+                {
+                    cx.emit(GridEvent::QuickLook(cell));
+                }
+            }))
             .on_action(cx.listener(|this, _: &Copy, window, cx| {
                 if this.editor.is_some() {
                     window.defer(cx, |window, cx| {
@@ -825,6 +1138,9 @@ impl Render for DataGrid {
                                 this.model.clamp_scroll();
                                 let mut frame = Frame::new(started, bounds);
                                 frame.prepare(&this.model, this.hover_scrollbar, window);
+                                if let Some(x) = this.header_drop {
+                                    frame.drop_marker(&this.model, x);
+                                }
                                 let mut left = this.model.number_width() - this.model.scroll_x;
                                 for c in this.model.visible_columns() {
                                     left += this.model.widths[c];
@@ -861,13 +1177,9 @@ impl Render for DataGrid {
                             }
                         });
                         let weak = paint.clone();
-                        window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+                        window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
                             if phase == DispatchPhase::Bubble {
-                                let _ = weak.update(cx, |this, cx| {
-                                    if this.drag.take().is_some() {
-                                        cx.notify();
-                                    }
-                                });
+                                let _ = weak.update(cx, |this, cx| this.mouse_up(event, cx));
                             }
                         });
                     },
@@ -1134,6 +1446,8 @@ impl Frame {
             left += width;
         }
         let count = m.rows.len() + filler_count(m.rows.len(), l.height);
+        let block = m.selected_columns();
+        let several = block.len() > 1 || m.selection.rows.len() > 1;
         for row in virtual_range(count, m.scroll_y, l.height - HEADER_HEIGHT, OVERSCAN) {
             let y = HEADER_HEIGHT + row as f32 * ROW_HEIGHT - m.scroll_y;
             if y + ROW_HEIGHT <= HEADER_HEIGHT || y >= l.height {
@@ -1170,6 +1484,9 @@ impl Frame {
                 if actual && m.edits.modified.contains(&cell) {
                     self.quad(r, rgb(MOD_CELL), data_clip);
                 }
+                if selected && several && block.len() > 1 && block.contains(&col) {
+                    self.quad(r, rgba(0xffffff1c), data_clip);
+                }
                 self.quad(
                     Rect {
                         x: x + width - 1.,
@@ -1185,7 +1502,11 @@ impl Frame {
                     let empty = m.cell_value(cell) == Some("") && m.options.show_empty;
                     let text = if empty { "EMPTY" } else { m.cell_text(cell) };
                     let chev = m.columns[col].chevron;
-                    let padding = if chev { 20. } else { 7. };
+                    let arrow = m.columns[col].foreign_key
+                        && !null
+                        && !m.is_default(cell)
+                        && width > ARROW_WIDTH + 20.;
+                    let padding = if chev || arrow { 20. } else { 7. };
                     let text_r = Rect {
                         x: x + 7.,
                         y: y + m.options.row_text_offset,
@@ -1207,7 +1528,25 @@ impl Frame {
                         state == RowState::Deleted,
                         window,
                     );
-                    if chev && m.options.hooks.popup {
+                    if arrow {
+                        self.text(
+                            "→",
+                            Rect {
+                                x: x + width - ARROW_WIDTH + 2.,
+                                y,
+                                width: ARROW_WIDTH - 5.,
+                                height: ROW_HEIGHT,
+                            },
+                            ui_font(),
+                            12.,
+                            MUTED,
+                            TextAlign::Center,
+                            data_clip,
+                            false,
+                            window,
+                        );
+                    }
+                    if chev && m.options.hooks.popup && !arrow {
                         self.text(
                             "⌃",
                             Rect {
@@ -1311,8 +1650,26 @@ impl Frame {
         let mut font = ui_font();
         font.weight = FontWeight::MEDIUM;
         for &(col, x, width) in &columns {
-            let sorted = m.sort.as_ref().filter(|s| s.column == m.columns[col].name);
-            let indicator = if sorted.is_some() { 13. } else { 0. };
+            let rank = m.sort.iter().position(|s| s.column == m.columns[col].name);
+            let sorted = rank.map(|i| &m.sort[i]);
+            // With several sorted columns each arrow carries its place: ▼1, ▲2…
+            let mark = sorted.map(|s| {
+                let arrow = if s.direction == Direction::Asc {
+                    "▲"
+                } else {
+                    "▼"
+                };
+                if m.sort.len() > 1 {
+                    format!("{arrow}{}", rank.unwrap_or(0) + 1)
+                } else {
+                    arrow.to_owned()
+                }
+            });
+            let indicator = match &mark {
+                Some(text) if text.chars().count() > 1 => 20.,
+                Some(_) => 13.,
+                None => 0.,
+            };
             let normalized = m.columns[col]
                 .name
                 .split_ascii_whitespace()
@@ -1351,17 +1708,13 @@ impl Frame {
                 false,
                 window,
             );
-            if let Some(s) = sorted {
+            if let Some(text) = &mark {
                 self.text(
-                    if s.direction == Direction::Asc {
-                        "▲"
-                    } else {
-                        "▼"
-                    },
+                    text,
                     Rect {
                         x: label_left + label_width + 4.,
                         y: 0.,
-                        width: 9.,
+                        width: indicator - 4.,
                         height: HEADER_HEIGHT - 1.,
                     },
                     ui_font(),
@@ -1469,6 +1822,34 @@ impl Frame {
                 whole,
             ));
         }
+    }
+    /// Where a dragged column header will land: a bar at the gap nearest `x`.
+    fn drop_marker(&mut self, m: &GridModel, x: f32) {
+        let l = m.layout();
+        let mut gaps: Vec<f32> = vec![m.number_width() - m.scroll_x];
+        let mut left = m.number_width() - m.scroll_x;
+        for c in m.visible_columns() {
+            left += m.widths[c];
+            gaps.push(left);
+        }
+        let Some(&gap) = gaps
+            .iter()
+            .min_by(|a, b| (*a - x).abs().total_cmp(&(*b - x).abs()))
+        else {
+            return;
+        };
+        let at = gap.clamp(m.number_width(), l.width) - 1.;
+        let whole = self.bounds;
+        self.quad(
+            Rect {
+                x: at,
+                y: 0.,
+                width: 2.,
+                height: l.height,
+            },
+            rgb(ACCENT),
+            whole,
+        );
     }
     fn paint(&self, window: &mut Window, cx: &mut App) {
         for item in &self.items {

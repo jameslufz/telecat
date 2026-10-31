@@ -483,10 +483,11 @@ async fn export_streams_the_whole_filtered_sorted_table() -> Result<()> {
                 value2: None,
             }],
             combine: Combine::And,
-            order_by: Some(OrderBy {
+            order_by: vec![OrderBy {
                 column: "id".into(),
                 dir: Direction::Desc,
-            }),
+            }],
+            estimate: false,
             limit: 300,
             offset: 600,
         };

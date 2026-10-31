@@ -1,6 +1,9 @@
 //! Workspace chrome. Editor and grid internals belong to their parallel sessions.
 pub mod commands;
 mod components;
+mod data;
+#[cfg(test)]
+mod data_tests;
 mod execution;
 mod export;
 pub mod fixtures;
@@ -13,8 +16,11 @@ mod link;
 mod objects_tests;
 mod panels;
 use layout::{Layout, Splitter};
+mod popovers;
+mod quicklook;
 mod routines;
 mod running;
+mod saved;
 mod sheets;
 mod sidebar;
 mod table;
@@ -78,9 +84,10 @@ enum Sheet {
     Preview,
     SwitchDatabase,
     Error(String),
+    /// Quick Look on a cell (see `quicklook.rs`).
     QuickLook {
-        title: String,
-        value: String,
+        view: Entity<quicklook::QuickLook>,
+        _subscription: Subscription,
     },
     SaveQuery {
         sql: String,
@@ -177,6 +184,12 @@ pub struct Workspace {
     import_check: Option<(Arc<telecat_db::Session>, String)>,
     triggers_ui: Option<triggers::TriggersUi>,
     export_job: Option<export::ExportJob>,
+    /// The Data view's open popover (page settings, row count, date picker).
+    popover: Option<popovers::Popover>,
+    /// Remembers table tabs' filters and layouts once edits pause.
+    table_state_task: Option<Task<()>>,
+    /// Row detail field search: fuzzy (TablePlus's default) or plain contains.
+    field_fuzzy: bool,
 }
 impl Workspace {
     fn new(
@@ -288,6 +301,9 @@ impl Workspace {
             import_check: None,
             triggers_ui: None,
             export_job: None,
+            popover: None,
+            table_state_task: None,
+            field_fuzzy: true,
             host: None,
             host_active: true,
             rail_visible: false,
@@ -476,13 +492,16 @@ impl Workspace {
                             filters: editor.applied,
                             combine: editor.combine,
                             order_by: editor.order_by,
+                            estimate: true,
                             limit: tab.limit,
                             offset: tab.offset,
                         })
                         .await?;
                     let info = session.table_info(&table).await?;
                     let kind = session.relation_kind(&table).await.ok();
-                    Ok::<_, anyhow::Error>((data, info, kind))
+                    // Menus and dropdowns still work as plain text if this fails.
+                    let details = session.column_details(&table).await.ok();
+                    Ok::<_, anyhow::Error>((data, info, kind, details))
                 });
                 cx.spawn(async move |this, cx| {
                     let r = task.await;
@@ -499,11 +518,14 @@ impl Workspace {
                             &flatten(&r),
                         );
                         match r {
-                            Ok(Ok((data, info, kind))) => {
+                            Ok(Ok((data, info, kind, details))) => {
                                 let remembered = this.remember_selection(id, cx);
                                 if let Some(t) = this.state.tabs.iter_mut().find(|t| t.id == id) {
                                     if let (Some(editor), Some(kind)) = (&mut t.table, kind) {
                                         editor.kind = kind;
+                                    }
+                                    if let (Some(editor), Some(details)) = (&mut t.table, details) {
+                                        editor.columns = Some(details);
                                     }
                                     if t.table.as_ref().is_some_and(|e| e.data.dirty()) {
                                         return;
@@ -522,8 +544,10 @@ impl Workspace {
                                         selected_row: None,
                                     };
                                     t.total = data.total;
+                                    t.estimated = data.estimated;
                                     t.info = Some(info);
                                 }
+                                this.sanitize_layout(id);
                                 this.restore_selection(id, remembered);
                             }
                             Ok(Err(e)) => this.failed(e, cx),
@@ -680,7 +704,15 @@ impl Workspace {
         if self.busy {
             return;
         }
-        self.state.open_table(table);
+        let open = self
+            .state
+            .tabs
+            .iter()
+            .any(|t| t.kind == TabKind::Table(table.clone()));
+        let id = self.state.open_table(table);
+        if !open {
+            self.restore_table_state(id);
+        }
         self.refresh_tab(cx);
         cx.notify();
     }
@@ -949,6 +981,11 @@ impl Workspace {
             cx.notify();
             return;
         }
+        if key == "escape" && self.popover.is_some() {
+            self.close_popover(cx);
+            cx.stop_propagation();
+            return;
+        }
         if key == "enter"
             && let Some(Sheet::HostKey(p)) = &self.sheet
         {
@@ -1092,6 +1129,27 @@ impl Workspace {
             cx.notify();
             return;
         }
+        if mods.platform && (mods.control || mods.alt) && self.sheet.is_none() {
+            let mut handled = true;
+            match (key.as_str(), mods.control, mods.alt, mods.shift) {
+                ("[", true, false, false) => {
+                    self.show_part(telecat_app::table_model::Part::Data, cx)
+                }
+                ("]", true, false, false) => {
+                    self.show_part(telecat_app::table_model::Part::Structure, cx)
+                }
+                ("left", true, false, false) => self.go(false, window, cx),
+                ("right", true, false, false) => self.go(true, window, cx),
+                ("r", false, true, false) => self.reload_current_tab(window, cx),
+                _ => handled = false,
+            }
+            if handled {
+                cx.stop_propagation();
+                cx.notify();
+            }
+            // Other ⌃⌘ / ⌥⌘ combinations are not the plain ⌘ shortcuts below.
+            return;
+        }
         if mods.platform {
             let mut handled = true;
             match (key.as_str(), mods.shift) {
@@ -1211,20 +1269,14 @@ impl Workspace {
             .gap(px(2.))
             .px(px(8.))
             .child(
-                nav("back", "ChevronLeft.svg", !self.state.can_back()).on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.state.navigate(false);
-                        cx.notify();
-                    },
-                )),
+                nav("back", "ChevronLeft.svg", !self.state.can_back())
+                    .tooltip(text_tooltip("Go Back (⌃⌘←)"))
+                    .on_click(cx.listener(|this, _, window, cx| this.go(false, window, cx))),
             )
             .child(
-                nav("forward", "ChevronRight.svg", !self.state.can_forward()).on_click(
-                    cx.listener(|this, _, _, cx| {
-                        this.state.navigate(true);
-                        cx.notify();
-                    }),
-                ),
+                nav("forward", "ChevronRight.svg", !self.state.can_forward())
+                    .tooltip(text_tooltip("Go Forward (⌃⌘→)"))
+                    .on_click(cx.listener(|this, _, window, cx| this.go(true, window, cx))),
             )
             .child({
                 // Bring the active tab (including a newly opened one) into view once, when it
@@ -1374,6 +1426,7 @@ impl Render for Workspace {
             .when(self.saving, |d| {
                 d.child(div().absolute().inset_0().occlude())
             })
+            .when_some(self.popover_view(cx), |d, p| d.child(p))
             .when_some(self.sheet.as_ref(), |d, s| d.child(self.sheet_view(s, cx)))
     }
 }
